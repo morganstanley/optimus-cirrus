@@ -226,8 +226,8 @@ class NodeGroupArgs(level: Int = 0, key: AnyRef = null) extends NodeGroup(level,
   override def create(level: Int, key: AnyRef): NodeGroup = new NodeGroupArgs(level, key)
   override def name: String = "Arguments"
   override def title(key: AnyRef): String = key match {
-    case s: Seq[_] => s.size.toString + " Arg(s) @" + s.hashCode().toHexString
-    case _         => key.toString
+    case s: collection.Seq[_] => s.size.toString + " Arg(s) @" + s.hashCode().toHexString
+    case _                    => key.toString
   }
 }
 
@@ -235,8 +235,8 @@ class NodeGroupArgsDisplayed(level: Int = 0, key: AnyRef = null) extends NodeGro
   override def name: String = "Arguments Displayed"
   override def create(level: Int, key: AnyRef): NodeGroup = new NodeGroupArgsDisplayed(level, key)
   override def title(key: AnyRef): String = key match {
-    case s: Seq[_] => s.mkString("(", ",", ")")
-    case _         => key.toString
+    case s: collection.Seq[_] => s.mkString("(", ",", ")")
+    case _                    => key.toString
   }
 }
 

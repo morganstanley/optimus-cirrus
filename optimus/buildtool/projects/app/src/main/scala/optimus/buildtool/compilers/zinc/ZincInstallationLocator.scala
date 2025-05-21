@@ -18,9 +18,7 @@ import optimus.buildtool.app.OptimusBuildToolImpl
 import optimus.buildtool.compilers.zinc.ZincClassPaths.sourceRequiredFor
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
-import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.LocalDefinition
-import optimus.buildtool.files.Directory
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.generators.ZincGenerator._
 import optimus.buildtool.resolvers.CoursierArtifactResolver
@@ -89,15 +87,15 @@ abstract class ZincInstallationLocator(scalaRuntimeMajorVersion: String) extends
           val loadedCompilerBridge =
             loadedJars.find(_.name.contains(sourceRequiredFor)).map(_.name).getOrElse("can't find compiler-bridge")
           log.debug(s"Found runtime zinc deps file: $zincRuntimeDep, with $loadedZinc:$loadedCompilerBridge")
-          log.info(s"Using zinc_$scalaRuntimeMajorVersion with ${loadedJars.size} resolved zinc artifacts")
+          log.debug(s"Using zinc_$scalaRuntimeMajorVersion with ${loadedJars.size} resolved zinc artifacts")
           loadedJars
         } else {
           val runtimeZincDepsFile = Utils.findJar(OptimusBuildToolImpl.getClass)
-          log.info(s"No zinc found from runtime classloader & zinc generator: $runtimeZincDepsFile")
+          log.debug(s"No zinc found from runtime classloader & zinc generator: $runtimeZincDepsFile")
           searchZincArtifactsFromDir(scalaRuntimeMajorVersion)
         }
       case None =>
-        log.info(s"Can't find in jar zinc-deps file for scala version: $scalaRuntimeMajorVersion")
+        log.debug(s"Can't find in jar zinc-deps file for scala version: $scalaRuntimeMajorVersion")
         searchZincArtifactsFromDir(scalaRuntimeMajorVersion)
     }
 
@@ -122,10 +120,8 @@ abstract class ZincInstallationLocator(scalaRuntimeMajorVersion: String) extends
 }
 
 class ZincClasspathResolver(
-    workspaceRoot: Directory,
     dependencyResolver: CoursierArtifactResolver,
     dependencyCopier: DependencyCopier,
-    val externalDeps: ExternalDependencies,
     scalaMajorVersion: String)
     extends ZincInstallationLocator(scalaMajorVersion) {
 
@@ -133,7 +129,7 @@ class ZincClasspathResolver(
     val allScalaVerNames = ScalaVersions.map(sVer => s"${name}_$sVer")
     // search the predefined zinc
     allScalaVerNames
-      .flatMap { n => externalDeps.mavenDependencies.allMavenDeps.find { d => d.group == group && d.name == n } }
+      .flatMap { n => dependencyResolver.dependencyDefinitions.find { d => d.group == group && d.name == n } }
       .to(Seq)
   }
 

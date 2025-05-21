@@ -39,7 +39,7 @@ object DependencyTrackerLogging {
     }
   }
 
-  def beforeRunNodes(nodes: collection.Seq[NodeTask]) =
+  def beforeRunNodes(nodes: Seq[NodeTask]) =
     loggerCallback.beforeRunNodes(nodes)
 
   def requestUtrack(scenario: String, key: NodeKey[_]) =
@@ -96,7 +96,7 @@ object DefaultLoggingCallback extends LoggingCallback {
   }
   def augment(nodeKey: TrackedNode[_]) = augmentNodeKey(nodeKey.underlying)
 
-  override def beforeRunNodes(nodes: collection.Seq[NodeTask]): Unit = {
+  override def beforeRunNodes(nodes: Seq[NodeTask]): Unit = {
     nodes foreach {
       case n: NodeKey[_] if n.scenarioStack().isTrackingIndividualTweakUsage =>
         log.info(s"before run node ${augmentNodeKey(n)}")
@@ -163,7 +163,7 @@ object DefaultLoggingCallback extends LoggingCallback {
   }
 }
 trait LoggingCallback {
-  def beforeRunNodes(nodes: collection.Seq[NodeTask]): Unit
+  def beforeRunNodes(nodes: Seq[NodeTask]): Unit
 
   def logDoAddTweaks(scenario: String, tweaks: Iterable[Tweak]): Unit
 

@@ -11,7 +11,6 @@
  */
 package optimus.graph;
 
-import static optimus.graph.OGTrace.AsyncSuffix;
 import static optimus.graph.OGTrace.CachedSuffix;
 import static optimus.graph.OGTrace.XsSuffix;
 import static optimus.graph.Settings.defaultCacheByNameTweaks;
@@ -1525,7 +1524,7 @@ public class NodeTaskInfo {
     if ((flags & EXTERNALLY_CONFIGURED_CUSTOM_CACHE) != 0
         || (flags & EXTERNALLY_CONFIGURED_POLICY) != 0) {
       if (!forTest) {
-        sb.append(AsyncSuffix);
+        sb.append("@");
       } else {
         sb.append(" | NodeTaskInfo.EXTERNALLY_CONFIGURED_"); // deliberate _
       }
@@ -1747,9 +1746,18 @@ public class NodeTaskInfo {
   static final NodeTaskInfo EndOfChain = internal("[endOfChain]");
   public static final NodeTaskInfo Delay =
       internal("[delay]").setReportingPluginType(PluginType.apply("Delay"));
+  public static final NodeTaskInfo ChanPut =
+      internal("[chan.put]").setReportingPluginType(PluginType.apply("Chan"));
+  public static final NodeTaskInfo ChanTake =
+      internal("[chan.take]").setReportingPluginType(PluginType.apply("Chan"));
+  public static final NodeTaskInfo ChanError =
+      internal("[chan.error]").setReportingPluginType(PluginType.apply("Chan"));
+  public static final NodeTaskInfo ChanSelect =
+      internal("[chan.select]").setReportingPluginType(PluginType.apply("Chan"));
+  public static final NodeTaskInfo Coro = internal("[coro]");
   public static final NodeTaskInfo Scheduled = internal("[scheduled]");
   public static final NodeTaskInfo DelayOnChildCompleted = internal("[delayOnChildCompleted]");
-  public static final NodeTaskInfo Start = internalCached("[start]", AT_MOST_ONE_WAITER);
+  public static final NodeTaskInfo Start = internalCached(Names.startName, AT_MOST_ONE_WAITER);
   public static final NodeTaskInfo UITrackDebug =
       internalCached("[uiTrackDebug]", AT_MOST_ONE_WAITER);
   public static final NodeTaskInfo When = internal("[whenClause]");
@@ -1807,4 +1815,8 @@ public class NodeTaskInfo {
   public static final NodeTaskInfo Throttled = internal("[throttled]");
   public static final NodeTaskInfo WitnessReactiveTemporalContext =
       internalCached("[witnessTemporalContext]", 0L);
+
+  public static class Names {
+    public static String startName = "[start]";
+  }
 }

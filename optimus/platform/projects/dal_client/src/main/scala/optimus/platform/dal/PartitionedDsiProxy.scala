@@ -84,7 +84,7 @@ class PartitionedDsiProxy(
       .toMap
   }
 
-  protected[optimus] override lazy val replica: ClientSideDSI = new MultiReadBrokersDSIProxy(
+  protected[optimus] override lazy val replica: ClientSideDSI = ReadBrokerDSIProxy(
     baseContext: Context,
     brokerProviderResolver,
     replicaBroker,
@@ -98,6 +98,8 @@ class PartitionedDsiProxy(
     secureTransport,
     maxBrokersAllowedForConnectionFromURI
   )
+
+  private[optimus] override def getDSIClient: DSIClient = replica.getDSIClient
 
   protected[optimus] override lazy val prcProxyOpt = getPrcRemoteDsiProxy(prcSkLoc)
 
@@ -200,7 +202,7 @@ class PartitionedDsiProxy(
             partitionMap,
             skLoc,
             new PrcKeyProvider(baseContext),
-            replica.asInstanceOf[MultiReadBrokersDSIProxy].getDSIClient
+            replica.getDSIClient
           ))
       } catch {
         case NonFatal(ex) =>

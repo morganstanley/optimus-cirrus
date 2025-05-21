@@ -87,7 +87,7 @@ object ChildProcessSampling extends Log {
       s"loop=${childLoopPeriodSec}s," +
       s"cstack=dwarf," +
       // same stack sampling interval as parent
-      s"interval=${AsyncProfilerSampler.apInterval},etypeframes," +
+      s"interval=${AsyncProfilerSampler.apInterval},etypeframes,persist,jemalloc," +
       // suffix to append to temporary files before being atomically moved to permanent name
       s"atomicfile=$atomicSuffix," +
       s"loglevel=${AsyncProfilerSampler.apLogLevel}"

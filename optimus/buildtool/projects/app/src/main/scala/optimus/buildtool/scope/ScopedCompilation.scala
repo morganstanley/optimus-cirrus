@@ -216,7 +216,8 @@ trait CompilationNode extends ScopedCompilation {
   @node override private[buildtool] def agentsForDownstreamRuntimes: IndexedSeq[Artifact] =
     distinctArtifacts("agents artifacts for downstreams") {
       apar(
-        if (config.containsAgent) scala.classes ++ java.classes else Nil,
+        // we use the pathing jar for agents because it contains the required classpath and agent manifest
+        if (config.containsAgent) pathing.pathing else Nil,
         upstream.internalAgentsForOurRuntime
       )
     }

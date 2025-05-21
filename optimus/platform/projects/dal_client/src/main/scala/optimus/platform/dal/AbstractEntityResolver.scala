@@ -194,7 +194,7 @@ private[optimus] trait HasLastWitnessedTime {
     catchUpReadWitnessedTime(asAsync(() => serverTime), "atLsqt", queryPartitions, waitForMaxCatchUp)
   }
 
-  private def updateWitnessedTime(
+  protected def updateWitnessedTime(
       source: String,
       newTime: Map[Partition, Instant],
       witnessTimeMap: ConcurrentHashMap[Partition, Instant]): Unit = {
@@ -227,7 +227,7 @@ private[optimus] trait HasLastWitnessedTime {
             .get(p)}) (original lastWitnessedTime: ${orgLastWitnessedMap(p)})")
     }
 
-    newTime foreach { case (p, t) => updateIfLater(p, t) }
+    newTime foreach { case (p, t) => if (t ne null) updateIfLater(p, t) }
   }
 
   private[optimus /*dal*/ ] def updateLastWitnessedTime(newTime: Map[Partition, Instant]): Unit = {
@@ -248,6 +248,13 @@ object DSIResolver {
 // TODO (OPTIMUS-13031): Needs changing to an @transient @entity, but @async not supported on entities
 trait DSIResolver extends EntityResolver with HasLastWitnessedTime with HasPartitionMap {
   import DSIResolver._
+
+  @entersGraph protected[optimus] def serverTimeWithWitnessTimeUpdated(source: String): Map[Partition, Instant] = {
+    val time = serverTime
+    updateWitnessedTime(source, time, lastReadWitnessedTimeMap)
+    updateWitnessedTime(source, time, lastWitnessedTimeMap)
+    time
+  }
 
   @async final protected[optimus] /*[platform]*/ override def serverTime: Map[Partition, Instant] = {
     val results = dsi match {

@@ -146,7 +146,7 @@ object VersioningResultSerializer
 
   override def deserialize(proto: VersioningResultProto): VersioningResult = {
     if (proto.hasValidResult) {
-      VersioningValidResult(proto.getValidResult.getVersionedCommandsList.asScala.map(fromProto(_)))
+      VersioningValidResult(proto.getValidResult.getVersionedCommandsList.asScalaUnsafeImmutable.map(fromProto(_)))
     } else if (proto.hasErrorResult) {
       val errorResult = proto.getErrorResult
       val throwable = errorResult.getType match {

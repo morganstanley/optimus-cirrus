@@ -39,5 +39,5 @@ object Constants {
   val LegalNodeConfigFields = Set("config", "tweakConfig", "cache")
   val LegalOutermostFields = Set("Version", "Cache", "PGO")
   val LegalEmbeddableCtorConfigFields = Set("cachePolicy", "cache")
-  val LegalCacheConfigField: Set[String] = Set("name", "cacheSize")
+  val LegalCacheConfigField: Set[String] = Set("name", "cacheSize", "evictOnLowMemory")
 }

@@ -29,13 +29,13 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.ProcessScope
-import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.AsyncUtils
 import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform._
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
 
 import scala.collection.immutable.{IndexedSeq, Seq}
 
@@ -106,12 +106,12 @@ import scala.collection.immutable.{IndexedSeq, Seq}
             Nil
           case Left(generationError) => Seq(generationError)
         }
-        val a = ProcessorArtifact.create(scopeId, inputs().processorName, artifactType, outputJar, msgs)
-        import optimus.buildtool.artifacts.JsonImplicits._
-        AssetUtils.withTempJson(ProcessorMetadata(a.processorName, a.messages, a.hasErrors))(
-          tempJar.writeFile(_, CachedMetadata.MetadataFile)
-        )
-        a
+        val artifact = ProcessorArtifact.create(scopeId, inputs().processorName, artifactType, outputJar, msgs)
+        import optimus.buildtool.artifacts.JsonImplicits.processorMetadataValueCodec
+        val md = ProcessorMetadata(artifact.processorName, artifact.messages, artifact.hasErrors)
+        tempJar.writeInFile(writeToStream(md, _), CachedMetadata.MetadataFile)
+
+        artifact
       } asyncFinally tempJar.close()
     }
     Some(artifact)

@@ -69,7 +69,8 @@ object ThinPyappWrapper extends Log {
       artifact: Path,
       pythonConfig: PythonConfiguration,
       sandbox: Sandbox,
-      pythonEnvironment: PythonEnvironment): Seq[CompilationMessage] = {
+      pythonEnvironment: PythonEnvironment,
+      buildAfsMapping: Boolean): Seq[CompilationMessage] = {
     import VenvProvider._
     import VenvUtils._
 
@@ -86,7 +87,8 @@ object ThinPyappWrapper extends Log {
 
       val cmd = if (pythonConfig.isArtifactory) {
         createRequirements(sandbox.buildDir, pythonConfig)
-        s"thin-pyapp --cache-dir ${pythonEnvironment.uvCache} --source ${sandbox.sourceDir} -r requirements.txt $artifact"
+        val maybeBuildMapping = if (buildAfsMapping) "--build-afs-mapping" else ""
+        s"thin-pyapp --cache-dir ${pythonEnvironment.uvCache} --source ${sandbox.sourceDir} -r requirements.txt $artifact $maybeBuildMapping"
       } else {
         createPthFile(sandbox.buildDir, pythonConfig)
         s"thin-pyapp --cache-dir ${pythonEnvironment.uvCache} --source ${sandbox.sourceDir} --pth-file libs.pth $artifact"

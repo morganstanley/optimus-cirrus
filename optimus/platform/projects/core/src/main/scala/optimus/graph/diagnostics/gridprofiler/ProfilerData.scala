@@ -39,7 +39,7 @@ final case class ProfilerData(
   // *. applies aggregation (by depth, engine, or perhaps total)
   // *. prepares the data for serialization
 
-  private def scope = tag.map(_.scope).getOrElse(collection.Seq())
+  private def scope = tag.map(_.scope).getOrElse(Seq())
   private def recursive = scope.lastOption.contains(RecursiveDistProfilerScope())
   private def extractedData =
     if (recursive) {
@@ -63,7 +63,7 @@ final case class ProfilerData(
     // TODO (OPTIMUS-28314): eager filtering could be applied here as
     //  "GridProfiler.filterHotspots(row, filtering)", where filtering is
     //  "tag.map(_.hotspotFilter).getOrElse(GridProfiler.defaultHotspotFilters)", but it conflicts with PGO
-    def combine(rows: collection.Seq[PNodeTaskInfo]): Map[String, PNodeTaskInfo] =
+    def combine(rows: Seq[PNodeTaskInfo]): Map[String, PNodeTaskInfo] =
       Profiler.combinePNTIs(rows).transform { (_, pnti) =>
         pnti.nti = null // NTI does not make sense across JVM boundaries (cf. PNTi.readObject)
         pnti
@@ -88,14 +88,14 @@ final case class ProfilerData(
       val rByScope = rFiltered
         .map { case (_, blockID) => (blockID, OGTrace.liveReader().getScopedTaskInfos(blockID, false)) }
         .filter { case (_, pntis) => pntis.size() > 0 }
-        .map { case (blockID, pntis) => (blockID, combine(pntis.asScala)) }
+        .map { case (blockID, pntis) => (blockID, combine(pntis.asScalaUnsafeImmutable)) }
 
       rByScope.toMap
     } else Map.empty[Int, Map[String, PNodeTaskInfo]]
   }
   // The maps above have Ints as keys, which are only meaningful in this JVM
   // these registries offer mapping to portable representations
-  val scopeMap: Map[Int, collection.Seq[ProfilerScope]] = GridProfiler.getScopeRegistry.map(p => p._2 -> p._1).toMap
+  val scopeMap: Map[Int, Seq[ProfilerScope]] = GridProfiler.getScopeRegistry.map(p => p._2 -> p._1).toMap
   val metricMap: Map[Int, String] = GridProfiler.getMetricsRegistry.map(p => p._2 -> p._1).toMap
 
   // all future tasks that return from this JVM will have freshJVM = false

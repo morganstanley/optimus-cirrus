@@ -68,7 +68,6 @@ object ThreadStatUtil {
     // clear all ScenarioIndependent except if it looks DAL related
     Caches.clearCaches(
       CauseTestCase,
-      includeCtorGlobal = true,
       includeSiGlobal = true,
       includeGlobal = false,
       includeNamedCaches = false,
@@ -206,10 +205,10 @@ object ThreadStatUtil {
 
   private def userThreadDeltas(
       userStart: Map[Long, ThreadStatRaw],
-      userEnd: Map[Long, ThreadStatRaw]): collection.Seq[ThreadStatDelta] = {
+      userEnd: Map[Long, ThreadStatRaw]): Seq[ThreadStatDelta] = {
     val allUserKeys = userStart.keySet ++ userEnd.keySet
 
-    val userDeltas: collection.Seq[ThreadStatDelta] = allUserKeys.toList.flatMap { threadId =>
+    val userDeltas: Seq[ThreadStatDelta] = allUserKeys.toList.flatMap { threadId =>
       (userStart.get(threadId), userEnd.get(threadId)) match {
         case (Some(startD), Some(endD)) =>
           if (startD.threadName != endD.threadName)
@@ -244,10 +243,10 @@ object ThreadStatUtil {
 
   private def systemThreadDeltas(
       start: Map[String, ThreadStatRaw],
-      end: Map[String, ThreadStatRaw]): collection.Seq[ThreadStatDelta] = {
+      end: Map[String, ThreadStatRaw]): Seq[ThreadStatDelta] = {
 
     val allKeys = start.keySet ++ end.keySet
-    val systemDeltas: collection.Seq[ThreadStatDelta] = allKeys.toList.flatMap { threadName =>
+    val systemDeltas: Seq[ThreadStatDelta] = allKeys.toList.flatMap { threadName =>
       (start.get(threadName), end.get(threadName)) match {
         case (Some(startD), Some(endD)) =>
           List(

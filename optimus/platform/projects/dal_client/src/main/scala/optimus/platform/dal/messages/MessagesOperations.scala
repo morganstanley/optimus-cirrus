@@ -131,9 +131,9 @@ trait MessagesOperations { this: DSIResolver =>
     result.head
   }
 
-  @async def checkEntitlementAndSetACLs(appId: String, acls: Seq[StreamsACLs]): Unit = {
+  @async def checkEntitlementAndSetACLs(streamAppId: String, acls: Seq[StreamsACLs]): Unit = {
     require(dsi.serverFeatures().supports(Feature.SetStreamsACLs), "Cannot run StreamsACLsCommand against this broker")
-    val results = executeMessagesCommand(StreamsACLsCommand(appId, acls))
+    val results = executeMessagesCommand(StreamsACLsCommand(streamAppId, acls))
     results match {
       case res: MessagesErrorResult => throw new StreamsACLsCommandException(res.error.getMessage)
       case _                        =>

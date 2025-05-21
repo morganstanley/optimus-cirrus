@@ -55,7 +55,12 @@ object CacheProtocols extends DefaultJsonProtocol {
               "error happened during deserialize CacheConfig object: cacheSize is a required field (1000 is a good starting point for size)")
           )
           .convertTo[Int],
-        // this is set to false after this method is called for inline caches
+        evictOnLowMemory = fields
+          .getOrElse(
+            "evictOnLowMemory",
+            true.toJson
+          )
+          .convertTo[Boolean],
         sharable = true
       )
     }

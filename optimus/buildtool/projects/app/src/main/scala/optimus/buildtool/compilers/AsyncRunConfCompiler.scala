@@ -11,19 +11,18 @@
  */
 package optimus.buildtool.compilers
 
-import java.util.Properties
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValue
 import com.typesafe.config.ConfigValueFactory
-import optimus.buildtool.artifacts.ClassFileArtifact
+import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompiledRunconfArtifact
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
-import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagePosition
+import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
@@ -83,10 +82,12 @@ import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.distinctLast
 import optimus.platform._
 
-import scala.jdk.CollectionConverters._
+import java.util.Properties
 import scala.collection.compat._
-import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
+import scala.collection.immutable.IndexedSeq
+import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -129,7 +130,7 @@ object AsyncRunConfCompiler {
       blockedSubstitutions: Seq[RunConfSourceSubstitution],
       installVersion: String,
       outputJar: JarAsset,
-      upstreamAgents: Seq[ClassFileArtifact]
+      upstreamAgents: Seq[Artifact]
   )
 }
 
@@ -300,11 +301,11 @@ final class StaticRunscriptCompilationBindingSources(
       arc: AppRunConf,
       upstreamInputs: UpstreamRunconfInputs,
       installVersion: String,
-      upstreamAgents: Seq[ClassFileArtifact]
+      upstreamAgents: Seq[Artifact]
   ): Map[String, Any] = {
     import AsyncRunConfCompilerImpl.dirNameEnvVar
-    import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
     import Templates._
+    import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
 
     val javaModule = (Some(arc.javaModule) ++ defaultJavaModule)
       .collectFirst {
@@ -365,12 +366,16 @@ final class StaticRunscriptCompilationBindingSources(
     )
 
     val allAgents = upstreamAgents.apar.flatMap {
-      case internal: InternalClassFileArtifact =>
+      case internal: PathingArtifact =>
         val internalAgentScope = internal.id.scopeId
-        pathBuilder.locationIndependentJar(scopeId, internalAgentScope, internalAgentScope.module)
+        pathBuilder.locationIndependentJar(
+          scopeId,
+          internalAgentScope,
+          NamingConventions.pathingJarName(internalAgentScope))
       case external: ExternalClassFileArtifact =>
         val externalAgentJar = dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(external).file
         pathBuilder.locationIndependentJar(scopeId, externalAgentJar)
+      case other => throw new MatchError(other)
     }.distinct
 
     val linuxAgentsJarPaths =
@@ -439,7 +444,7 @@ final class StaticRunscriptCompilationBindingSources(
       runConfs: Seq[RunConf],
       upstreamInputs: UpstreamRunconfInputs,
       installVersion: String,
-      upstreamAgents: Seq[ClassFileArtifact]
+      upstreamAgents: Seq[Artifact]
   ): Seq[ApplicationScriptResult] = {
     runConfs.apar.collect {
       case arc: AppRunConf
@@ -679,6 +684,7 @@ final class StaticRunscriptCompilationBindingSources(
             runEnv = runEnv,
             projectProperties = obtWorkspaceProperties,
             enableDTC = true,
+            useAppDefaults = true,
             envProperties = envProperties,
             systemProperties = systemProperties,
             validator = Some(obtConfig.appValidator),

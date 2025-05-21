@@ -20,6 +20,7 @@ import optimus.buildtool.utils.Jars
 
 import java.nio.file.Path
 import scala.collection.immutable.Seq
+import scala.util.control.NonFatal
 
 object CachedMetadata {
   val MetadataFile: RelativePath = RelativePath(NamingConventions.MetadataFileName)
@@ -39,11 +40,19 @@ final case class PythonMetadata(
 
 object PythonMetadata {
   def load(pythonArtifact: Path): PythonMetadata = {
-    val file = JarAsset(pythonArtifact)
-    Jars.withJar(file) { root =>
-      val metadataJson = root.resolveFile(CachedMetadata.MetadataFile).asJson
-      import JsonImplicits._
-      AssetUtils.readJson[PythonMetadata](metadataJson, unzip = false)
+    try {
+      val file = JarAsset(pythonArtifact)
+      Jars.withJar(file) { root =>
+        val metadataJson = root.resolveFile(CachedMetadata.MetadataFile).asJson
+        import JsonImplicits._
+        AssetUtils.readJson[PythonMetadata](metadataJson, unzip = false)
+      }
+    } catch {
+      case NonFatal(e) =>
+        throw new IllegalStateException(
+          s"Failed to load Python metadata from artifact: $pythonArtifact. Error: ${e.getMessage}",
+          e
+        )
     }
   }
 }

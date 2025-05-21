@@ -12,12 +12,28 @@
 package optimus.graph.loom;
 
 import static optimus.CoreUtils.merge;
+import static optimus.debug.CommonAdapter.newMethod;
+import static optimus.graph.loom.LoomConfig.BSM_DESC;
+import static optimus.graph.loom.LoomConfig.CMD_ASYNC;
+import static optimus.graph.loom.LoomConfig.CMD_GET;
+import static optimus.graph.loom.LoomConfig.CMD_GETSI;
+import static optimus.graph.loom.LoomConfig.CMD_NODE;
+import static optimus.graph.loom.LoomConfig.CMD_NODE_ACPN;
+import static optimus.graph.loom.LoomConfig.CMD_OBSERVED_VALUE_NODE;
+import static optimus.graph.loom.LoomConfig.CMD_QUEUED;
+import static optimus.graph.loom.LoomConfig.NF_EXPOSE_ARGS_TRAIT;
+import static optimus.graph.loom.LoomConfig.NF_TRIVIAL;
+import static optimus.graph.loom.LoomConfig.NODE_DESC;
+import static optimus.graph.loom.LoomConfig.NODE_FACTORY;
+import static optimus.graph.loom.LoomConfig.NODE_FUTURE_TYPE;
+import static optimus.graph.loom.LoomConfig.NODE_GETTER_DESC;
+import static optimus.graph.loom.LoomConfig.NODE_TYPE;
 import static optimus.graph.loom.NameMangler.mkImplName;
 import static optimus.graph.loom.NameMangler.unmangleName;
-import static optimus.debug.CommonAdapter.makePublic;
-import static optimus.debug.CommonAdapter.newMethod;
-import static optimus.graph.loom.LoomConfig.*;
-import static org.objectweb.asm.Opcodes.*;
+import static org.objectweb.asm.Opcodes.H_INVOKESPECIAL;
+import static org.objectweb.asm.Opcodes.H_INVOKESTATIC;
+import static org.objectweb.asm.Opcodes.INVOKEINTERFACE;
+import static org.objectweb.asm.Opcodes.INVOKEVIRTUAL;
 import optimus.debug.CommonAdapter;
 import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.ClassVisitor;
@@ -62,16 +78,19 @@ public class NodeMethod extends TransformableMethod {
   }
 
   public void writeQueuedFunc(ClassVisitor cv) {
-    // $queued must be public to make it accessible to private inner classes when enqueuing
-    var newAccess = makePublic(queuedMethod.access);
+    if (method.name.startsWith(mangledClsName) != queuedMethod.name.startsWith(mangledClsName)) {
+      LMessage.warning("Queued Method access is different!!!!", this, cls);
+    }
+    // var queuedPM = isPublic(queuedMethod) && queuedMethod.name.startsWith(mangledClsName);
+    // var newAccess = queuedPM ? queuedMethod.access : method.access;
+    var newAccess = method.access;
     writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_FUTURE_TYPE, newAccess);
   }
 
   private void writeInvokeNewNode(
       ClassVisitor cv, String cmd, MethodNode org, Type returnType, int access) {
-    if (newNodeMethod == null) {
+    if (newNodeMethod == null)
       LMessage.fatal("Could not find matching $newNode method! " + cls.name + "." + org.name);
-    }
 
     var desc = Type.getMethodDescriptor(returnType, argTypes);
     try (var mv = newMethod(cv, access, org.name, desc)) {

@@ -12,14 +12,29 @@
 package optimus.platform.dal
 
 import java.time.Instant
-
 import msjava.base.util.uuid.MSUuid
+import msjava.slf4jutils.scalalog.getLogger
+import optimus.entity.EntityInfoRegistry
+import optimus.platform.TimeInterval
+import optimus.platform.dsi.Feature
+import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.storable._
 
 import scala.collection.mutable
 
+object RequestGenerator {
+  private val log = getLogger[RequestGenerator.type]
+
+  def checkMonoTemporalSupported(serverFeatures: SupportedFeatures, className: String): Unit = {
+    require(
+      serverFeatures.supports(Feature.SupportMonoTemporal),
+      s"DAL broker doesn't support MonoTemporal entities such as ${className}")
+  }
+}
 class RequestGenerator(dsi: DSI) {
+  import RequestGenerator._
+
   private def hasUnpersistedChanges(entity: Entity, validTime: Instant): Boolean = {
     true
   }
@@ -48,12 +63,20 @@ class RequestGenerator(dsi: DSI) {
     require(
       blob.entities.size == 1,
       "Multi-schema writes are only supported in transaction/event blocks, not in persist blocks.")
+
+    val monoTemporal = entity.$info.monoTemporal
+    if (monoTemporal) checkMonoTemporalSupported(dsi.serverFeatures(), entity.$info.runtimeClass.getName)
+
+    val vt = if (monoTemporal && validTime != TimeInterval.NegInfinity) {
+      log.warn(s"Entity is monotemporal: changing valid time from $validTime to negative infinity")
+      TimeInterval.NegInfinity
+    } else validTime
     val lockToken = if (upsert) {
       None
     } else {
       getLockToken(entity)
     }
-    Put(blob.someSlot, lockToken, validTime, minAssignableTtOpt)
+    Put(blob.someSlot, lockToken, vt, minAssignableTtOpt, monoTemporal)
   }
 
   def generateInvalidateAfterRequest(entity: Entity, validTime: Instant) = {
@@ -65,10 +88,29 @@ class RequestGenerator(dsi: DSI) {
       case _                 => throw new IllegalStateException(s"Cannot invalidate heap entity $entity")
     }
 
-    InvalidateAfter(entity.dal$entityRef, dsiInfo.versionedRef, dsiInfo.lt, validTime, entity.getClass.getName)
+    val monoTemporal = entity.$info.monoTemporal
+    if (monoTemporal) checkMonoTemporalSupported(dsi.serverFeatures(), entity.$info.runtimeClass.getName)
+    val vt = if (monoTemporal && validTime != TimeInterval.NegInfinity) {
+      log.warn(s"Entity is monotemporal: changing valid time from $validTime to negative infinity")
+      TimeInterval.NegInfinity
+    } else validTime
+    InvalidateAfter(
+      entity.dal$entityRef,
+      dsiInfo.versionedRef,
+      dsiInfo.lt,
+      vt,
+      entity.getClass.getName,
+      monoTemporal = monoTemporal)
   }
 
   def generateInvalidateAfterRequest(ref: EntityReference, validTime: Instant, clazzName: String): InvalidateAfter = {
-    InvalidateAfter(ref, VersionedReference.Nil, -1, validTime, clazzName)
+    val info = EntityInfoRegistry.getClassInfo(clazzName)
+    val monoTemporal = info.monoTemporal
+    if (monoTemporal) checkMonoTemporalSupported(dsi.serverFeatures(), clazzName)
+    val vt = if (monoTemporal && validTime != TimeInterval.NegInfinity) {
+      log.warn(s"Entity is monotemporal: changing valid time from $validTime to negative infinity")
+      TimeInterval.NegInfinity
+    } else validTime
+    InvalidateAfter(ref, VersionedReference.Nil, -1, vt, clazzName, monoTemporal)
   }
 }

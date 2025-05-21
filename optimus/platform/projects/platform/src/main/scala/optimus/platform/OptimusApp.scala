@@ -80,9 +80,9 @@ import optimus.platform.installcommonpath.InstallCommonPath
 import optimus.platform.runtime.OptimusCompositeLeaderElectorClient
 import optimus.platform.runtime.OptimusEarlyInitializer
 import optimus.platform.runtime.ZkUtils
-import optimus.platform.util.ArgHandlers.DelimitedStringOptionHandler
+import optimus.utils.app.DelimitedStringOptionHandler
 import optimus.platform.util.ArgumentPublisher
-import optimus.platform.util.ArgumentPublisher.parseOptimusArgsToMap
+import optimus.platform.util.ArgumentPublisher.parseOptimusArgsToPairs
 import optimus.platform.util.AutoSysUtils
 import optimus.platform.util.LoggingHelper
 import optimus.platform.util.ProcessEnvironment
@@ -101,10 +101,10 @@ import org.kohsuke.args4j.spi.Setter
 import org.kohsuke.args4j.spi.StringArrayOptionHandler
 
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.{List => JList}
 import scala.annotation.nowarn
 import scala.collection.mutable.ListBuffer
-import scala.compat.Platform.currentTime
 import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
@@ -245,14 +245,14 @@ class OptimusAppCmdLine {
     name = "--exitMode",
     usage =
       "how to behave on app exit [NoAction | ForceExit | Suspend]. Use Suspend to prevent the process from going down when debugging",
-    handler = classOf[ExitMode.OptionOptionHandler]
+    handler = classOf[ExitMode.ExitModeOptionOptionHandler]
   )
   val exitMode: Option[ExitMode.Value] = None
 
   @args4j.Option(
     name = "--scopedConfiguration",
     usage = "path to the scoped configuration file to be used",
-    handler = classOf[ScopedConfiguration.OptionOptionHandler]
+    handler = classOf[ScopedConfiguration.ScopedConfigurationOptionOptionHandler]
   )
   val scopedConfiguration: Option[ScopedConfiguration] = None
 }
@@ -319,8 +319,6 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       .getOrElse(appExitMode)
   }
 
-  private val gc = GCMonitor.instance
-
   def exit(maybeException: Option[Exception], retCode: Int): Unit = {
     println(
       s"${maybeException.map(_ => "printing exception to stderr and ").getOrElse("")}exiting with return code $retCode")
@@ -332,6 +330,8 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
 
   protected[optimus] def suspend(): Unit = new CountDownLatch(1).await()
 
+  private val numFlushes = new AtomicInteger(0)
+
   /** Hook for sundry cleanup actions such as flushing breadcrumbs/auxscheduler/profiling data. */
   protected def flushBeforeExit(): Unit = try {
     if (Breadcrumbs.collecting) {
@@ -342,7 +342,9 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
 
       CollectionTraceBreadcrumbs.publishInfoIfNeeded(ChainedID.root, Events.OptimusAppCollected)
     }
-    GridProfiler.logSummary(Option(cmdLine).flatMap(cl => Option(cl.appId)))
+    val nf = numFlushes.getAndIncrement()
+    val source = if (nf > 0) s"optimus-exit:$nf" else "optimus-exit"
+    GridProfiler.logSummary(Option(cmdLine).flatMap(cl => Option(cl.appId)), source = source)
     TemporalSurfaceProfilingUtils.dumpTemporalSurfProfilingData()
     Breadcrumbs.flush()
     HeapSampling.exiting()
@@ -569,7 +571,7 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
     OptimusEarlyInitializer.ensureInitialized
     InfoDumper.ensureInitialized()
     GCNative.ensureLoaded()
-    if (System.getProperty("optimus.gc.disable") eq null) gc.monitor()
+    GCMonitor.startIfEnabled()
 
     // Log actual JVM params, executed class, and command line params
     // IFF this uses the standard Log trait.
@@ -637,7 +639,7 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
     )
 
     if (Properties.propIsSet("scala.time")) {
-      val total = currentTime - OptimusApp.startupTime
+      val total = System.currentTimeMillis() - OptimusApp.startupTime
       Console.println("[total " + total + "ms]")
     }
 
@@ -686,13 +688,11 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
     // report the profiling mode in vm options (if set) since it overrides command line
     val profilingMode = ProcessGraphInputs.ProfileLevel.currentValueOrThrow().toString
     val propertyMap = appLaunchContextInfo() ++ Seq(
-      BCProps.agents -> AgentInfo.agentInfo().asScala,
+      BCProps.agents -> AgentInfo.agentInfo().asScalaUnsafeImmutable,
       BCProps.pid -> MSProcess.getPID,
       BCProps.host -> LoggingInfo.getHost,
       BCProps.logFile -> LoggingInfo.getLogFile,
-      BCProps.argsMap -> parseOptimusArgsToMap(
-        if (truncatedArgs.length < argsSeq.length) truncatedArgs :+ "..." else argsSeq,
-        parser),
+      BCProps.args -> (if (truncatedArgs.length < argsSeq.length) truncatedArgs :+ "..." else argsSeq),
       BCProps.event -> Events.AppStarted.name,
       BCProps.className -> this.getClass.getName,
       BCProps.appDir -> Option(System.getenv("APP_DIR")).getOrElse("unknown"),
@@ -888,7 +888,7 @@ package magic {
 object OptimusApp {
   type ExitHandler = (Option[Exception], Long, Int, Boolean) => Unit
 
-  val startupTime: Long = currentTime
+  val startupTime: Long = System.currentTimeMillis()
 
   lazy val systemEnv = System.getenv().asScala
 
@@ -927,7 +927,7 @@ object ExitMode extends Enumeration {
   /** prevent the main thread from dying, generally for keeping graph debugger etc open * */
   val Suspend: ExitMode.Value = Value
 
-  class OptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[ExitMode.Value]])
+  class ExitModeOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[ExitMode.Value]])
       extends OneArgumentOptionHandler[Option[ExitMode.Value]](parser, option, setter) {
     override def parse(arg: String): Option[ExitMode.Value] =
       if (!StringUtils.isBlank(arg)) { Some(ExitMode.withName(arg)) }

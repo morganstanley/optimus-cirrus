@@ -14,6 +14,7 @@ package optimus.platform
 import com.sun.management.GarbageCollectionNotificationInfo
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
+import msjava.slf4jutils.scalalog.Logger
 import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayKey
@@ -59,16 +60,17 @@ import java.io.File
 import java.io.InputStream
 import java.lang.management.ManagementFactory
 import java.lang.{Long => JLong}
+import java.time.Duration
 import java.time.Instant
 import javax.management.Notification
 import javax.management.NotificationEmitter
 import javax.management.NotificationListener
 import javax.management.openmbean.CompositeData
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
-
 object AdvancedUtils {
 
   def createUuidOffGraphForTesting: String = {
@@ -473,20 +475,17 @@ object AdvancedUtils {
   /** Clears all cached nodes that retain an object with a finalizer or cleaner */
   def clearAllCachesWithFinalizers(
       cause: ClearCacheCause,
-      includeCtor: Boolean,
       includeSI: Boolean,
       includeLocal: Boolean,
       seconds: Int): Long = {
     val caches = Caches.allCaches(
       includePerPropertyCaches = includeLocal,
-      includeCtorGlobal = includeCtor,
       includeSiGlobal = includeSI
     )
     NCSupport.tagNativeNodes(caches.toArray[AnyRef], seconds)
     Caches.clearCaches(
       cause,
       includePerPropertyCaches = includeLocal,
-      includeCtorGlobal = includeSI,
       includeSiGlobal = includeSI,
       filter = CacheFilter({ _.executionInfo().getHoldsNativeMemory() }, "NativeMarker")
     )
@@ -988,14 +987,13 @@ object AdvancedUtils {
 
   @nodeSync
   @nodeSyncLift
-  final def givenWithPluginTags[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(
-      @nodeLift @nodeLiftByName f: => T): T = needsPlugin
-  final def givenWithPluginTags$queued[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): Node[T] =
+  final def givenWithPluginTags[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(@nodeLift @nodeLiftByName f: => T): T =
+    needsPlugin
+  final def givenWithPluginTags$queued[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): Node[T] =
     givenWithPluginTags$newNode(kvs, s)(f).enqueueAttached
-  final def givenWithPluginTags$withNode[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): T =
+  final def givenWithPluginTags$withNode[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): T =
     givenWithPluginTags$newNode(kvs, s)(f).get
-  final private[this] def givenWithPluginTags$newNode[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(
-      f: Node[T]) = {
+  final private[this] def givenWithPluginTags$newNode[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]) = {
     val ss = EvaluationContext.scenarioStack.createChild(s, f)
     EvaluationContext.given(ss.withPluginTags(kvs), f)
   }
@@ -1214,6 +1212,49 @@ object AdvancedUtils {
   final def timedValueSink[T](startTime: Long, computedValue: T): (Long, T) =
     (OGTrace.nanoTime() - startTime, computedValue)
 
+  /**
+   * Returns result and logs the time it took to execute with default thresholds.
+   *
+   * WARNING: This method may not work correctly if the provided function `f` is not exception-safe.
+   * If an exception occurs during execution of `f`, the timing measurement may be incomplete or inaccurate.
+   *
+   * @param log The logger to use for output
+   * @param action A description of the action being timed (will be used in log message)
+   * @param f The function to time
+   * @return The result of executing function f
+   */
+  def traceLatency[T](log: Logger, action: => String)(f: => T): T =
+    macro AdvancedUtilsMacros.traceLatencyWithDefaultingArgsImpl
+
+  /**
+   * Returns result and logs the time it took to execute with appropriate log level based on thresholds.
+   *
+   * WARNING: This method may not work correctly if the provided function `f` is not exception-safe.
+   * If an exception occurs during execution of `f`, the timing measurement may be incomplete or inaccurate.
+   *
+   * @param log The logger to use for output
+   * @param action A description of the action being timed (will be used in log message)
+   * @param infoThreshold Duration threshold above which to log at INFO level
+   * @param warnThreshold Duration threshold above which to log at WARN level
+   * @param f The function to time
+   * @return The result of executing function f
+   */
+  def traceLatency[T](log: Logger, action: => String, infoThreshold: Duration, warnThreshold: Duration)(f: => T): T =
+    macro AdvancedUtilsMacros.traceLatencyWithDurationImpl
+
+  def doLog(log: Logger, durationInNanos: Long, action: => String, infoThreshold: Long, warnThreshold: Long): Unit = {
+    if (durationInNanos < infoThreshold) {
+      // No need to construct the log
+      ()
+    } else {
+      val logStr = s"It took ${durationInNanos / 1e6} ms to $action"
+      if (durationInNanos > warnThreshold)
+        log.warn(logStr)
+      else
+        log.info(logStr)
+    }
+  }
+
   final def newThrottle(maxConcurrent: Int): Throttle = newThrottle(new SimpleThrottleLimiter(maxConcurrent))
   final def newThrottle(policy: ThrottleLimiter): Throttle = new Throttle(policy)
 
@@ -1323,4 +1364,60 @@ object AdvancedUtils {
   def asyncUsing$queued[R <: AutoCloseable, B](resource: => R, f: R => B): NodeFuture[B] =
     asyncUsing$queued(resource)(toNodeFactory(f))
 
+  /**
+   * Code (transitively called from) within a withoutDAL { } block cannot make DAL (most) read or write calls.
+   * This is useful for testing purposes and also for ensuring more dependable timings by detecting unintended DAL access.
+   * Attempts to use the DAL will throw a NoDSIException. This happens even if accessing DAL-calling nodes which were
+   * previously evaluated (and cached) from outside of the withoutDAL { } block.
+   *
+   * The one exception is that entity dereferences (i.e. parentEntity.childEntity) are allowed to access DAL.
+   * This is because these are specified to return the same result regardless of the context that they are evaluated in.
+   *
+   * Implementation note: Currently, cached nodes (including SI and XS) are not reused between regular code and code
+   * called from withoutDAL { } blocks. We could in theory allow reuse of nodes that didn't actually access DAL.
+   */
+  @nodeSync
+  @nodeSyncLift
+  final def withoutDAL[T](@nodeLift @nodeLiftByName f: => T): T =
+    withoutDAL$withNode(toNode(f _))
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withoutDAL$queued[T](f: => T): NodeFuture[T] = withoutDAL$newNode(toNode(f _)).enqueueAttached
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withoutDAL$queued[T](f: Node[T]): Node[T] =
+    withoutDAL$newNode(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withoutDAL$withNode[T](f: Node[T]): T = withoutDAL$newNode(f).get
+  final private[this] def withoutDAL$newNode[T](f: Node[T]): Node[T] = {
+    val plugin = new WithoutDALViolationCollector(mutable.Set.empty)
+    val ss = EvaluationContext.scenarioStack.withPluginTag(WithoutDALViolationCollector, plugin)
+    val attachedInnerNode = EvaluationContext.given(ss, f)
+    val mappedNode = attachedInnerNode.map(r =>
+      if (attachedInnerNode.accessedDAL) {
+        val locations = plugin.getLocations
+        val msg =
+          s"DAL access detected in withoutDAL block ${if (locations.nonEmpty) s"at ${locations.mkString(", ")}" else ""} (some locations may be missed due to cache hits - re-run the node in the Graph debugger to find all locations of DAL calls)"
+        val res = if (DiagnosticSettings.lenientWithoutDAL) {
+          log.warn(msg)
+          r
+        } else throw new IllegalStateException(msg)
+        plugin.cleanupLocations()
+        res
+      } else r)
+    mappedNode.attach(ss) // the node created from the map does not have a ss but needs one if we call enqueueAttached
+    mappedNode
+  }
+
+  private[platform] class WithoutDALViolationCollector(private var locations: mutable.Set[String]) {
+    def addLocation(location: String): Unit = synchronized {
+      if (locations ne null) locations += location
+    }
+
+    def getLocations: Set[String] = synchronized {
+      locations.toSet
+    }
+
+    // clear locations so that we don't keep the (potentially quite large) location string in cache after the node completes
+    def cleanupLocations(): Unit = synchronized { locations = null }
+  }
+  object WithoutDALViolationCollector extends NonForwardingPluginTagKey[WithoutDALViolationCollector]
 }

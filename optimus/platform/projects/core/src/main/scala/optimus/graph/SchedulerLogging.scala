@@ -101,14 +101,12 @@ object SchedulerDiagnosticUtils {
     def allInfos: Map[Long, ThreadInfo] = schedulerInfos.infos ++ otherInfos.infos
   }
 
-  def getThreadSnapshot(
-      schedulers: List[Scheduler],
-      threadNames: collection.Seq[String] = collection.Seq.empty): ThreadSnapshot =
+  def getThreadSnapshot(schedulers: List[Scheduler], threadNames: Seq[String] = Seq.empty): ThreadSnapshot =
     getThreadSnapshotForQueues(schedulers.map(_.getContexts), threadNames)
 
   def getThreadSnapshotForQueues(
       queues: SchedulerQueues,
-      threadNames: collection.Seq[String],
+      threadNames: Seq[String],
       excludeSpinningThread: Boolean = false): ThreadSnapshot = {
     val threadIDs = getThreadIds(queues)
     val schedulerThreadInfos =
@@ -123,7 +121,7 @@ object SchedulerDiagnosticUtils {
 
   def getThreadSnapshotWithAdapted(
       schedulers: List[Scheduler],
-      threadNames: collection.Seq[String] = collection.Seq.empty
+      threadNames: Seq[String] = Seq.empty
   ): (ThreadSnapshot, Boolean) = {
     val queues = schedulers.map(_.getContexts)
     (getThreadSnapshotForQueues(queues, threadNames), anyAdaptedTasks(queues))

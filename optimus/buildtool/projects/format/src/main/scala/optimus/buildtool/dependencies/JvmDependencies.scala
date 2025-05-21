@@ -15,151 +15,124 @@ import com.typesafe.config.Config
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyGroup
 import optimus.buildtool.config.Exclude
+import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.Substitution
-import optimus.buildtool.dependencies.JvmDependenciesLoader.mavenScalaLibName
+import optimus.buildtool.dependencies.DependencyLoader.mavenScalaLibName
+import optimus.buildtool.format.DependenciesConfig
+import optimus.buildtool.format.DependencyConfig
 import optimus.buildtool.format.MavenDefinition
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
-import scala.jdk.CollectionConverters._
 
-class JvmDependencies(
-    val dependencies: Seq[DependencyDefinition],
-    val mavenDependencies: Seq[DependencyDefinition],
-    val multiSourceDependencies: Option[MultiSourceDependencies],
-    val nativeDependencies: Map[String, NativeDependencyDefinition],
-    val groups: Seq[DependencyGroup],
-    val globalExcludes: Seq[Exclude],
-    val globalSubstitutions: Seq[Substitution],
-    val mavenDefinition: Option[MavenDefinition],
-    val scalaMajorVersion: Option[String]
-) {
+trait JvmDependencies {
+  def dependencies: MultiSourceDependencies
+  def dependencySets: Set[DependencySet]
+  val variantSets: Set[VariantSet]
+  def nativeDependencies: Map[String, NativeDependencyDefinition]
+  val groups: Seq[DependencyGroup]
+  def globalExcludes: Seq[Exclude]
+  def globalSubstitutions: Seq[Substitution]
+  def mavenDefinition: MavenDefinition
+  def scalaMajorVersion: Option[String]
 
-  private def byName(deps: Seq[MultiSourceDependency]) =
-    deps.map(d => d.name -> Seq(d.definition)).toMap.withDefaultValue(Seq())
-
-  private def byKey(definitions: Seq[DependencyDefinition]) =
-    definitions.map(d => d.key -> Seq(d)).toMap.withDefaultValue(Seq())
-
-  private def byMultiSourceKey(deps: Seq[MultiSourceDependency]) = byKey(deps.map(_.definition))
-
-  private def multiSourceDepsMap(deps: Seq[MultiSourceDependency]) = {
+  private[dependencies] def dependenciesByKey(
+      deps: MultiSourceDependencies,
+      depGroups: Seq[DependencyGroup],
+      onlyMavenKeys: Boolean
+  ): Seq[(String, DependencyConfig, Int, Seq[DependencyDefinition])] = {
     // name + afs name + maven names
-    byName(deps) ++ byMultiSourceKey(deps) ++ byKey(deps.flatMap(_.maven))
+    val depsByKey = deps.all.flatMap { d =>
+      // referencing by name gets us all maven (if defined) or afs
+      val byName =
+        if (onlyMavenKeys) d.name.collect { case n if d.maven.nonEmpty => (n, d.file, d.line, d.maven) }
+        else d.name.map(n => (n, d.file, d.line, d.definitions.preferred))
+      // referencing by afs key gets us all maven (if defined) or afs
+      val byAfsKey = if (onlyMavenKeys) Nil else d.afs.map(a => (a.key, d.file, a.line, d.definitions.preferred))
+      // referencing by maven key gets us just that maven dep
+      val byMavenKey = d.maven.map(m => (m.key, d.file, m.line, Seq(m)))
+      byName.to(Seq) ++ byAfsKey ++ byMavenKey
+    }
+    val groupsByKey =
+      if (onlyMavenKeys) Nil else depGroups.map(g => (g.name, DependenciesConfig, g.line, g.dependencies))
+    (depsByKey ++ groupsByKey).distinct // distinct since multiple ivy configs may include the same maven dep (via extends)
   }
 
-  // from jvm-dependencies.obt
-  private val loadedMultiSourceDeps = multiSourceDependencies.getOrElse(MultiSourceDependencies(Nil))
+  private def dependencyMap(
+      deps: MultiSourceDependencies,
+      depGroups: Seq[DependencyGroup],
+      onlyMavenKeys: Boolean
+  ): Map[String, Seq[DependencyDefinition]] =
+    dependenciesByKey(deps, depGroups, onlyMavenKeys).map { case (key, _, _, deps) => key -> deps }.toMap
 
   // mixed mode dependencies could be used for any modules
-  val multiSourceDepsMap: Map[String, Seq[DependencyDefinition]] = multiSourceDepsMap(
-    loadedMultiSourceDeps.multiSourceDeps)
-  val mavenOnlyDepsMap: Map[String, Seq[DependencyDefinition]] = multiSourceDepsMap(loadedMultiSourceDeps.mavenOnlyDeps)
-  val allMixedModeDependenciesMap: Map[String, Seq[DependencyDefinition]] =
-    mavenOnlyDepsMap ++ multiSourceDepsMap
+  private lazy val allDepsMap: Map[String, Seq[DependencyDefinition]] =
+    dependencyMap(dependencies, groups, onlyMavenKeys = false)
+  private lazy val mavenDepsMap: Map[String, Seq[DependencyDefinition]] =
+    dependencyMap(dependencies, Nil, onlyMavenKeys = true)
 
-  // afs dependencies
-  val jvmAfsDepsByName: Map[String, Seq[DependencyDefinition]] = byName(loadedMultiSourceDeps.afsDefinedDeps)
-  val jvmAfsDepsByKey: Map[String, Seq[DependencyDefinition]] = byMultiSourceKey(loadedMultiSourceDeps.afsDefinedDeps)
-  val dependenciesAfsByKey: Map[String, Seq[DependencyDefinition]] = byKey(dependencies) // from dependencies.obt
+  private lazy val dependencySetsMap: Map[DependencySetId, Map[String, Seq[DependencyDefinition]]] =
+    dependencySets.map { s =>
+      s.id -> dependencyMap(s.dependencies, Nil, onlyMavenKeys = false)
+    }.toMap
+  private lazy val variantSetsMap: Map[VariantSetId, Map[String, Seq[DependencyDefinition]]] =
+    variantSets.map { s =>
+      s.id -> dependencyMap(s.dependencies, Nil, onlyMavenKeys = false)
+    }.toMap
 
-  // maven dependencies
-  val mavenDepsByKey: Map[String, Seq[DependencyDefinition]] = byKey(mavenDependencies) // from maven-dependencies.obt
-  val jvmMavenDepsByKey: Map[String, Seq[DependencyDefinition]] =
-    byKey(loadedMultiSourceDeps.mavenDefinedDeps.flatMap(_.maven))
+  def forId(
+      id: String,
+      moduleSet: Option[ModuleSet] = None,
+      fromMavenLibs: Boolean = false
+  ): Seq[DependencyDefinition] = {
+    val dependencies =
+      if (fromMavenLibs) mavenDepsMap // maven only projects or maven release build
+      else allDepsMap
 
-  val groupsByName: Map[String, Seq[DependencyDefinition]] =
-    groups.map(g => g.name -> g.dependencies).toMap.withDefaultValue(Seq())
+    val variantSetDeps = moduleSet.map(_.variantSets.flatMap(variantSetsMap.get).flatten.toMap).getOrElse(Map.empty)
+    val dependencySetDeps =
+      moduleSet
+        .map(_.transitiveNonVariantDependencySets.flatMap(dependencySetsMap.get).flatten.toMap)
+        .getOrElse(Map.empty)
 
-  // all allowed dependencies for afs modules and mavenOnly modules
-  val afsModulesDependenciesMap: Map[String, Seq[DependencyDefinition]] =
-    dependenciesAfsByKey ++ jvmAfsDepsByName ++ jvmAfsDepsByKey ++ allMixedModeDependenciesMap
-  val mavenOnlyModulesDependenciesMap: Map[String, Seq[DependencyDefinition]] =
-    mavenDepsByKey ++ jvmMavenDepsByKey ++ allMixedModeDependenciesMap
-
-  // transitive mapping rules without version, can't be directly used in codetree
-  val noVersionDependenciesMap: Map[String, Seq[DependencyDefinition]] =
-    multiSourceDepsMap(loadedMultiSourceDeps.noVersionMavenDeps)
-
-  def ++(buildDeps: JvmDependencies): JvmDependencies = {
-    def merge[T](a: Seq[T], b: Seq[T]): Seq[T] = (a ++ b).toList.distinct
-    def hasAfDefinition(dep: JvmDependencies) = dep.mavenDependencies.nonEmpty
-
-    // Seq.empty ++ jvm-dependencies.obt
-    val mergedMultiSourceDeps = merge(
-      this.multiSourceDependencies.map(_.loaded).getOrElse(Nil),
-      buildDeps.multiSourceDependencies.map(_.loaded).getOrElse(Nil))
-
-    JvmDependencies(
-      merge(this.dependencies, buildDeps.dependencies), // Seq.empty++dependencies.obt
-      merge(this.mavenDependencies, buildDeps.mavenDependencies), // maven-dependencies.obt++Seq.empty
-      Some(MultiSourceDependencies(mergedMultiSourceDeps)),
-      this.nativeDependencies ++ buildDeps.nativeDependencies,
-      merge(this.groups, buildDeps.groups),
-      merge(this.globalExcludes, buildDeps.globalExcludes),
-      merge(this.globalSubstitutions, buildDeps.globalSubstitutions),
-      if (hasAfDefinition(this)) this.mavenDefinition
-      else if (hasAfDefinition(buildDeps)) buildDeps.mavenDefinition
-      else None,
-      scalaMajorVersion.orElse(this.scalaMajorVersion)
-    )
+    val allDeps = dependencies ++ dependencySetDeps ++ variantSetDeps
+    scalaMajorVersion match {
+      case Some(scalaStr) =>
+        allDeps
+          .get(id)
+          .orElse(allDeps.get(mavenScalaLibName(id, scalaStr)))
+          .getOrElse(Nil)
+      case None => allDeps.getOrElse(id, Nil)
+    }
   }
 
-  lazy val gradleVersions: java.util.Map[String, String] =
-    (dependencies ++ mavenDependencies)
-      .filter(_.variant.forall(!_.configurationOnly))
-      .map(dep => dep.gradleKey -> dep.version)
-      .toMap
-      .asJava
+  lazy val versionsConfig: Config = JvmDependenciesLoader.versionsAsConfig(dependencies.preferred)
 
-  private def versionsById(id: String, fromMavenLibs: Boolean): Seq[DependencyDefinition] = {
-    val searchDeps = {
-      val dependencies =
-        if (fromMavenLibs) mavenOnlyModulesDependenciesMap // maven only projects or maven release build
-        else afsModulesDependenciesMap
-      scalaMajorVersion match {
-        case Some(scalaStr) =>
-          dependencies
-            .get(id)
-            .orElse(dependencies.get(mavenScalaLibName(id, scalaStr)))
-            .getOrElse(Nil)
-        case None => dependencies(id)
-      }
-    }
-    groupsByName(id) ++ searchDeps
-  }
-
-  lazy val versionsConfig: Config =
-    JvmDependenciesLoader.versionsAsConfig(dependencies ++ mavenDependencies)
-
-  def forId(id: String, fromMavenLibs: Boolean = false): Seq[DependencyDefinition] =
-    versionsById(id, fromMavenLibs) match {
-      case Seq()    => Seq.empty[DependencyDefinition]
-      case versions => versions
-    }
 }
 
-object JvmDependencies {
-  def apply(
-      dependencies: Seq[DependencyDefinition],
-      mavenDependencies: Seq[DependencyDefinition],
-      multiSourceDependencies: Option[MultiSourceDependencies],
-      nativeDependencies: Map[String, NativeDependencyDefinition],
-      groups: Seq[DependencyGroup],
-      globalExcludes: Seq[Exclude],
-      globalSubstitutions: Seq[Substitution],
-      mavenDefinition: Option[MavenDefinition],
-      scalaMajorVersion: Option[String]): JvmDependencies =
-    new JvmDependencies(
-      dependencies,
-      mavenDependencies,
-      multiSourceDependencies,
-      nativeDependencies,
-      groups,
-      globalExcludes,
-      globalSubstitutions,
-      mavenDefinition,
-      scalaMajorVersion)
+final case class JvmDependenciesImpl(
+    dependencies: MultiSourceDependencies,
+    dependencySets: Set[DependencySet],
+    variantSets: Set[VariantSet],
+    nativeDependencies: Map[String, NativeDependencyDefinition],
+    groups: Seq[DependencyGroup],
+    globalExcludes: Seq[Exclude],
+    globalSubstitutions: Seq[Substitution],
+    mavenDefinition: MavenDefinition,
+    scalaMajorVersion: Option[String]
+) extends JvmDependencies
 
-  val empty: JvmDependencies = apply(Seq.empty, Seq.empty, None, Map.empty, Seq.empty, Seq.empty, Seq.empty, None, None)
+object JvmDependencies {
+  val empty: JvmDependencies = JvmDependenciesImpl(
+    MultiSourceDependencies(Nil),
+    Set.empty,
+    Set.empty,
+    Map.empty,
+    Seq.empty,
+    Seq.empty,
+    Seq.empty,
+    MavenDefinition.empty,
+    None
+  )
 }

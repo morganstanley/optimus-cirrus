@@ -86,13 +86,12 @@ private[optimus] object EventCause {
   }
 
   type ChildEventCauseBuilder[T <: ChildEventCause] =
-    (String, EventCause, TrackingScope[_ >: Null <: TrackingMemo]) => T
+    (String, EventCause) => T
 
   // The base class for child event cause, those event cause that aren't derived from Root
   private[optimus] class ChildEventCause(
       override val cause: String,
       val parent: EventCause,
-      override val scope: TrackingScope[_ >: Null <: TrackingMemo],
       override val includeInHandlerProfCrumb: Boolean = false,
       // If set, this child task will not take a token on the parent (won't block completion) but will still report
       // profiling data via backgroundComplete().
@@ -240,8 +239,6 @@ private[optimus] trait EventCause {
     if (instrumentToken) new InstrumentedToken(this) else new IndividualToken(this)
   }
 
-  def scope: TrackingScope[_ >: Null <: TrackingMemo] = NullScope
-
   protected def countUp(): Unit = synchronized {
     if (!completed) counter += 1
     else throwOrLogException(s"Cannot countUp already completed EventCause $this")
@@ -264,7 +261,6 @@ private[optimus] trait EventCause {
   final def createProfiledChild(child: String, sourceLocation: SourceLocation): EventCause =
     createChildImpl(
       child + s" - ${sourceLocation.stackTraceString}",
-      scope,
       includeInHandlerProfilingCrumb = true,
       background = false)
 
@@ -273,31 +269,26 @@ private[optimus] trait EventCause {
   final def createBackgroundProfiledChild(child: String, sourceLocation: SourceLocation): EventCause =
     createChildImpl(
       child + s" - ${sourceLocation.stackTraceString}",
-      scope,
       includeInHandlerProfilingCrumb = true,
       background = true)
 
   // Create a non-profiled child.
   final def createChild(child: String): EventCause =
-    createChildImpl(child, scope, includeInHandlerProfilingCrumb = false, background = false)
-
-  final def createChild(child: String, scope: TrackingScope[_ >: Null <: TrackingMemo]): EventCause =
-    createChildImpl(child, scope, includeInHandlerProfilingCrumb = false, background = false)
+    createChildImpl(child, includeInHandlerProfilingCrumb = false, background = false)
 
   // Create a child using a builder
   def createChild[T <: ChildEventCause](builder: ChildEventCauseBuilder[T], child: String): T = {
     if (completed) throwOrLogException(s"Cannot create child $child of completed EventCause $this")
-    builder(child, this, scope)
+    builder(child, this)
   }
 
   private def createChildImpl(
       child: String,
-      scope: TrackingScope[_ >: Null <: TrackingMemo],
       includeInHandlerProfilingCrumb: Boolean,
       background: Boolean): ChildEventCause = {
     // A background task may very well be attached to an already completed foreground cause. That's fine.
     if (completed && (!background)) throwOrLogException(s"Cannot create child $child of completed EventCause $this")
-    new ChildEventCause(child, this, scope, includeInHandlerProfilingCrumb, background)
+    new ChildEventCause(child, this, includeInHandlerProfilingCrumb, background)
   }
 
   // generally used to run a block of code that might generate child causes
@@ -394,10 +385,7 @@ private[optimus] trait EventCause {
   }
 }
 
-private[optimus] final case class TestEventCause(
-    override val cause: String = "TestEventCause",
-    override val scope: TrackingScope[_ >: Null <: TrackingMemo] = NullScope)
-    extends RootEventCause
+private[optimus] final case class TestEventCause(override val cause: String = "TestEventCause") extends RootEventCause
 
 private[optimus] case object ExcelEventCause extends EventCause.NonTrackingEventCause
 

@@ -25,8 +25,7 @@ import java.nio.file.Paths
       scopeConfigSource: ScopeConfigurationSource,
       ignoredPaths: Seq[String]
   ): Changes = {
-    val changesOpt = gitOpt.map(git => changedPaths(git, ignoredPaths))
-    val changesAsScopes = Changes.changesAsScopes(changesOpt, scopeConfigSource)
+    val changesAsScopes = gitOpt.map(git => changedPaths(git, ignoredPaths)).map(scopeConfigSource.changesAsScopes)
     Changes(changesAsScopes, scopeConfigSource)
   }
 

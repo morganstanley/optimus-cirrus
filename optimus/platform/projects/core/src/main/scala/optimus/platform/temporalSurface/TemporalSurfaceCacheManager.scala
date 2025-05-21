@@ -15,7 +15,7 @@ import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
 
 trait TemporalSurfaceCache {
   def getItemKeys(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType): Option[collection.Seq[operation.ItemKey]]
+      sourceTemporality: operation.TemporalityType): Option[Seq[operation.ItemKey]]
   def getItemData(operation: TemporalSurfaceQuery)(
       sourceTemporality: operation.TemporalityType,
       itemTemporality: operation.TemporalityType): Option[Map[operation.ItemKey, operation.ItemData]]

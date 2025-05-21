@@ -13,6 +13,7 @@ package optimus.buildtool.trace
 
 import java.lang.management.ManagementFactory
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 import ch.epfl.scala.bsp4j.MessageType
 import com.sun.management.ThreadMXBean
@@ -25,6 +26,8 @@ import optimus.breadcrumbs.crumbs.CrumbHints
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.compilers.RegexScanner.ruleTimings
+import optimus.buildtool.compilers.RegexScanner.timingEnabled
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -38,6 +41,7 @@ import optimus.utils.CollectionUtils._
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 private[buildtool] object ObtCrumbSource extends Crumb.Source {
   override val name = "OBT"
@@ -98,7 +102,7 @@ private[buildtool] class BreadcrumbTrace(
         obtCategory -> category.toString,
         descriptor.property,
         obtScope -> scopeId.toString,
-        obtProgresses -> progresses.map(p => (p.time, p.name, p.progress)),
+        obtProgresses -> getProgresses.map(p => (p.time, p.name, p.progress)),
         obtStats -> getStats.map { case (k, v) => k.key -> v },
         obtStart -> startTime,
         obtEnd -> time
@@ -339,6 +343,19 @@ final class BreadcrumbTraceListener(
       obtErrorsByCategory -> stats.errorsByCategory,
       obtWarningsByCategory -> stats.warningsByCategory
     )
+
+    if (timingEnabled) {
+      val regexRuleTimings = ruleTimings.asScala.map { case (rule, time) =>
+        (rule, TimeUnit.NANOSECONDS.toSeconds(time.longValue))
+      }.toMap
+
+      publish(
+        "RegexScan",
+        longTerm = sendSummaryToLongTermIndex,
+        obtRegexRules -> regexRuleTimings,
+        obtRegexScan -> regexRuleTimings.values.sum
+      )
+    }
   }
 }
 

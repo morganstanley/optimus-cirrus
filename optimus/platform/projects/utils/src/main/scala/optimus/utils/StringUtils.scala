@@ -13,6 +13,7 @@ package optimus.utils
 
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import scala.Double.NaN
 import scala.util.Try
 
 trait OptimusStringUtils {
@@ -31,6 +32,7 @@ trait OptimusStringUtils {
       if (s.size <= n) s else s.substring(0, n - 1) + ellipsis
     }
     def abbrev: String = abbrev(80)
+    def gigaParse: Double = OptimusStringUtils.parseDouble(underlying)
   }
 
   object IntParsable {
@@ -61,5 +63,14 @@ object OptimusStringUtils extends OptimusStringUtils {
   def charsetAwareToString(a: Array[Byte], allowDefault: Boolean): String =
     if (allowDefault && a.length < 4) new String(a)
     else new String(a, detectCharset(a))
+
+  private val SplitSuffix = """([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\s*([KMGT]?)B?\s*""".r
+  private val mults: Map[String, Double] = Map("K" -> 1e3, "M" -> 1e6, "G" -> 1e9, "T" -> 1e12, "" -> 1.0)
+  def parseDouble(s: String): Double =
+    s.toUpperCase match {
+      case SplitSuffix(num, suf) =>
+        Try(num.toDouble * mults(suf)).getOrElse(NaN)
+      case _ => NaN
+    }
 
 }

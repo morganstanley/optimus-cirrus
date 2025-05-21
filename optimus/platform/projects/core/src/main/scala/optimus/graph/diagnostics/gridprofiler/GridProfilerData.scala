@@ -134,7 +134,7 @@ object GridProfilerData {
   // and
   //   key == key
   // returns Map[Scope, Map[Task, T]
-  private[optimus] def get[T](scopes: collection.Seq[Int], key: Int): Map[Int, Map[String, T]] = {
+  private[optimus] def get[T](scopes: Seq[Int], key: Int): Map[Int, Map[String, T]] = {
     val res = m.Map.empty[Int, m.Map[String, T]]
 
     def emptyRow = m.Map.empty[String, T]
@@ -182,7 +182,7 @@ object GridProfilerData {
   // and
   //  key is custom
   // returns Map[Scope, Map[Task, Map[Key(as String), Any]]]
-  private[optimus] def getCustom(scopes: collection.Seq[Int]): Map[Int, Map[String, Map[String, Any]]] = {
+  private[optimus] def getCustom(scopes: Seq[Int]): Map[Int, Map[String, Map[String, Any]]] = {
     val res = m.Map.empty[Int, m.Map[String, m.Map[String, Any]]]
     def emptyRow = m.Map.empty[String, m.Map[String, Any]]
     def emptyMetrics = m.Map.empty[String, Any]
@@ -327,7 +327,7 @@ object GridProfilerData {
 
   // extracts and deletes custom metrics for the given key./scope
   // this is called through the user-facing API GridProfiler.removeCustomMetrics
-  private[optimus] def removeByKey(key: Int, sc: Int): collection.Seq[Any] = {
+  private[optimus] def removeByKey(key: Int, sc: Int): MetricData = {
     val res = MetricData(0)
     for (
       map <- data.get(sc);

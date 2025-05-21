@@ -21,6 +21,7 @@ import optimus.graph.UnsafeInternal
 import optimus.graph.profiled.NodeDelegate
 import optimus.platform.PluginHelpers._
 import optimus.platform.annotations.captureByValue
+import optimus.platform.annotations.deprecating
 import optimus.platform.annotations.nodeLift
 import optimus.platform.annotations.nodeLiftByName
 import optimus.platform.annotations.nodeSync
@@ -378,10 +379,11 @@ object asAsyncInnards {
 
 object asNodeInnards {
 
+  @deprecating("This is not the API you are looking for!")
   @nodeSyncLift
   @nodeLiftByName
-  implicit def liftAndEnqueue[R](@nodeLift @nodeLiftByName r: => R): Node[R] = optimus.core.needsPlugin
-  implicit def liftAndEnqueue$withNode[R](r: Node[R]): Node[R] = r.enqueue
+  implicit def liftAndNotEnqueue[R](@nodeLift @nodeLiftByName r: => R): Node[R] = optimus.core.needsPlugin
+  implicit def liftAndNotEnqueue$withNode[R](r: Node[R]): Node[R] = r
 
   // used for both by-name and nilary cases to save typing
   private[optimus /*platform*/ ] sealed abstract class NodeFunction0ImplBase[+R](private val equalikey: AnyRef)

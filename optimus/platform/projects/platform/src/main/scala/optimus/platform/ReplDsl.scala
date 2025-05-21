@@ -38,7 +38,7 @@ object ReplDsl {
   private val scenarioStack = {
     // TODO (OPTIMUS-0000): Workaround for ArrayStack grow not working when size zero
     // Have mailed typesafe
-    val s = scala.collection.mutable.ArrayStack[Scenario](null.asInstanceOf[Scenario])
+    val s = scala.collection.mutable.Stack[Scenario](null.asInstanceOf[Scenario])
     s.pop()
     s
   }

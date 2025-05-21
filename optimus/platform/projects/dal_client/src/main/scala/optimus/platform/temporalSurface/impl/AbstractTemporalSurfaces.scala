@@ -49,10 +49,10 @@ trait TemporalContextImpl extends TemporalSurfaceImpl with TemporalContext {
   @node final def operationTemporalityFor(operation: TemporalSurfaceQuery): operation.TemporalityType = {
     findPossiblyMatchingLeaves(operation, false) match {
       case (AlwaysMatch, surfaces) => // all leaves that Always match the query
-        val first = surfaces.head.temporalSurface.currentTemporalityFor(operation)
+        val first = surfaces.head.temporalSurface.currentTemporality
         if (
           surfaces.tail.exists { surface =>
-            surface.temporalSurface.currentTemporalityFor(operation) != first
+            surface.temporalSurface.currentTemporality != first
           }
         ) {
           log.warn(
@@ -216,7 +216,7 @@ trait TemporalContextImpl extends TemporalSurfaceImpl with TemporalContext {
         // happy days! - we have a single global assignment
         log.debug(s"dataAccess - query: $operation - single global assignment: $assignment")
         val tsUsed = assignment.temporalitySource
-        val ts = tsUsed.currentTemporalityFor(operation)
+        val ts = tsUsed.currentTemporality
         EntityTemporalInformation(ts.validTime, ts.txTime, tsUsed, assignment.context)
       case _ => NotPresentInTemporalContext
     }
@@ -264,7 +264,7 @@ private[optimus] final class SimpleTTContext(private val underlying: TemporalCon
       }
 
       innerCollectTTs(tc)
-      tts
+      tts.toList
     }
 
     underlying match {
@@ -361,9 +361,6 @@ trait LeafTemporalSurfaceImpl extends LeafTemporalSurface with TemporalSurfaceIm
   }
 
   private[optimus] def currentTemporality: QueryTemporality.At
-
-  private[optimus] def currentTemporalityFor(query: TemporalSurfaceQuery): query.TemporalityType =
-    currentTemporality
 
   /**
    * implements [findPossiblyMatchingLeaves]

@@ -42,21 +42,24 @@ private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => ne
 
   val regIndexWriteCrumbStr = "RegisteredIndexWrite"
   val EnableProp: String = "optimus.dal.registered.indexes.enable"
-  val EntitiesListCompressionTypeProp: String =
+  private val EntitiesListCompressionTypeProp: String =
     "optimus.dal.registered.indexes.entitiesListCompressionType"
-  val MaxStringLengthProp: String = "optimus.dal.registered.indexes.writer.maxStringLength"
+  private val MaxStringLengthProp: String = "optimus.dal.registered.indexes.writer.maxStringLength"
   val UnregisteredIndexNotAllowedInPartitionsProp: String =
     "optimus.dal.registered.indexes.unregisteredIndexNotAllowedInPartitions"
   val EnableForceBrokerCacheUpdateForRegressionAndPerfTests: String =
     "optimus.dal.registered.indexes.enableForceBrokerCacheUpdateForRegressionAndPerfTests"
+  private val DisableSingleBackendQueryExecution: String =
+    "optimus.dal.registered.indexes.disableSingleBackendQueryExecution"
 
-  // DO NOT USE this in real deployment. This is only for integration & performance tests.
-  val TestOnlyNonInteractiveModeProp = "optimus.dal.registered.indexes.manager.testOnlyNonInteractiveMode"
+  // DO NOT USE this in real deployment. This is only for autosys jobs, integration & performance tests.
+  val ScriptOrTestOnlyNonInteractiveModeProp =
+    "optimus.dal.registered.indexes.manager.scriptOrtestOnlyNonInteractiveMode"
 
   // This allow-list is to avoid "bootstrap" problem with registration, which may also write some entities
   // with index fields.
   // Change back to full classname match after entity migration is complete.
-  val oldIndexRegistrationModeAllowList: Set[Pattern] = Set(
+  private val oldIndexRegistrationModeAllowList: Set[Pattern] = Set(
     Pattern.compile("optimus\\.[a-z]+\\.session\\.SlotMetadata"))
 
   def isOldIndexRegistrationModeAllowed(className: String): Boolean =
@@ -65,8 +68,8 @@ private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => ne
   def areRegisteredIndexesEnabled: Boolean =
     DiagnosticSettings.getBoolProperty(
       EnableProp,
-      "false".toBoolean
-    ) // non-test default value, is true for most DAL tests.
+      "true".toBoolean
+    )
 
   def isForceBrokerCacheUpdateForRegressionAndPerfTestsEnabled: Boolean =
     DiagnosticSettings.getBoolProperty(EnableForceBrokerCacheUpdateForRegressionAndPerfTests, false)
@@ -89,8 +92,14 @@ private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => ne
   // being registered so we will have registration time check.
   // However, we do have partial implementation to support the full entity class hierarchy where some @indexed vals may
   // belong in base classes/traits. And we have test cases as well. So, this flag **should be only disabled in tests**.
-  def BaseTypeWithIndexFieldShouldFailRegistrationPropName =
+  val BaseTypeWithIndexFieldShouldFailRegistrationPropName =
     "optimus.dal.registered.indexes.baseTypeWithIndexFieldShouldFailRegistration"
   def baseTypeWithIndexFieldShouldFailRegistration: Boolean =
     DiagnosticSettings.getBoolProperty(BaseTypeWithIndexFieldShouldFailRegistrationPropName, false)
+
+  def disableSingleBackendQueryExecution: Boolean =
+    DiagnosticSettings.getBoolProperty(DisableSingleBackendQueryExecution, false)
+
+  val serializedKeysMaxSizeBytes: Int =
+    DiagnosticSettings.getIntProperty("optimus.dal.registered.indexes.serializedKeysMaxSizeBytes", 6 * 1024 * 1024)
 }

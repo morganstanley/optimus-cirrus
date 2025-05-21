@@ -14,11 +14,11 @@ package optimus.graph.diagnostics.pgo
 import optimus.graph.DiagnosticSettings
 import optimus.graph.NodeTaskInfo
 import optimus.graph.cache.NCPolicy
-import ConfigWriter.log
 import optimus.graph.diagnostics.PNodeTaskInfo
+import optimus.graph.diagnostics.pgo.ConfigWriter.log
 import optimus.platform.inputs.registry.ProcessGraphInputs
 
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
 
 object PGOMode {
   def fromUIOptions(autoSuggestDisableCache: Boolean, autoSuggestDisableXSFT: Boolean): Seq[PGOMode] =
@@ -282,7 +282,7 @@ case object DisableXSFT extends PGOMode {
 /* show the actual dependencies on a node and corresponding tweak ids */
 case object TweakDependencies extends PGOMode {
   override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
-    val entries = mutable.ArrayBuffer[(String, String)]()
+    val entries = ArraySeq.newBuilder[(String, String)]
     if (hasTweakDependenciesWorthWriting(pnti)) {
       val encodedMask = pnti.tweakDependencies.stringEncoded // [CONSIDER_REMAP_COMPRESS_ID_MASKS]
       val key = "depOn_" + encodedMask
@@ -295,7 +295,7 @@ case object TweakDependencies extends PGOMode {
       val value = s""""twkID": $id""" // [CONSIDER_REMAP_COMPRESS_ID_MASKS]
       entries += ((key, value))
     }
-    entries
+    entries.result()
   }
 
   private def hasTweakableID(pnti: PNodeTaskInfo): Boolean = pnti.isDirectlyTweakable && pnti.tweakID > 1

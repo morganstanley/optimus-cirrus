@@ -11,6 +11,7 @@
  */
 package optimus.platform.storable
 import com.fasterxml.jackson.annotation.JsonCreator
+import optimus.graph.DiagnosticSettings
 
 class SerializedKey(
     val typeName: String,
@@ -41,18 +42,43 @@ class SerializedKey(
   def isKey: Boolean = unique && !indexed
 
   override def equals(o: Any): Boolean = o match {
-    case sk: SerializedKey => typeName == sk.typeName && properties == sk.properties
-    case _                 => false
+    case sk: SerializedKey =>
+      if (SerializedKey.useNewEquals) {
+        typeName == sk.typeName && properties == sk.properties &&
+        unique == sk.unique && indexed == sk.indexed && refFilter == sk.refFilter
+      } else {
+        typeName == sk.typeName && properties == sk.properties
+      }
+    case _ => false
   }
 
   /**
    * Compares the meta types of keys. The meta type is the type name and property names. Property values are excluded.
    */
-  def compareMetaType(that: SerializedKey): Int = {
+  private def compareMetaType(that: SerializedKey): Int = {
     typeName.compareTo(that.typeName) match {
       case 0 => properties.compareNames(that.properties)
       case r => r
     }
+  }
+
+  private def compareTo(that: SerializedKey): Int = {
+    // must keep consistent with equals
+    def c1: Int = this.typeName.compareTo(that.typeName)
+    def c2: Int = this.properties.compareNames(that.properties)
+    def c3: Int = this.unique.compareTo(that.unique)
+    def c4: Int = this.indexed.compareTo(that.indexed)
+    def c5: Int = this.refFilter.compareTo(that.refFilter)
+    var value: Int = 0
+    def evaluate(v: Int): Int = {
+      value = v
+      value
+    }
+    if (evaluate(c1) != 0) value
+    else if (evaluate(c2) != 0) value
+    else if (evaluate(c3) != 0) value
+    else if (evaluate(c4) != 0) value
+    else c5
   }
 
   override lazy val hashCode: Int = typeName.hashCode * 31 + properties.hashCode
@@ -68,12 +94,15 @@ class SerializedKey(
 object SerializedKey {
   def apply(
       typeName: String,
-      props: collection.Seq[(String, Any)],
+      props: Seq[(String, Any)],
       unique: Boolean = true,
       indexed: Boolean = false,
       refFilter: Boolean = false,
       serializedSizeOpt: Option[Int] = None): SerializedKey =
     new SerializedKey(typeName, SortedPropertyValues(props), unique, indexed, refFilter, serializedSizeOpt)
 
-  implicit val ordering: Ordering[SerializedKey] = (l: SerializedKey, r: SerializedKey) => l.compareMetaType(r)
+  implicit val ordering: Ordering[SerializedKey] = (l: SerializedKey, r: SerializedKey) =>
+    if (useNewEquals) l.compareTo(r) else l.compareMetaType(r)
+
+  val useNewEquals = DiagnosticSettings.getBoolProperty("SerializedKey.useNewEquals", true)
 }

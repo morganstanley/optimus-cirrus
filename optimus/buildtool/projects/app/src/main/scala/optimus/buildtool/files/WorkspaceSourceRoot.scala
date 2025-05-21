@@ -19,11 +19,11 @@ import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
-
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.platform._
 import optimus.platform.util.Log
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 
 @entity class WorkspaceSourceRoot(val path: Path) extends ReactiveDirectory {
@@ -39,7 +39,7 @@ import scala.collection.mutable
       if (existsUnsafe) {
         val buffer = mutable.ArrayBuffer[(Path, Instant)]()
         Files.walkFileTree(path, new ExtensionFilterFileVisitor(ext, path, buffer))
-        buffer.sorted.map { case (file, lastModified) =>
+        buffer.to(ArraySeq).sorted.map { case (file, lastModified) =>
           FileAsset.timestamped(file, lastModified)
         }
       } else Nil

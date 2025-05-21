@@ -13,7 +13,7 @@ package optimus.platform.utils
 
 import javax.security.auth.login.AppConfigurationEntry
 import javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag
-import msjava.kerberos.auth.MSKerberosConfiguration
+import com.ms.infra.kerberos.configuration.MSKerberosConfiguration
 
 import scala.jdk.CollectionConverters._
 
@@ -27,27 +27,25 @@ trait KerberosAuthentication {
 
   protected def setupKerberosCredentials(clientNames: List[String] = List("KafkaClient", "Client")): Unit = {
     if (isKerberized) {
-      MSKerberosConfiguration.setClientConfiguration()
+      MSKerberosConfiguration.getDefault.setClientConfiguration()
       clientNames.foreach(clientName => registerAppConfigurationEntryFor(clientName))
     }
   }
 
   private def registerAppConfigurationEntryFor(clientName: String): Unit = {
-    MSKerberosConfiguration.registerAppConfigurationEntry(
-      clientName,
-      (_: String) =>
-        Array(
-          new AppConfigurationEntry(
-            "com.sun.security.auth.module.Krb5LoginModule",
-            LoginModuleControlFlag.REQUIRED,
-            Map(
-              "useKeyTab" -> "false",
-              "storeKey" -> "false",
-              "useTicketCache" -> "true",
-              "principal" -> MSKerberosConfiguration.getUserPrincipal
-            ).asJava
-          )
+    MSKerberosConfiguration.getDefault.getAppConfigEntryCache
+      .addEntries(
+        clientName,
+        new AppConfigurationEntry(
+          "com.sun.security.auth.module.Krb5LoginModule",
+          LoginModuleControlFlag.REQUIRED,
+          Map(
+            "useKeyTab" -> "false",
+            "storeKey" -> "false",
+            "useTicketCache" -> "true",
+            "principal" -> MSKerberosConfiguration.getDefault.getLibraryConfigurations.getUserPrincipal
+          ).asJava
         )
-    )
+      )
   }
 }

@@ -970,9 +970,9 @@ object KnowableOps {
 
   def writeKnowableTag(e: Expression, sqlFormatter: ExpressionSqlFormatter): Unit = {
     e match {
-      case Constant(null, _)           => sqlFormatter.write("NULL")
-      case Constant(Seq(i: Int, _), _) => sqlFormatter.write(i)
-      case Constant(Seq(i: Int), _)    => sqlFormatter.write(i)
+      case Constant(null, _)                      => sqlFormatter.write("NULL")
+      case Constant(collection.Seq(i: Int, _), _) => sqlFormatter.write(i)
+      case Constant(collection.Seq(i: Int), _)    => sqlFormatter.write(i)
       case _ =>
         sqlFormatter.write("(")
         sqlFormatter.visit(e)
@@ -982,8 +982,8 @@ object KnowableOps {
 
   def writeKnowableValue(e: Expression, sqlFormatter: ExpressionSqlFormatter): Unit = {
     e match {
-      case Constant(null | Seq(_), _) => sqlFormatter.write("NULL")
-      case Constant(Seq(_, v), _)     => sqlFormatter.visit(Constant(v, TypeCode.None))
+      case Constant(null | Seq(_), _)        => sqlFormatter.write("NULL")
+      case Constant(collection.Seq(_, v), _) => sqlFormatter.visit(Constant(v, TypeCode.None))
       case _ =>
         val sqlType = sqlFormatter.getSqlType(Function(Value.Name, List(e)))
         if (sqlType != "")

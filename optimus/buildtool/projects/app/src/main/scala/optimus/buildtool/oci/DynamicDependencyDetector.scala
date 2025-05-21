@@ -14,12 +14,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
-
 import optimus.buildtool.utils.PathUtils
 import optimus.platform.util.Log
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.ArraySeq
 
 /* It Works on Unix only for now.
  * It uses the unix command 'ldd' to try and detect all AFS dynamic dependencies recursively */
@@ -102,9 +101,9 @@ trait DynamicDependencyDetector extends Log {
 
   protected def runLddCmd(path: Path): Seq[String] = {
     import scala.sys.process._
-    val lines = new ArrayBuffer[String]
+    val lines = ArraySeq.newBuilder[String]
     // no need to parse std err when looking for AFS paths...
-    Process(s"$ldd $path") ! ProcessLogger(line => lines.append(line), _ => () /* ignoring stderr */ )
-    lines
+    Process(s"$ldd $path") ! ProcessLogger(line => lines += line, _ => () /* ignoring stderr */ )
+    lines.result()
   }
 }

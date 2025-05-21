@@ -18,11 +18,13 @@ import java.util.concurrent.atomic.AtomicReference
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.ChainedID
 import optimus.dsi.partitioning.Partition
+import optimus.graph.DiagnosticSettings
 import optimus.platform.dal.DALPubSub
 import optimus.platform.dal.DALPubSub._
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.dsi.bitemporal._
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters._
 
 trait PubSubStreamManager extends HandlePubSub {
@@ -161,12 +163,14 @@ trait PubSubStreamManager extends HandlePubSub {
   }
 
   def onDisconnect(): Unit = {
+    cleanUpStaleStreams()
     streamMap.asScala.foreach { case (id, stream) =>
       stream.handlePubSubResult(PubSubBrokerDisconnect(id)) foreach performStreamAction
     }
   }
 
   def shutdownAllStreams(): Unit = {
+    cleanUpStaleStreams()
     streamMap.asScala.foreach { case (id, stream) =>
       stream.shutdown() foreach performStreamAction
     }
@@ -188,8 +192,73 @@ trait PubSubStreamManager extends HandlePubSub {
         closedStreams.add(streamObj.serverSideStreamId)
     }
   }
+
+  private val staleStreamStatusByPartition = new ConcurrentHashMap[Partition, StaleStreamState]()
+  def notifyStaleStreams(): Unit = {
+    log.trace("Checking for stale streams")
+    val earliestUpdateTime = patch.MilliInstant.now.minusSeconds(pubsubStaleLimitInSec)
+    val staleStreams = streamMap.asScala.collect {
+      case (_, stream) if stream.getLastUpdateTime.isBefore(earliestUpdateTime) => stream
+    } toSet
+
+    if (staleStreams.nonEmpty) {
+      staleStreams.groupBy(_.partition).foreach { case (ptn, strms) =>
+        staleStreamStatusByPartition.compute(
+          ptn,
+          (_, oldVal) => {
+            if (oldVal == null || oldVal.streams != strms) {
+              val state = StaleStreamState(streamStateCounter.getAndIncrement(), strms)
+              log.warn(s"Stale streams found in $ptn partition: $state")
+              val evt = PubSubTickDelay(state.entityTypes)
+              strms foreach { stream =>
+                stream.handlePubSubResult(evt)
+              }
+              state
+            } else {
+              oldVal
+            }
+          }
+        )
+      }
+    } else {
+      cleanUpStaleStreams()
+    }
+  }
+
+  private def cleanUpStaleStreams(): Unit = {
+    staleStreamStatusByPartition.forEach((ptn, state) => {
+      log.warn(s"Stale streams recovered in $ptn partition: $state")
+      val evt = PubSubTickDelayOver(state.entityTypes)
+      state.streams foreach { stream =>
+        stream.handlePubSubResult(evt)
+      }
+      staleStreamStatusByPartition.remove(ptn)
+    })
+  }
 }
 
 object PubSubStreamManager {
   private val log = getLogger(this)
+
+  private val pubsubStaleMinLimitInSec: Int =
+    DiagnosticSettings.getIntProperty("optimus.dal.pubsub.staleMinLimitInSec", 5)
+  private val pubsubStaleLimitInSec: Int = {
+    val p = DiagnosticSettings.getIntProperty("optimus.dal.pubsub.staleLimitInSec", 10)
+    if (p <= pubsubStaleMinLimitInSec) {
+      throw new IllegalArgumentException(
+        s"Invalid value for optimus.dal.pubsub.staleLimitInSec: $p. It should be greater than $pubsubStaleMinLimitInSec.")
+    }
+    p
+  }
+
+  private val streamStateCounter = new AtomicInteger(0)
+  private final case class StaleStreamState(counter: Int, streams: Set[NotificationStreamImpl]) {
+    def entityTypes: Set[String] = streams.flatMap(_.currentSubscriptions.flatMap(_.className)).toSet
+
+    private lazy val description =
+      s"DalPS Stale Streams($counter, ${streams
+          .map { s => (s.serverSideStreamId, s.getLastUpdateTime, s.currentSubscriptions.flatMap(_.className)) }
+          .mkString(",")})"
+    override def toString: String = description
+  }
 }

@@ -11,10 +11,7 @@
  */
 package optimus.platform.relational.tree
 
-class LambdaElement(
-    returnType: TypeInfo[_],
-    val body: RelationElement,
-    val parameters: collection.Seq[ParameterElement])
+class LambdaElement(returnType: TypeInfo[_], val body: RelationElement, val parameters: Seq[ParameterElement])
     extends RelationElement(ElementType.Lambda, returnType) {}
 object LambdaElement {
   def unapply(l: LambdaElement) = Some(l.rowTypeInfo, l.body, l.parameters)

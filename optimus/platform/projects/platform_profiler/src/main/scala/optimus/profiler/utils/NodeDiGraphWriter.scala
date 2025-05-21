@@ -11,12 +11,14 @@
  */
 package optimus.profiler.utils
 
+import optimus.graph.DiagnosticSettings
+
 import java.util.{ArrayList => JArrayList}
 import java.util.{Collection => JCollection}
 import java.util.{HashMap => JHashMap}
 import java.util.{HashSet => JHashSet}
-
 import optimus.graph.OGTraceReader
+import optimus.graph.diagnostics.Debugger
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.platform.util.PrettyStringBuilder
@@ -31,7 +33,14 @@ object NodeDiGraphWriter {
 
   def fullNodeGraphToString(reader: OGTraceReader, config: DigraphConfig = DefaultConfig): String = {
     val writer = new NodeDiGraphWriter(reader, config)
-    writer.visit(reader.getRawTasks())
+    writer.visit(
+      reader.getRawTasks(
+        true,
+        Debugger.dbgOfflineShowStart.get,
+        Debugger.dbgOfflineShowUnattached.get,
+        Debugger.dbgOfflineShowSpecProxies.get,
+        Debugger.dbgOfflineShowNonCacheable.get
+      ))
   }
 
   def fullNodeGraphToString(hotspots: Map[String, PNodeTaskInfo], tasks: Map[String, PNodeTask]): String = {
@@ -82,10 +91,12 @@ class DigraphConfig(
     val dontSkipIncompleteInfo: Boolean = false,
     val alignRoots: Boolean = true,
     val includeEdgeIndex: Boolean = false,
-    val alignByName: Boolean = false)
+    val alignByName: Boolean = false,
+    val includeEnqueues: Boolean = true)
 
 case object DefaultConfig extends DigraphConfig
 case object EnqueuerGraphConfig extends DigraphConfig(false, false, true, alignByName = true)
+case object ValueGraphConfig extends DigraphConfig(includeEnqueues = false)
 
 class NodeDiGraphWriter(reader: OGTraceReader, config: DigraphConfig = DefaultConfig) {
   private val sb = new PrettyStringBuilder
@@ -137,7 +148,11 @@ class NodeDiGraphWriter(reader: OGTraceReader, config: DigraphConfig = DefaultCo
       var i = 0
       while (i < callees.size()) {
         val child = callees.get(i)
-        val idTo = idOf(child.id, child.infoId, markVisited = false)
+        val idTo = idOf(
+          child.id,
+          child.infoId,
+          markVisited = false,
+          speculativeProxy = Debugger.dbgOfflineShowSpecProxies.get && task.isSpeculativeProxy)
         edge(idFrom, idTo, 1, i, callees.isEnqueue(i))
         visit(child)
         i += 1
@@ -227,6 +242,7 @@ class NodeDiGraphWriter(reader: OGTraceReader, config: DigraphConfig = DefaultCo
       edgeCount: Int,
       edgeIndex: Int = -1,
       enqueueEdge: Boolean = false): Unit = {
+    if (enqueueEdge && !config.includeEnqueues) return
     sb.append("n" + idFrom)
     sb.append("->")
     sb.append("n" + idTo)
@@ -240,12 +256,17 @@ class NodeDiGraphWriter(reader: OGTraceReader, config: DigraphConfig = DefaultCo
   }
 
   private def idOf(grp: PNodeTaskInfoGrp): Integer = idOf(grp.id, grp.pnti.id)
-  private def idOf(task: PNodeTask): Integer = idOf(task.id, task.infoId)
+  private def idOf(task: PNodeTask): Integer =
+    idOf(task.id, task.infoId, markVisited = true, speculativeProxy = task.isSpeculativeProxy)
 
   def getTaskInfo(id: Int): PNodeTaskInfo = reader.getTaskInfo(id)
   def getPntiName(pnti: PNodeTaskInfo): String = pnti.fullNamePackageShortened()
 
-  private def idOf(id: Integer, nti_id: Int, markVisited: Boolean = true): Integer = {
+  private def idOf(
+      id: Integer,
+      nti_id: Int,
+      markVisited: Boolean = true,
+      speculativeProxy: Boolean = false): Integer = {
     var i: Integer = ids.get(id)
     if (i != null) { return i }
     i = ids.size + 1
@@ -264,6 +285,7 @@ class NodeDiGraphWriter(reader: OGTraceReader, config: DigraphConfig = DefaultCo
 
       if (pnti != null)
         NodeDiGraphWriter.attributes(sb, pnti.isDirectlyTweakable, pnti.isProfilerProxy, pnti.isInternal)
+      if (speculativeProxy) sb.append(" color=green")
       sb.appendln("]")
     }
     i // return value

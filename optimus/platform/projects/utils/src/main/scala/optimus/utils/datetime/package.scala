@@ -191,55 +191,6 @@ package object datetime {
     }
   }
 
-  object JSR310Conversions {
-
-    implicit class ConvertibleInstant(val instant: Instant) extends AnyVal {
-      def toEpochNano = toJSR310.toEpochNano
-      def toJSR310: javax.time.Instant = javax.time.Instant.ofEpochSecond(instant.getEpochSecond, instant.getNano)
-    }
-
-    implicit class ConvertibleJSRInstant(val instant: javax.time.Instant) extends AnyVal {
-      def toJavaTime: Instant = Instant.ofEpochSecond(instant.getEpochSecond, instant.getNanoOfSecond)
-    }
-
-    implicit class ConvertibleZonedDateTime(val zdt: ZonedDateTime) extends AnyVal {
-      def toJSR310: javax.time.calendar.ZonedDateTime =
-        javax.time.calendar.ZonedDateTime.of(
-          zdt.getYear,
-          zdt.getMonthValue,
-          zdt.getDayOfMonth,
-          zdt.getHour,
-          zdt.getMinute,
-          zdt.getSecond,
-          zdt.getNano,
-          javax.time.calendar.ZoneId.of(zdt.getZone.getId, ZoneId.SHORT_IDS)
-        )
-    }
-
-    implicit class ConvertibleJSRZoneId(val zoneId: javax.time.calendar.ZoneId) extends AnyVal {
-      def toJavaTime = ZoneId.of(zoneId.getID, ZoneId.SHORT_IDS)
-    }
-
-    implicit class ConvertibleJSRLocalDate(val ld: javax.time.calendar.LocalDate) extends AnyVal {
-      def toJavaTime: LocalDate = LocalDate.of(ld.getYear, ld.getMonthOfYear.getValue, ld.getDayOfMonth)
-    }
-
-    implicit class ConvertibleJSRZonedDateTime(val zdt: javax.time.calendar.ZonedDateTime) extends AnyVal {
-      def toJavaTime: ZonedDateTime =
-        ZonedDateTime.of(
-          zdt.getYear,
-          zdt.getMonthOfYear.getValue,
-          zdt.getDayOfMonth,
-          zdt.getHourOfDay,
-          zdt.getMinuteOfHour,
-          zdt.getSecondOfMinute,
-          zdt.getNanoOfSecond,
-          ZoneId.of(zdt.getZone.getID, ZoneId.SHORT_IDS)
-        )
-    }
-
-  }
-
   class ComparableLocalDate(val thiz: LocalDate) extends AnyVal with Comparable[LocalDate] {
     override def compareTo(that: LocalDate): Int = thiz.compareTo(that)
   }

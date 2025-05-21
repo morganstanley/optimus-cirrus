@@ -172,3 +172,13 @@ case object PubSubBrokerConnectEvent extends GlobalEvent
  * message is received when connection is successful with with pubsub broker
  */
 case object PubSubBrokerDisconnectEvent extends GlobalEvent
+
+/**
+ * message signifies delay in ticks for given entity types
+ */
+final case class PubSubDelayEvent(delayedTypes: Set[String]) extends GlobalEvent
+
+/**
+ * message signifies delay in ticks is over for given entity types
+ */
+final case class PubSubDelayOverEvent(recoveredTypes: Set[String]) extends GlobalEvent

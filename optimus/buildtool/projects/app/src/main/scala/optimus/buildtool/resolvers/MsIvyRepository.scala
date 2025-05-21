@@ -114,18 +114,19 @@ import scala.util.Try
       throw new IllegalStateException("I'm expecting to be called by CoursierArtifactResolver on artifactsNode")
 
     @node def artifactsNode(
-        dependency: Dependency,
+        coursierDependency: CoursierDependency,
         project: Project,
         overrideClassifiers: Option[Seq[String]]
-    ): Seq[Either[String, CoursierArtifact]] = artifactsImpl(dependency, project, overrideClassifiers)
+    ): Seq[Either[String, CoursierArtifact]] = artifactsImpl(coursierDependency, project, overrideClassifiers)
 
     // split the implementation out into a non-node method since we're only using @node for caching here;
     // there are no async transforms needed below
     private def artifactsImpl(
-        dependency: Dependency,
+        coursierDependency: CoursierDependency,
         project: Project,
         overrideClassifiers: Option[Seq[String]]
     ): Seq[Either[String, CoursierArtifact]] = {
+      val dependency = coursierDependency.dependency
       val publications = matchingPublications(dependency, project, overrideClassifiers)
       val namedArtifacts: Seq[Either[String, CoursierArtifact]] = toArtifacts(dependency, project, publications)
 
@@ -133,7 +134,7 @@ import scala.util.Try
 
       val artifacts: Seq[CoursierArtifact] = namedArtifacts
         .flatMap(_.toOption)
-        .map { case artifact =>
+        .map { artifact =>
           if (isClassJar(artifact)) {
             // attach extra information to the class jar if available
             val extraArtifacts = nonClassArtifacts.getOrElse(artifact.publication.name, Nil)
@@ -148,7 +149,17 @@ import scala.util.Try
 
       val errors = namedArtifacts.collect { case e @ Left(_) => e }
 
-      (artifacts.map(Right(_)) ++ errors).sortBy {
+      // only check for missing configurations with direct deps (otherwise non-transitive variants for transitive
+      // deps could cause errors)
+      val configurationErrors =
+        if (
+          coursierDependency.direct && dependency.configuration.value != "none" &&
+          !project.allConfigurations.contains(dependency.configuration)
+        ) {
+          Some(Left(s"No configuration '${dependency.configuration.value}' exists"))
+        } else None
+
+      (artifacts.map(Right(_)) ++ errors ++ configurationErrors).sortBy {
         // sort so that we get consistent results on every run (important for stable fingerprints and compilations)
         case Left(err)       => err
         case Right(artifact) => artifact.url
@@ -387,7 +398,7 @@ private[resolvers] object MsIvyRepository {
       }
     } yield MsIvyRepository(
       ivyPattern,
-      artifactPatterns,
+      artifactPatterns.toList,
       changing,
       withChecksums,
       withSignatures,
@@ -427,9 +438,9 @@ private[resolvers] object MsIvyRepository {
 
 @entity trait AsyncArtifactSource {
   @node def artifactsNode(
-      dependency: Dependency,
+      coursierDependency: CoursierDependency,
       project: Project,
-      overrideClassifiers: Option[Seq[String]]
+      overrideClassifiers: Option[Seq[String]],
   ): Seq[Either[String, CoursierArtifact]]
 }
 

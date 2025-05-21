@@ -51,7 +51,8 @@ object ImageLocation {
     def mkBuilder = tap(Jib.from(value))
     def mkContainerizer = tap(Containerizer.to(value))
 
-    override def toString(): String = s"$path@$name"
+    override def toString: String =
+      s"${Jib.TAR_IMAGE_PREFIX}//${path.toString.stripPrefix("//").stripPrefix("/")}@$name"
   }
   final case class Registry(name: String) extends ImageLocation {
     val value: RegistryImage = RegistryImage.named(name)

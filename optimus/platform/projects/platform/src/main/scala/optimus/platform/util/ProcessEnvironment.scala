@@ -48,7 +48,8 @@ final case class ProcessEnvironment(
 object ProcessEnvironment {
   private lazy val bean = ManagementFactory.getRuntimeMXBean
 
-  private lazy val inputArguments: Seq[String] = ManagementFactory.getRuntimeMXBean.getInputArguments.asScala
+  private lazy val inputArguments: Seq[String] =
+    ManagementFactory.getRuntimeMXBean.getInputArguments.asScalaUnsafeImmutable
   private lazy val entityAgentArgument: String =
     inputArguments.find(a => a.startsWith("-javaagent:") && a.contains("entityagent")).getOrElse("")
   private lazy val aliasPackageArgument: String =

@@ -123,7 +123,7 @@ object DALAccExecutionProvider {
   class ConstFormatter(loadContext: TemporalContext, val forDisplay: Boolean) extends DALExpressionVisitor {
     protected override def visitFunction(f: Function): Expression = {
       (f.method, f.arguments, visitExpressionList(f.arguments)) match {
-        case ("knowable.value", _, List(Constant(s: Seq[_], _))) =>
+        case ("knowable.value", _, List(Constant(s: collection.Seq[_], _))) =>
           if (s.size == 1) Constant(null, TypeCode.None) else Constant(s.last, typeCode(s.last))
         case ("option.value", RichConstant(valueOpt: Option[_], _, _) :: Nil, visitedArgs) =>
           if (valueOpt == None) Function("option.value", visitedArgs)

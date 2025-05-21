@@ -289,7 +289,8 @@ class GraphConsole private extends JPanel2 {
         if (writeAction)
           write(action, inStyle)
 
-        val ss = Option(DebuggerUI.replScenarioStack).getOrElse(EvaluationContext.scenarioStack)
+        val ss = Option(DebuggerUI.replScenarioStack).getOrElse(
+          if (EvaluationContext.isInitialised) EvaluationContext.scenarioStack else null)
         DebuggerUI.underStackOf(ss) {
           GraphConsole.interpret(interpreter, action) match {
             case Results.Success    => in.setText("")

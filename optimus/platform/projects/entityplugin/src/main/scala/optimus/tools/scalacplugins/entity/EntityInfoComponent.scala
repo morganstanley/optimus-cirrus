@@ -48,13 +48,17 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
 
   case class AllPossibleParents(head: Symbol, overrides: List[Symbol], otherSources: List[Symbol])
 
-  private def shouldRewriteParents(sym: Symbol) = {
+  private def hasNoBaseClass(sym: Symbol) = {
     val superClass = sym.superClass
-    // TODO (OPTIMUS-13297): if we move the BusinessEventImpl class to core project, we can remove the type check here
-    !sym.isTrait && isEntityOrEvent(sym) && (superClass.isTrait || superClass == definitions.ObjectClass)
+    !sym.isTrait && (superClass.isTrait || superClass == definitions.ObjectClass)
   }
 
-  def rewriteParents(sym: Symbol, parents: List[Type]): List[Type] = {
+  // TODO (OPTIMUS-13297): if we move the BusinessEventImpl class to core project, we can remove the type check here
+  private def shouldRewriteParents(sym: Symbol) = hasNoBaseClass(sym) && isEntityOrEvent(sym)
+  private def needsEmbeddableCompanionImpl(sym: Symbol, parents: List[Type]) =
+    sym.isModuleClass && hasNoBaseClass(sym) && parents.contains(EmbeddableCompanionBaseClass.tpe)
+
+  private def rewriteParents(sym: Symbol, parents: List[Type]): List[Type] = {
     def rewrite(sc: Symbol): List[Type] = sc.tpe :: parents.tail
     if (shouldRewriteParents(sym)) {
       if (isEntity(sym)) rewrite(EntityImplClass)
@@ -163,7 +167,10 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
           val parents1 = if (needsEntityInfos(sym)) {
             enterInfoDefsForSym(decls1, sym)
             rewriteParents(sym, parents0)
-          } else parents0
+          } else if (needsEmbeddableCompanionImpl(sym, parents0)) {
+            EmbeddableCompanionBaseImplClass.tpe :: parents0.tail
+          } else
+            parents0
 
           // TODO (OPTIMUS-24864): removing this causes breakage, but why?
           if (isStorableCompanion(sym) && !sym.isStatic) List(sym, sym.module) foreach (_ resetFlag PrivateLocal)
@@ -180,7 +187,6 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
           if (isStorableCompanion(sym) && !sym.isStatic) List(sym, sym.module) foreach (_ resetFlag PrivateLocal)
 
           ClassInfoType(parents1, decls1, sym)
-
         case s => s
       }
     } else {
@@ -216,10 +222,10 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
 
       // We want to know as soon as incompatible definitions are combined, that includes self types which are associated with a trait
       // without it actually inheriting it.
-      val baseClasses = impliedBaseClasses(sym).filter(isEntityOrEvent)
+      val baseClasses: List[Symbol] = impliedBaseClasses(sym).filter(isEntityOrEvent)
 
-      val baseModules = baseClasses.map(_.companionModule)
-      val thisIsAConcreteClass = sym.isConcreteClass
+      private val baseModules = baseClasses.map(_.companionModule)
+      private val thisIsAConcreteClass = sym.isConcreteClass
 
       def isAbstractMethod(s: Symbol): Boolean = s match {
         case m: MethodSymbol => m.isAbstract
@@ -271,7 +277,7 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
         refs
       }
 
-      if (sym.isSubClass(InlineEntityClass) && !indexInfos.isEmpty)
+      if (sym.isSubClass(InlineEntityClass) && indexInfos.nonEmpty)
         alarm(OptimusErrors.INLINE_ENTITY_WITH_INDEX_KEY, sym.pos)
 
       private def propertyInfoSym(nodeSym: Symbol): Option[Symbol] = {

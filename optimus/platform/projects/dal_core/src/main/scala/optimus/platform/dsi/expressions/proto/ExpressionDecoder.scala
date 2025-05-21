@@ -66,13 +66,13 @@ trait ExpressionDecoder {
       proto.getName,
       decode(proto.getWhen).asInstanceOf[DSIQueryTemporality.BitempRange],
       decode(proto.getKind),
-      proto.getSuperClassesList.asScala,
+      proto.getSuperClassesList.asScalaUnsafeImmutable,
       decode(proto.getId)
     )
   }
 
   protected def decode(proto: EntityProto): Entity = {
-    Entity(proto.getName, decode(proto.getWhen), proto.getSuperClassesList.asScala, decode(proto.getId))
+    Entity(proto.getName, decode(proto.getWhen), proto.getSuperClassesList.asScalaUnsafeImmutable, decode(proto.getId))
   }
 
   protected def decode(proto: EventProto): Event = {
@@ -88,7 +88,10 @@ trait ExpressionDecoder {
   }
 
   protected def decode(proto: PropertyProto): Property = {
-    Property(propType = decode(proto.getPropType), names = proto.getNamesList.asScala, owner = decode(proto.getOwner))
+    Property(
+      propType = decode(proto.getPropType),
+      names = proto.getNamesList.asScalaUnsafeImmutable,
+      owner = decode(proto.getOwner))
   }
 
   protected def decode(proto: ConstantProto): Constant = {

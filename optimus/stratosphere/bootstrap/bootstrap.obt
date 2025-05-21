@@ -13,16 +13,22 @@ main {
     libs = [
       ossjava.typesafeconfig
     ]
+    modules = [
+      optimus.platform.partial-rollout
+    ]
   }
   tokens {
     "INTELLIJ_VERSION" = ${versions.intellij.core}
     "SCALA_PLUGIN_VERSION" = ${versions.intellij.plugins.scala}
     "PYTHON_PLUGIN_VERSION" = ${versions.intellij.plugins.python-community}
     "PYTHON_ULTIMATE_PLUGIN_VERSION" = ${versions.intellij.plugins.python-ultimate}
+    "RUFF_PLUGIN_VERSION" = ${versions.intellij.plugins.ruff}
+    "RUFF_BINARY_VERSION" = ${workspace.intellij.compat.ruff-binary}
     "HOCON_PLUGIN_VERSION" = ${versions.intellij.plugins.hocon}
     "MATERIAL_THEME_PLUGIN_VERSION" = ${versions.intellij.plugins.material-theme-ui}
     "CODY_PLUGIN_VERSION" = ${versions.intellij.plugins.cody}
     "COPILOT_PLUGIN_VERSION" = ${versions.intellij.plugins.copilot}
+    "GREP_CONSOLE_PLUGIN_VERSION" = ${versions.intellij.plugins.grep-console}
     "DISABLE_ASYNC_STACK_TRACES" = ${workspace.intellij.compat.disable-async-stack-traces}
     "LINUX_INTELLIJ_JDK" = ${workspace.intellij.compat.linux-jdk}
     "LINUX_JCEF_SANDBOX" = ${workspace.intellij.compat.linux-jcef-sandbox}

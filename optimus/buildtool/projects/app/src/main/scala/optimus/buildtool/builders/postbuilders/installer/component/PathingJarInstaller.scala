@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component
 
-import java.nio.file.Files
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.builders.postbuilders.installer.ManifestResolver
@@ -28,6 +27,7 @@ import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 
+import java.nio.file.Files
 import scala.collection.immutable.Seq
 
 class PathingJarInstaller(
@@ -57,7 +57,9 @@ class PathingJarInstaller(
     val scopesNeedingPathing = includedRunconfJars.map(_._1).toSet ++ pathingBundleScopes
 
     includedScopeArtifacts.apar.flatMap {
-      case scopeArtifacts: ScopeArtifacts if scopesNeedingPathing.contains(scopeArtifacts.scopeId) =>
+      case scopeArtifacts: ScopeArtifacts
+        // javaagents always need a pathing jar containing their full classpath and agent manifest
+          if scopesNeedingPathing.contains(scopeArtifacts.scopeId) || isAgentJar(scopeArtifacts.scopeId) =>
         val scopeId = scopeArtifacts.scopeId
         val pathingJar = scopeArtifacts.pathingJar
         val targetDir = pathBuilder.libDir(scopeId)
@@ -85,5 +87,8 @@ class PathingJarInstaller(
       case _ => None
     }
   }
+
+  @node private def isAgentJar(scopeId: ScopeId): Boolean =
+    installer.scopeConfigSource.scopeConfiguration(scopeId).agentConfig.isDefined
 
 }

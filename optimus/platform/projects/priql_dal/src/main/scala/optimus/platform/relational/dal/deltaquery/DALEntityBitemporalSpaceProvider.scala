@@ -50,8 +50,6 @@ import optimus.platform.storable.EntityChange
 import optimus.platform.storable.EntityVersionHolder
 import optimus.platform.storable.PersistentEntity
 
-import scala.collection.Seq
-
 object DALEntityBitemporalSpaceProvider extends DALQueryUtil {
   import QueryResultMetaData._
   private[dal] final def rectangle_props(id: Id) = List(

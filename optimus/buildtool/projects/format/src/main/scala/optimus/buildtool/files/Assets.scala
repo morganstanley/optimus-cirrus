@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.files
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import java.net.URL
 import java.nio.file.AccessDeniedException
 import java.nio.file.FileSystem
@@ -25,7 +26,6 @@ import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.OptimusBuildToolAssertions
 import optimus.buildtool.utils.PathUtils
 import optimus.platform.impure
-import spray.json.JsonFormat
 
 import java.net.URI
 import scala.collection.immutable.Seq
@@ -293,9 +293,10 @@ object FileInJarAsset {
 }
 
 final case class JsonAsset private[files] (path: Path, lastModified: Instant) extends FileAsset {
-  def storeJson[A: JsonFormat](a: A, replace: Boolean, zip: Boolean = true): Unit =
+  def storeJson[A: JsonValueCodec](a: A, replace: Boolean, zip: Boolean = true): Unit =
     AssetUtils.storeJsonAtomically(this, a, replaceIfExists = replace, zip = zip)
 }
+
 object JsonAsset {
   def apply(file: Path): JsonAsset = JsonAsset(file, Instant.EPOCH)
   def timestamped(file: Path): JsonAsset = JsonAsset(file, FileAsset.lastModified(file))

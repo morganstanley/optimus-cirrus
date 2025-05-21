@@ -22,12 +22,12 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.GenericFiles
-import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.AsyncUtils
 import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Utils
 import optimus.platform._
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
@@ -122,12 +122,12 @@ import optimus.scalacompat.collection._
                   processEnvironment(tempJar, e, templateFiles, environments, sharedEnvironments, buildProperties))
                 .toIndexedSeq
 
-            val a = GenericFilesArtifact.create(scopeId, jarPath, msgs)
-            import optimus.buildtool.artifacts.JsonImplicits._
-            AssetUtils.withTempJson(GenericFilesArtifact.Cached(a.messages, a.hasErrors))(
-              tempJar.writeFile(_, RelativePath(GenericFilesArtifact.messages))
-            )
-            a
+            val artifact = GenericFilesArtifact.create(scopeId, jarPath, msgs)
+            import optimus.buildtool.artifacts.JsonImplicits.genericFilesArtifactValueCodec
+            val md = GenericFilesArtifact.Cached(artifact.messages, artifact.hasErrors)
+            tempJar.writeInFile(writeToStream(md, _), RelativePath(GenericFilesArtifact.messages))
+
+            artifact
           } asyncFinally tempJar.close()
         }
 

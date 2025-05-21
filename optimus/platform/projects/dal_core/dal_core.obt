@@ -32,8 +32,8 @@ main {
       optimus.silverking.silverking
     ]
     libs = [
+      com.ms.watchtower.watchtower_core,
       fsf.zookeeper,
-      ipm.watchtower_core,
       msjava.base,
       msjava.hdom,
       msjava.msnet,
@@ -47,12 +47,12 @@ main {
       ossjava.hibernate-validator,
       ossjava.iharder-base64,
       ossjava.jackson2,
+      ossjava.jackson2.module-scala,
       ossjava.jsr305-annotations,
       ossjava.lz4-java,
       ossjava.protobuf-java,
       ossjava.slf4j.bridges,
       ossjava.spring,
-      ossscala.jackson-module-scala,
       ossscala.scala.tools,
       ossscala.spray-json,
       sam.zookeeper

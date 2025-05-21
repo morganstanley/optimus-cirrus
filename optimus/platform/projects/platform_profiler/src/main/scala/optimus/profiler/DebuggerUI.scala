@@ -19,6 +19,7 @@ import java.util.{ArrayList => JArrayList}
 import java.util.{IdentityHashMap => JIdentityHashMap}
 import optimus.graph._
 import optimus.graph.cache.Caches
+import optimus.graph.diagnostics.Debugger
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.messages.BookmarkCounter
@@ -37,6 +38,7 @@ import optimus.profiler.ui.ValueInspector
 import optimus.profiler.ui.browser.NodeTreeBrowser
 import optimus.utils.misc.Color
 
+import scala.collection.immutable.ArraySeq
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -175,7 +177,7 @@ object DebuggerUI extends Log {
       ntsk.getCompletedTime >= t1 && ntsk.getFirstStartTime <= t2 && ntsk.getSelfTime >= minSelf && ntsk.getSelfPlusANCTime >= minTime
 
     val al: JArrayList[PNodeTask] = NodeTrace.getTraceBy(predicate, false, nMax)
-    al.asScala
+    al.asScalaUnsafeImmutable
   }
 
   final case class NodeSummary(self: Long, total: Long) {
@@ -226,8 +228,7 @@ object DebuggerUI extends Log {
       includeSiGlobal = true,
       includeGlobal = true,
       includeNamedCaches = true,
-      includePerPropertyCaches = true,
-      includeCtorGlobal = false)
+      includePerPropertyCaches = true)
     caches.foreach {
 
       _.foreach(candidate => {
@@ -468,39 +469,40 @@ object DebuggerUI extends Log {
 
   def foreachAncestor(initTsk: PNodeTask, sortFn: SF = identity, after: Boolean = false, maxLevel: Int = 1000)(
       f: (PNodeTask, Int) => Unit): Unit =
-    foreachRelative(initTsk)(n => sortFn(n.getCallers.asScala), maxLevel, after)(f)
+    foreachRelative(initTsk)(n => sortFn(n.getCallers.asScala.to(ArraySeq)), maxLevel, after)(f)
 
   def ancestors(
       initTsk: PNodeTask,
       maxLevel: Int = 1000,
       sortFn: SF = identity,
       after: Boolean = false): Seq[(PNodeTask, Int)] = {
-    val res = ArrayBuffer.empty[(PNodeTask, Int)]
+    val res = ArraySeq.newBuilder[(PNodeTask, Int)]
     foreachAncestor(initTsk, sortFn, after, maxLevel) { (n, i) =>
       res += ((n, i))
     }
-    res
+    res.result()
   }
 
   def foreachDescendant(initTsk: PNodeTask, sortFn: SF = identity, after: Boolean = false, maxLevel: Int = 1000)(
       f: (PNodeTask, Int) => Unit): Unit =
-    foreachRelative(initTsk)(n => sortFn(n.getCallees.asScala.toBuffer), maxLevel, after)(f)
+    foreachRelative(initTsk)(n => sortFn(n.getCallees.asScala.to(ArraySeq)), maxLevel, after)(f)
 
   def descendants(
       initTsk: PNodeTask,
       maxLevel: Int = 1000,
       sortFn: SF = identity,
       after: Boolean = false): Seq[(PNodeTask, Int)] = {
-    val res = ArrayBuffer.empty[(PNodeTask, Int)]
+    val res = ArraySeq.newBuilder[(PNodeTask, Int)]
     foreachDescendant(initTsk, sortFn, after, maxLevel) { (n, i) =>
       res += ((n, i))
     }
-    res
+    res.result()
   }
 
-  def foreachParent(tsk: PNodeTask)(f: PNodeTask => Unit): Unit = foreachDirectRelative(tsk)(_.getCallers.asScala)(f)
+  def foreachParent(tsk: PNodeTask)(f: PNodeTask => Unit): Unit =
+    foreachDirectRelative(tsk)(_.getCallers.asScala.to(ArraySeq))(f)
   def foreachChild(tsk: PNodeTask)(f: PNodeTask => Unit): Unit =
-    foreachDirectRelative(tsk)(_.getCallees.asScala.toBuffer)(f)
+    foreachDirectRelative(tsk)(_.getCallees.asScala.to(ArraySeq))(f)
 
   def hasAncestor(tsk: PNodeTask, i: NodeTaskInfo): Boolean = ancestors(tsk).exists(_._1.infoId == i.profile)
   def haveAncestor(tsks: Iterable[PNodeTask], i: NodeTaskInfo): Int = tsks.count(t => hasAncestor(t, i))
@@ -525,8 +527,22 @@ object DebuggerUI extends Log {
       GraphDebuggerUI.addTab("Time Line [" + tabName + "]", new NodeTimeLineView(reader))
     if (showHotspots)
       GraphDebuggerUI.addTab("Profiler [" + tabName + "]", new NodeProfiler(reader))
-    if (showBrowser && reader.hasRecordedTasks)
-      GraphDebuggerUI.addTab("Browser [" + tabName + "]", new GraphBrowser(reader.getRawTasks))
+    if (showBrowser && reader.hasRecordedTasks) {
+      val browser = new GraphBrowser(
+        reader.getRawTasks(
+          true,
+          Debugger.dbgOfflineShowStart.get,
+          Debugger.dbgOfflineShowUnattached.get,
+          Debugger.dbgOfflineShowSpecProxies.get,
+          Debugger.dbgOfflineShowNonCacheable.get
+        )
+      )
+      GraphDebuggerUI.offlineBrowsers.add(browser)
+      GraphDebuggerUI.addTab(
+        "Browser [" + tabName + "]",
+        browser,
+        () => GraphDebuggerUI.offlineBrowsers.remove(browser))
+    }
 
     loadedTraces += reader
     reader

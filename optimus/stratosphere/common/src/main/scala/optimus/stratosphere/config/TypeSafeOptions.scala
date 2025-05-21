@@ -184,6 +184,10 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def addImportsOnPaste: Boolean = self.select("intellij.defaults.add-imports-on-paste")
     }
 
+    object globalJarMapping {
+      def enabled: Boolean = self.select("intellij.global-jar-mapping.enabled")
+    }
+
     object idea64 {
       def vmoptions: Seq[String] = self.select("intellij.idea64.vmoptions")
       def extraVmoptions: Seq[String] = self.select("intellij.idea64.extraVmoptions")
@@ -191,6 +195,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object allowedInspections {
       def groups: Map[String, Boolean] = self.select("intellij.allowed-inspections.groups")
+      def optimus: Map[String, Boolean] = self.select("intellij.allowed-inspections.optimus")
     }
 
     object jetfire {
@@ -260,6 +265,12 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         self.select[Seq[Config]]("intellij.plugins.extension").map(PluginInfo.fromConfig(_, isExtension = true))
       def ultimate: Seq[PluginInfo] =
         self.select[Seq[Config]]("intellij.plugins.ultimate").map(PluginInfo.fromConfig(_))
+
+      object ruff {
+        def enabled: Boolean = self.select("intellij.plugins.ruff.enabled")
+        def binaryVersion: String = self.select("intellij.plugins.ruff.binary-version")
+        def pythonVersion: String = self.select("intellij.plugins.ruff.python-version")
+      }
     }
 
     object proxy {
@@ -308,11 +319,15 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object internal {
     def bannerMessage: String = self.select("internal.banner-message")
-    def bitbucketHostname: String = self.select("internal.bitbucket-hostname")
     def hasVersionChanged: Boolean = self.select[Boolean]("internal.version-changed")
     def helpMailGroup: String = self.select("internal.help-mail-group")
     def msGroup: Path = self.select("internal.ms-group")
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
+
+    object bitbucket {
+      def hostname: String = self.select("internal.bitbucket.hostname")
+      def allUsersGroup: String = self.select("internal.bitbucket.all-users-group")
+    }
 
     object console {
       def colors: ConsoleColors = ConsoleColors(
@@ -360,6 +375,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object historyTruncation {
       def codetreeArchiveUrl: Option[RemoteUrl] = self.select("internal.history-truncation.codetree-archive-url")
+      def codetreeReleaseArchiveUrl: Option[RemoteUrl] =
+        self.select("internal.history-truncation.codetree-release-archive-url")
       def isWorkspaceMigrated: Option[Boolean] = self.select("internal.history-truncation.is-workspace-migrated")
       def newRootCommit: Option[String] = self.select("internal.history-truncation.new-root-commit")
     }
@@ -513,6 +530,29 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def all: Map[String, HostnamePort] = self
           .select[Map[String, String]]("internal.urls.bitbucket")
           .map { case (name, value) => (name, HostnamePort.parse(value)) }
+        def byMPR(meta: String, project: String, repo: String): Option[HostnamePort] = {
+          self.select[Option[String]](s"internal.urls.repos.$meta.$project.$repo").map { instanceId: String =>
+            HostnamePort(self.select[Config](s"internal.urls.bitbucket.$instanceId"))
+          }
+        }
+        def metaForPR(project: String, repo: String): Option[String] = {
+          self
+            .select[Config]("internal.urls.repos")
+            .entrySet()
+            .asScala
+            .filter { key =>
+              key.getKey.endsWith(s"$project.$repo")
+            }
+            .toSeq match {
+            case Seq(singleEntry) => Some(singleEntry.getKey.split("\\.").head)
+            case Seq(_, _*) =>
+              log.warning(
+                s"Multiple config entries match for 'internal.urls.repos.<meta>.$project.$repo', falling back to legacy logic")
+              None
+            case _ =>
+              None
+          }
+        }
       }
 
       object migration {
@@ -575,11 +615,13 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def forcePush: Boolean = self.select("pr-creation-tool.force-push")
     def skipPush: Boolean = self.select("pr-creation-tool.skip-push")
     def catchup: Boolean = self.select("pr-creation-tool.catchup")
+    def forceSkipCatchup: Boolean = self.select[Option[Boolean]]("pr-creation-tool.force-skip-catchup").getOrElse(false)
     def targetBranch: String = self.select("pr-creation-tool.target-branch")
     def remote: String = self.select("pr-creation-tool.remote")
     def defaultReviewers: Seq[String] = self.select("pr-creation-tool.default-reviewers")
     def privateBuildUrl: String = self.select("pr-creation-tool.private-build-url")
     def ciType: String = self.select("pr-creation-tool.ci-type")
+    def shortUrl: String = self.select("pr-creation-tool.short-url")
   }
 
   object python {
@@ -634,6 +676,14 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def commandTime: Boolean = self.select("show.command-time")
     def channelsAutoInclude: Boolean = self.select("show.channels.auto-include")
     def channelsConflicts: Boolean = self.select("show.channels.conflicts")
+  }
+
+  object autoBuildRules {
+    object schema {
+      def filePatterns: Seq[String] = self.select[Seq[String]]("auto-build-rules.schema.file-patterns")
+      def directoryPatterns: Seq[String] = self.select[Seq[String]]("auto-build-rules.schema.directory-patterns")
+      def regexPatterns: Seq[String] = self.select[Seq[String]]("auto-build-rules.schema.regex-patterns")
+    }
   }
 
   // please keep the object sorted

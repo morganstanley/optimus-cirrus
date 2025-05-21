@@ -61,7 +61,7 @@ object ClassPathUtils {
 
   final def readClasspathEntries(
       classLoader: ClassLoader,
-      excludeRegexes: collection.Seq[String] = collection.Seq.empty): collection.Seq[Path] = {
+      excludeRegexes: Seq[String] = Seq.empty): Seq[Path] = {
     val excludePatterns = excludeRegexes map Pattern.compile
     def shouldExclude(path: String): Boolean =
       excludePatterns exists { _.matcher(path).matches }
@@ -111,14 +111,14 @@ object ClassPathUtils {
   }
 
   /** Recursively expands all Class-Path manifest entries */
-  final def expandClasspath(classPath: collection.Seq[Path]): collection.Seq[Path] =
+  final def expandClasspath(classPath: Seq[Path]): Seq[Path] =
     expandClasspath(classPath, normalize = false, recurse = true)
 
   /** Expands all Class-Path manifest entries (optionally recursively) */
   final def expandClasspath(
-      classPath: collection.Seq[Path],
+      classPath: Seq[Path],
       normalize: Boolean,
-      recurse: Boolean): collection.Seq[Path] = {
+      recurse: Boolean): Seq[Path] = {
     val effectiveClassPath = new ju.LinkedHashSet[Path]()
 
     def loadClassPath(file: Path): Unit = {

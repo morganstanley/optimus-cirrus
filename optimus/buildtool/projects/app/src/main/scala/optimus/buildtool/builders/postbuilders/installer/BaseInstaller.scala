@@ -84,7 +84,7 @@ trait BaseInstaller { this: PostBuilder with Log =>
           artifactsForScope.collect { case (InternalArtifactId(_, _: T, _), jar) => jar }.toIndexedSeq
 
         val classJars = collectJarsPerType[InternalClassFileArtifactType].sortBy(_.pathString)
-        val pathingJars = collectJarsPerType[PathingArtifactType]
+        val pathingJar = collectJarsPerType[PathingArtifactType].singleOption
         val runconfJar = collectJarsPerType[CompiledRunconfArtifactType]
 
         val installJar =
@@ -97,12 +97,16 @@ trait BaseInstaller { this: PostBuilder with Log =>
           } else
             ScopeInstallJar(pathBuilder.libDir(scopeId).resolveJar(NamingConventions.scopeOutputName(scopeId)))
 
+        val installedPathingJar =
+          pathingJar.map(_ => pathBuilder.libDir(scopeId).resolveJar(NamingConventions.pathingJarName(scopeId)))
+
         ScopeArtifacts(
           scopeId,
           classJars,
-          pathingJars.singleOption,
+          pathingJar,
           runconfJar.singleOption,
-          installJar
+          installJar,
+          installedPathingJar
         )
       }
       .toIndexedSeq
@@ -153,7 +157,8 @@ final case class ScopeArtifacts(
     classJars: Seq[JarAsset],
     pathingJar: Option[JarAsset],
     runconfJar: Option[JarAsset],
-    installJar: InstallJar
+    installJar: InstallJar,
+    installedPathingJar: Option[JarAsset]
 )
 
 private[installer] final case class LoggingDetails(prefix: String, midfix: String)

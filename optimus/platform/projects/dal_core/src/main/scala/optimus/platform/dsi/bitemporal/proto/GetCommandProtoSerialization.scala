@@ -1111,7 +1111,7 @@ object DiscoverServicesResultSerializer
           DiscoverServicesFailure.CannotDiscoverServices(msg)
       }
     } else {
-      val services = proto.getServicesList.asScala.map(ServiceDiscoveryElementSerializer.deserialize)
+      val services = proto.getServicesList.asScalaUnsafeImmutable.map(ServiceDiscoveryElementSerializer.deserialize)
       val ess = fromProto(proto.getEstablishSessionResult).asInstanceOf[EstablishSessionSuccess]
       DiscoverServicesSuccess(services, ess)
     }
@@ -1757,7 +1757,7 @@ trait QueryReferenceResultSerialization {
       refs.size == txTimes.size && refs.size == vrefs.size,
       s"unexpected number of refs (${refs.size})/ txTimes (${txTimes.size})/ vrefs ${vrefs.size} in ${resultType.getSimpleName}"
     )
-    (refs, txTimes, vrefs).zipped.toIterable
+    (refs, txTimes, vrefs).zipped.toStream
   }
 }
 

@@ -94,8 +94,10 @@ trait NodeSynthesis { this: UntypedUtils =>
           ValDef(lazyHolderMods, lazyHolderName, lazyHolderType, lazyHolderRhs)
         }
 
-        val syncMods =
-          queuedMods.withAnnotations(mkAnnotation(NodeSyncAnnotationType, tree.pos.focus) :: Nil) | Flags.SYNTHETIC
+        val syncMods = withMiscFlag(queuedMods, MiscFlags.SYNTHETIC_CHECKED).withAnnotations(
+          mkAnnotation(NodeSyncAnnotationType, tree.pos.focus) :: mkAnnotation(
+            GivenAnyRuntimeEnvAnnotationTpe,
+            tree.pos.focus) :: Nil) | Flags.SYNTHETIC
 
         val queuedDefDef = atPos(tree.pos.focus) {
           val rt = tpt match {

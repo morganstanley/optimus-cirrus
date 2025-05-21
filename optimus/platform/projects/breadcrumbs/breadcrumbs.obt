@@ -29,9 +29,10 @@ main {
       ossjava.httpcomponents-client,
       ossjava.httpcomponents-core,
       ossjava.iharder-base64,
+      ossjava.jackson2.module-scala,
       ossjava.jsr305-annotations,
       ossjava.logback,
-      ossjava.metrics-core.variant.kafka,
+      ossjava.metrics-core,
       ossjava.slf4j,
       ossjava.snakeyaml,
       ossjava.zkclient,
@@ -57,7 +58,6 @@ auth {
   open = true
   compile {
     modules += optimus.platform.breadcrumbs.main
-    libs += msjava.kerberos
   }
   installIvy = true
 }
@@ -80,7 +80,7 @@ apps {
     libs = [
       msjava.logbackutils,
       msjava.slf4jutils,
-      ossjava.metrics-core.variant.kafka
+      ossjava.metrics-core
     ]
   }
 }

@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.config
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory._
 import optimus.buildtool.files.RelativePath
@@ -92,6 +94,8 @@ private[buildtool] final case class Dependencies(
 
 private[buildtool] object Dependencies {
   val empty: Dependencies = Dependencies(Nil, Nil, Nil)
+
+  implicit val dependenciesValueCodec: JsonValueCodec[Dependencies] = JsonCodecMaker.make
 }
 
 private[buildtool] final case class AllDependencies(
@@ -198,7 +202,7 @@ private[buildtool] final case class ScopeConfiguration(
     generatorConfig: Seq[(GeneratorType, GeneratorConfiguration)],
     resourceTokens: Map[String, String],
     runConfConfig: Option[RunConfConfiguration[RelativePath]],
-    private val sourceExclusionsStr: Seq[String],
+    private[buildtool] val sourceExclusionsStr: Seq[String],
     private[buildtool] val dependencies: AllDependencies,
     scalacConfig: ScalacConfiguration,
     javacConfig: JavacConfiguration,
@@ -207,7 +211,6 @@ private[buildtool] final case class ScopeConfiguration(
     pythonConfig: Option[PythonConfiguration],
     electronConfig: Option[ElectronConfiguration],
     agentConfig: Option[AgentConfiguration],
-    targetBundles: Seq[MetaBundle],
     processorConfig: Seq[(ProcessorType, ProcessorConfiguration)],
     interopConfig: Option[InteropConfiguration],
     useMavenLibs: Boolean // global setting to force scope use mavenLibs instead of libs

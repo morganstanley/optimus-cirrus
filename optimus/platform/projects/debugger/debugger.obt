@@ -15,7 +15,7 @@ main {
   compile {
     libs = [
       ossjava.jackson2
-      ossscala.jackson-module-scala
+      ossjava.jackson2.module-scala
     ]
   }
 }

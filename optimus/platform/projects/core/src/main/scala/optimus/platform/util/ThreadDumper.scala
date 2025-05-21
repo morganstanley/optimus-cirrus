@@ -48,20 +48,17 @@ object ThreadDumper {
 
   bean.setThreadContentionMonitoringEnabled(bean.isThreadContentionMonitoringSupported)
 
-  def dumpThreadsToLog(summary: String, details: collection.Seq[String] = Nil): collection.Seq[ThreadInfo] = {
+  def dumpThreadsToLog(summary: String, details: Seq[String] = Nil): Seq[ThreadInfo] = {
     val (dump, threadInfos) = dumpThreads(summary, details)
     log.warn(dump)
     threadInfos
   }
-  def dumpThreadsToConsole(summary: String, details: collection.Seq[String] = Nil): collection.Seq[ThreadInfo] = {
+  def dumpThreadsToConsole(summary: String, details: Seq[String] = Nil): Seq[ThreadInfo] = {
     val (dump, threadInfos) = dumpThreads(summary, details)
     println(dump)
     threadInfos
   }
-  def dumpThreadsToWriter(
-      w: Writer,
-      summary: String,
-      details: collection.Seq[String] = Nil): collection.Seq[ThreadInfo] = {
+  def dumpThreadsToWriter(w: Writer, summary: String, details: Seq[String] = Nil): Seq[ThreadInfo] = {
     val (dump, threadInfos) = dumpThreads(summary, details)
     w.append(dump)
     w.flush()
@@ -120,7 +117,7 @@ object ThreadDumper {
       excludeSpinningThread: Boolean = false): ThreadInfos =
     getThreadInfos(getThreadIds(schedulerQueues.map(_.contexts)), excludeSpinningThread = excludeSpinningThread)
 
-  def getThreadIdsByName(names: collection.Seq[String]): Array[Long] = {
+  def getThreadIdsByName(names: Seq[String]): Array[Long] = {
     allThreads.filter(thread => names.exists(thread.getName.matches)).map(_.threadId)
   }
 
@@ -149,7 +146,7 @@ object ThreadDumper {
     }
   }
 
-  def dumpThreads(summary: String, details: collection.Seq[String] = Nil): (String, collection.Seq[ThreadInfo]) = {
+  def dumpThreads(summary: String, details: Seq[String] = Nil): (String, Seq[ThreadInfo]) = {
     val result = new PrettyStringBuilder
     val threadInfos = bean.dumpAllThreads(true, true)
     val allThreadsMap = allThreads.map(t => t.threadId -> t).toMap

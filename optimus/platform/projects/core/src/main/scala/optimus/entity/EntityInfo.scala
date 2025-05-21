@@ -21,6 +21,7 @@ import optimus.graph.DiagnosticSettings
 import optimus.graph.PropertyInfo
 import optimus.graph.diagnostics.DbgObjectSupport
 import optimus.platform.UpcastDomain
+import optimus.platform.annotations.internal.EntityMetaDataAnnotation
 import optimus.platform.pickling.PickledInputStream
 import optimus.platform.pickling.ReflectiveEntityPickling
 import optimus.platform.pickling.UnsafeFieldInfo
@@ -39,7 +40,7 @@ import scala.util.hashing.MurmurHash3
 trait OptimusInfo {
   def runtimeClass: Class[_]
   // TODO (OPTIMUS-47350): warning! not the API to use if you're looking for cached constructor PropertyInfos...
-  def properties: collection.Seq[PropertyInfo[_]]
+  def properties: Seq[PropertyInfo[_]]
 
   OptimusInfo.registry.put(this, ())
 
@@ -135,9 +136,9 @@ trait StorableInfo extends OptimusInfo {
   type BaseType <: Storable
   type PermRefType <: StorableReference
   def runtimeClass: Class[_]
-  def indexes: collection.Seq[IndexInfo[_, _]]
-  def keys: collection.Seq[IndexInfo[_, _]]
-  def linkages: collection.Seq[LinkageType] = collection.Seq.empty
+  def indexes: Seq[IndexInfo[_, _]]
+  def keys: Seq[IndexInfo[_, _]]
+  def linkages: Seq[LinkageType] = Seq.empty
 
   def storedProperties: Iterable[PropertyInfo[_]] = properties collect {
     case s: PropertyInfo[_] if s.isStored => s
@@ -145,35 +146,37 @@ trait StorableInfo extends OptimusInfo {
 
   def deserializePermReference(rep: String): PermRefType
 
-  protected[optimus] def unsafeFieldInfo: collection.Seq[UnsafeFieldInfo]
+  protected[optimus] def unsafeFieldInfo: Seq[UnsafeFieldInfo]
 
   def createUnpickled(is: PickledInputStream, forceUnpickle: Boolean): BaseType
   final def createUnpickled(is: PickledInputStream): BaseType = createUnpickled(is, forceUnpickle = false)
 }
 
-abstract class EntityInfo(props: collection.Seq[PropertyInfo[_]], val parents: collection.Seq[ClassEntityInfo])
+abstract class EntityInfo(props: Seq[PropertyInfo[_]], val parents: Seq[ClassEntityInfo])
     extends OptimusInfo
     with StorableInfo {
   import optimus.platform.storable.EntityReference
   type BaseType = Entity
   type PermRefType = EntityReference
-  lazy val properties: collection.Seq[PropertyInfo[_]] = props.toVector
+  lazy val properties: Seq[PropertyInfo[_]] = props.toVector
 
   /**
    * Whether or not the Entity is storable.
    */
   val isStorable: Boolean
 
+  def monoTemporal: Boolean = false
+
   lazy val dbgFieldMap: DbgObjectSupport.FieldMap = DbgObjectSupport.setUp(runtimeClass, classOf[EntityImpl])
 
   def deserializePermReference(rep: String): PermRefType = EntityReference.fromString(rep)
   // TODO (OPTIMUS-0000): This should go away, but old semantics code is using it. Remove after that code is removed.
-  val indexes: collection.Seq[IndexInfo[_, _]] = collection.Seq.empty
-  lazy val keys: collection.Seq[IndexInfo[_, _]] = indexes filter { _.unique }
+  val indexes: Seq[IndexInfo[_, _]] = Seq.empty
+  lazy val keys: Seq[IndexInfo[_, _]] = indexes filter { _.unique }
 
   def log: msjava.slf4jutils.scalalog.Logger
 
-  protected[optimus] lazy val unsafeFieldInfo: collection.Seq[UnsafeFieldInfo] =
+  protected[optimus] lazy val unsafeFieldInfo: Seq[UnsafeFieldInfo] =
     ReflectiveEntityPickling.instance.prepareMeta(this)
 
   def createUnpickled(
@@ -220,9 +223,9 @@ abstract class EntityInfo(props: collection.Seq[PropertyInfo[_]], val parents: c
 class ClassEntityInfo(
     clazz: Class[_],
     override val isStorable: Boolean,
-    props: collection.Seq[PropertyInfo[_]],
-    parents: collection.Seq[ClassEntityInfo] = collection.Seq.empty,
-    override val indexes: collection.Seq[IndexInfo[_ <: Storable, _]] = collection.Seq.empty,
+    props: Seq[PropertyInfo[_]],
+    parents: Seq[ClassEntityInfo] = Seq.empty,
+    override val indexes: Seq[IndexInfo[_ <: Storable, _]] = Seq.empty,
     val upcastDomain: Option[UpcastDomain] = None)
     extends EntityInfo(props, parents) {
   lazy val runtimeClass: Class[_ <: Entity] = clazz.asSubclass(classOf[Entity])
@@ -232,7 +235,10 @@ class ClassEntityInfo(
 
   lazy val baseTypes: Set[ClassEntityInfo] = parentTypes + this
 
-  override lazy val linkages: collection.Seq[LinkageType] = (properties collect {
+  override lazy val monoTemporal: Boolean =
+    Option(runtimeClass.getAnnotation(classOf[EntityMetaDataAnnotation])).map(_.monoTemporal()).getOrElse(false)
+
+  override lazy val linkages: Seq[LinkageType] = (properties collect {
     case p if p.isChildToParent => EntityLinkageProperty(p.name, runtimeClass.getName)
   }) ++ (parentTypes flatMap { _.linkages })
 
@@ -265,11 +271,11 @@ class ClassEntityInfo(
 class ModuleEntityInfo(
     val runtimeClass: Class[_],
     val isStorable: Boolean,
-    props: collection.Seq[PropertyInfo[_]],
-    parents: collection.Seq[ClassEntityInfo] = collection.Seq.empty
+    props: Seq[PropertyInfo[_]],
+    parents: Seq[ClassEntityInfo] = Seq.empty
 ) extends EntityInfo(props, parents) {
   override val log: Logger = msjava.slf4jutils.scalalog.getLogger(runtimeClass)
-  override val indexes: collection.Seq[IndexInfo[_, _]] = collection.Seq.empty
+  override val indexes: Seq[IndexInfo[_, _]] = Seq.empty
 
   override def toString: String = runtimeClass.getName
 }

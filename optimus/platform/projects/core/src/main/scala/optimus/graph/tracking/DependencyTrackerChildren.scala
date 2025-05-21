@@ -40,7 +40,7 @@ private[tracking] trait DependencyTrackerChildren {
 
   private def fireChildDependency(): Unit = dependencyLock.synchronized {
     if (childrenDependency != null) {
-      Invalidators.invalidate(childrenDependency, root)
+      Invalidators.invalidate(childrenDependency, root, root.unbatchedTrackedNodeInvalidationObserver())
     }
     childrenDependency = null
   }
@@ -90,9 +90,10 @@ private[tracking] trait DependencyTrackerChildren {
       throw new IllegalArgumentException("Scenario names must be unique :" + nm)
     require(ref != ScenarioReference.Dummy, s"cannot create DependencyTracker for ScenarioReference '$nm'")
     val child = new DependencyTracker(root, ref, scenarioStack, null)
-    child.addTweaks(tweaks, throwOnDuplicate = true)
+    // add the child before adding the tweaks, because adding the tweaks calls getOrCreateScenario which calls back here
     addChild(child)
     root.addedChild(child)
+    if (tweaks.nonEmpty) child.addTweaks(tweaks, throwOnDuplicate = true)
     child
   }
 

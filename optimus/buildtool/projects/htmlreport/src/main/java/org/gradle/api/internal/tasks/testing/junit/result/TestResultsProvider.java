@@ -31,7 +31,18 @@ public interface TestResultsProvider extends Closeable {
    *
    * <p>Writes all output for the test class.
    */
-  void writeAllOutput(long id, TestOutputEvent.Destination destination, Writer writer);
+  void writeAllOutput(long classId, TestOutputEvent.Destination destination, Writer writer);
+
+  void writeNonTestOutput(long classId, TestOutputEvent.Destination destination, Writer writer);
+
+  /**
+   * Writes the output of the given test to the given writer. This method must be called only after
+   * {@link #visitClasses(org.gradle.api.Action)}.
+   *
+   * <p>Write all output for the given test case name of the test class.
+   */
+  void writeTestOutput(
+      long classId, long testId, TestOutputEvent.Destination destination, Writer writer);
 
   /**
    * Visits the results of each test class, in no specific order. Each class is visited exactly
@@ -39,7 +50,11 @@ public interface TestResultsProvider extends Closeable {
    */
   void visitClasses(Action<? super TestClassResult> visitor);
 
-  boolean hasOutput(long id, TestOutputEvent.Destination destination);
+  boolean hasOutput(long classId, TestOutputEvent.Destination destination);
+
+  boolean hasOutput(long classId, long testId, TestOutputEvent.Destination destination);
 
   Optional<CoverageResult> getCoverageResult();
+
+  boolean isHasResults();
 }

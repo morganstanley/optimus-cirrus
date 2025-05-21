@@ -62,7 +62,7 @@ object EntityProviderPersistence extends ProviderPersistence {
     // Type info of entity is generally unavailable.
     val typeInfo = TypeInfo.mock(entityTypeName)
 
-    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScala)
+    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScalaUnsafeImmutable)
     new EntityStorableRelationElement[Any](typeInfo.cast[Any], DynamicKey(keys))
   }
 

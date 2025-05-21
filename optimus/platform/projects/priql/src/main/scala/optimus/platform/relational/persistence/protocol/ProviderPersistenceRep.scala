@@ -88,7 +88,7 @@ object DefaultProviderPersistence extends ProviderPersistence {
   override def createRelationElement(
       relation: RelExpr.RelationElement,
       decodeType: TypeInfoDecoder): ProviderRelation = {
-    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScala)
+    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScalaUnsafeImmutable)
     val tpe = decodeType(relation.getItemType)
 
     ScalaTypeMultiRelation(

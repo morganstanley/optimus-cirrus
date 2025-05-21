@@ -15,6 +15,7 @@ import optimus.buildtool.config.MetaBundle.toMavenCompatibleStr
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import scala.util.hashing.MurmurHash3
 
 trait Id {
@@ -91,6 +92,12 @@ object ScopeId {
 
   val RootScopeId: ScopeId = ScopeId("", "", "", "")
 
+  implicit val ScopeIdJsonValueCodec: JsonValueCodec[ScopeId] = new JsonValueCodec[ScopeId] {
+    override def decodeValue(in: JsonReader, default: ScopeId): ScopeId = ScopeId.parse(in.readString(null))
+    override def encodeValue(x: ScopeId, out: JsonWriter): Unit = out.writeVal(x.toString)
+    override def nullValue: ScopeId = null
+  }
+
   def parse(str: String): ScopeId = str match {
     case "." | ""               => RootScopeId
     case ScopeIdString(scopeId) => scopeId
@@ -102,13 +109,6 @@ object ScopeId {
   def parseOpt(str: String): Option[ScopeId] = str match {
     case ScopeIdString(scopeId) => Some(scopeId)
     case _                      => None
-  }
-  import spray.json._
-  implicit object ScopeIdJsonFormat extends RootJsonFormat[ScopeId] {
-    override def write(obj: ScopeId): JsValue = JsString(obj.toString)
-    override def read(json: JsValue): ScopeId = (json: @unchecked) match {
-      case JsString(str) => parse(str)
-    }
   }
 
   def apply(moduleId: ModuleId, tpe: String): ScopeId = {

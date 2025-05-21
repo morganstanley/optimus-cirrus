@@ -60,14 +60,18 @@ import optimus.profiler.ui.common.JPanel2
 import optimus.profiler.ui.common.JSplitPane2
 import optimus.profiler.ui.common.JTabbedPane2
 import optimus.profiler.ui.common.ProvidesMenus
+import optimus.profiler.utils.NodeDiGraphWriter
+import optimus.profiler.utils.ValueGraphConfig
 
 import java.awt.Component
 import javax.swing.event.ChangeEvent
 import javax.swing.event.ChangeListener
+import scala.collection.mutable
 
 /** All methods should forward to the dispatch thread */
 object GraphDebuggerUI extends Log with ConfigSettings {
   private lazy val frame: GraphDebuggerUI = new GraphDebuggerUI(DiagnosticSettings.offlineReview)
+  private[profiler] val offlineBrowsers: mutable.Set[GraphBrowser] = mutable.Set.empty
 
   def clearUserPreferences(): Unit = {
     val prefs = Preferences.userNodeForPackage(getClass)
@@ -149,7 +153,7 @@ object GraphDebuggerUI extends Log with ConfigSettings {
   def loadTrace(toCompare: Boolean): Unit = frame.profiler.loadTrace(toCompare = toCompare)
 
   // same preference as for the class
-  private[profiler] var showInternal: DbgPreference = DbgPreference("showInternal", "Show Internal Nodes", "", pref)
+  private[profiler] val showInternal: DbgPreference = DbgPreference("showInternal", "Show Internal Nodes", "", pref)
 }
 
 class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with ProvidesMenus {
@@ -164,7 +168,7 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
   private val uiprofiler = UIProfiler.instance
   private val browser = new GraphBrowser
   private val selectedNodeBrowser = new GraphBrowser(GraphBrowser.SHOW_NODES_FROM_SELECTED_IN_UI, _ignoreFilter = true)
-  private val caches = new CachesView(DiagnosticSettings.offlineReview)
+  private val caches = new CachesView(offlineReview)
   private val nodeTimeLine = new NodeTimeLineView
   private val schedulerView = new SchedulerView
   private val jvmStacksView = JVMStacksView() // Can be null if JVM Stacks are not enabled
@@ -290,7 +294,10 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
 
       profilerMenu.addAdvCheckBoxMenu("Show Internal Nodes", "", showInternal) { b =>
         showInternal.set(b)
-        browser.nodeTreeChangeFlagOfShowInternal()
+        val browserToUse =
+          if (!offlineReview) Set(browser)
+          else GraphDebuggerUI.offlineBrowsers
+        browserToUse.foreach(_.nodeTreeChangeFlagOfShowInternal())
         selectedNodeBrowser.nodeTreeChangeFlagOfShowInternal()
         nodeTimeLine.cmdRefreshTimeLine() // redraw selected nodes
         Analyze.nodeAnalyzers.foreach(_.refresh())
@@ -301,7 +308,7 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
       }
 
       profilerMenu.addSeparator()
-      add(profilerMenu, "Generate optconf (property configuration)", profiler.cmdExportCachePropertiesFile())
+      add(profilerMenu, "Generate optconf (property configuration)", profiler.cmdExportOptconfs())
       profilerMenu.addSeparator()
       add(profilerMenu, "Refresh All", refresh()).setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0))
       add(profilerMenu, "Reset Profile", profiler.cmdResetProfile())
@@ -339,6 +346,25 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
       profilerMenu.addMenu("Exit", System.exit(-1)).setMnemonic('x')
       menuBar.add(profilerMenu)
 
+      if (offlineReview) {
+        val offlineMenu = new JMenu2("Offline Options")
+        add(
+          offlineMenu,
+          "Generate NodeTask graph", {
+            val graph = NodeDiGraphWriter.fullNodeGraphToString(DebuggerUI.loadedTraces.last, config = ValueGraphConfig)
+            SClipboard.copy(graph, graph)
+            showMessage("Copied to clipboard!")
+          },
+          tooltipText = Some("Only of latest trace loaded")
+        )
+        offlineMenu.addSeparator()
+        val tooltip = "Only applies to new traces"
+        offlineMenu.addCheckBoxMenu("Show start node", tooltip, Debugger.dbgOfflineShowStart)
+        offlineMenu.addCheckBoxMenu("Show unattached nodes", tooltip, Debugger.dbgOfflineShowUnattached)
+        offlineMenu.addCheckBoxMenu("Show speculative proxies", tooltip, Debugger.dbgOfflineShowSpecProxies)
+        offlineMenu.addCheckBoxMenu("Show noncacheable nodes", tooltip, Debugger.dbgOfflineShowNonCacheable)
+        menuBar.add(offlineMenu)
+      }
       profiler.getMenus.foreach { menuBar.add }
       caches.getMenus.foreach { menuBar.add }
       menuBar
@@ -357,8 +383,8 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
   private def updateTitle(): Unit = {
     val newTitle =
       if (DiagnosticSettings.diag_consoleTitle eq null) {
-        val cmdLine = System.getProperty("sun.java.command")
-        if (cmdLine ne null) cmdLine else "Graph Debugger"
+        val runconfName = System.getProperty("runconf.name")
+        if (runconfName ne null) runconfName else "Graph Debugger"
       } else " " + DiagnosticSettings.diag_consoleTitle
     setTitle(newTitle)
   }

@@ -129,10 +129,12 @@ object FileChooser {
     if (!file.getName.endsWith(suffix)) new File(file.getAbsolutePath + suffix) else file
   }
 
-  def traceFileChooser: JFileChooser2 = mkFileChooser("Recorded Traces", ogtraceSuffix)
-  def graphFileChooser: JFileChooser2 = mkFileChooser("Graph Profiles", graphProfileSuffix)
-  def nodeDumpChooser: JFileChooser2 = mkFileChooser("Node Dumps", nodeDumpSuffix)
-  def htmlLogFileChooser: JFileChooser2 = mkFileChooser("Console Logs", htmlLogSuffix)
+  lazy val traceFileChooser: JFileChooser2 = mkFileChooser("Recorded Traces", ogtraceSuffix)
+  lazy val graphFileChooser: JFileChooser2 = mkFileChooser("Graph Profiles", graphProfileSuffix)
+  lazy val nodeDumpChooser: JFileChooser2 = mkFileChooser("Node Dumps", nodeDumpSuffix)
+  lazy val htmlLogFileChooser: JFileChooser2 = mkFileChooser("Console Logs", htmlLogSuffix)
+  // cannot have an extension as we save multiple types of files (html, js, csv etc)
+  lazy val allProfileFileChooser: JFileChooser2 = mkFileChooser("All Profiling files", "")
   def optConfFileChooser(option: JComponent): JFileChooser2 = {
     val optconfPaths = NodeCacheConfigs.getOptconfProviderPaths
     val optconfPath = if (optconfPaths.nonEmpty) optconfPaths.head else null

@@ -26,6 +26,8 @@ import scala.util.control.NonFatal
 final case class LocalBranch(trackedRemoteName: Option[String])
 
 final case class RemoteUrl(url: String) {
+  def instanceUrl: Option[String] =
+    "https?://(?:.+@)?(stash[^.]+\\.ms\\.com)/.*$".r.findFirstMatchIn(url).map(_.group(1))
   def repoName: String = url.split('/').last.trim.stripSuffix(".git")
   def isFork: Boolean = url.contains("~") // [...]/scm/upstream_repo/repo.git versus [...]/scm/~user_id/repo.git
   def projectKey: String = url.split("/").takeRight(2).head
@@ -136,7 +138,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def checkBranchContainsRevision(branchName: String, revision: String): Boolean =
     listBranchesContainingRevision(revision).contains(branchName)
 
-  def checkBranchExists(branchName: String): Boolean = Try(runGit("rev-parse", "--verify", branchName)).isSuccess
+  def checkBranchExists(branchName: String): Boolean = revParse(branchName).isDefined
 
   def showFileFromRevision(ref: String, filePath: String): Option[String] = {
     Try(runGit("show", s"$ref:$filePath")).map(Some(_)).getOrElse(None)
@@ -246,6 +248,8 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     runGit("branch", s"--set-upstream-to=$remoteName/$remoteBranch", localBranch)
 
   def status(): String = runGit("status")
+
+  def revParse(ref: String): Option[String] = Try(runGit("rev-parse", "--verify", ref)).toOption
 
   def resetKeep(resetTo: String): String = runGit("reset", "--keep", resetTo)
 

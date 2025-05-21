@@ -22,7 +22,7 @@ import org.kohsuke.args4j.CmdLineParser
 import java.io.BufferedWriter
 import java.io.FileReader
 import java.io.FileWriter
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.ArraySeq
 
 class BasRegMetricsCmdLine {
   import org.kohsuke.args4j.Option
@@ -108,7 +108,7 @@ object BasRegMetricsUtils extends App {
     var nameCol = 0
     var basCol = 0
     var regCol = 0
-    val data = ArrayBuffer[BasRegMetric]()
+    val data = ArraySeq.newBuilder[BasRegMetric]
     var row = 0
     val allRows = reader.readAll().iterator()
     while (allRows.hasNext) {
@@ -125,7 +125,7 @@ object BasRegMetricsUtils extends App {
       }
       row += 1
     }
-    data
+    data.result()
   }
 
   private def readCSV(path: String): Seq[BasRegMetric] = {

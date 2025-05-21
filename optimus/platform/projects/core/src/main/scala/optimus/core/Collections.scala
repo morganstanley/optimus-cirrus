@@ -79,7 +79,7 @@ object Collections {
     (b1.result(), b2.result(), b3.result(), b4.result())
   }
 
-  def unzip3[A, B, C, CC[X] <: GenTraversable[X]](coll: collection.Seq[Product3[A, B, C]])(
+  def unzip3[A, B, C, CC[X] <: GenTraversable[X]](coll: Seq[Product3[A, B, C]])(
       factory: IterableFactory[CC]): (CC[A], CC[B], CC[C]) = {
     val b1 = factory.newBuilder[A]
     val b2 = factory.newBuilder[B]
@@ -94,7 +94,7 @@ object Collections {
   }
 
   type SpanPredicateAndApply[T, R] = (T => Boolean, Iterable[T] => R)
-  def applyRepeatedSpan[T, R](iter: Iterable[T])(predicates: SpanPredicateAndApply[T, R]*): collection.Seq[R] = {
+  def applyRepeatedSpan[T, R](iter: Iterable[T])(predicates: SpanPredicateAndApply[T, R]*): Seq[R] = {
 
     def applySpan(iter: Iterable[T], predicate: SpanPredicateAndApply[T, R]): (Iterable[T], Option[R]) = {
       val (items, others) = iter.span(predicate._1)
@@ -105,7 +105,7 @@ object Collections {
     }
 
     @tailrec
-    def doRepeatedSpan(iter: Iterable[T], result: collection.Seq[R] = collection.Seq.empty): collection.Seq[R] = {
+    def doRepeatedSpan(iter: Iterable[T], result: Seq[R] = Seq.empty): Seq[R] = {
       if (iter.isEmpty) result
       else {
         val initialSize = iter.size

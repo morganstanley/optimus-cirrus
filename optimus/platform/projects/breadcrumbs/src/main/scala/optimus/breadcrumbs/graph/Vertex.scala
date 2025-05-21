@@ -436,7 +436,7 @@ final case class Vertex(
       },
       down: Boolean = true,
       maxDepth: Int = Int.MaxValue): Iterable[A] =
-    iterator(pred, down, maxDepth).collect(pf).toIterable
+    iterator(pred, down, maxDepth).collect(pf).toStream
 
   def find(
       f: Vertex => Boolean,

@@ -11,39 +11,28 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import com.github.plokhotnyuk.jsoniter_scala.macros.named
+
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 import optimus.scalacompat.collection._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 import scala.collection.immutable.Seq
 
 final case class MetaBundleReport(
-    metadataCreator: String,
-    metadataVersion: String,
+    @named("metadata_creator") metadataCreator: String,
+    @named("metadata_version") metadataVersion: String,
     meta: String,
     project: String,
     release: String,
-    buildInfo: BuildInfoReport,
+    @named("build_info") buildInfo: BuildInfoReport,
     artifacts: Iterable[ArtifactReport]
 )
 
 object MetaBundleReport {
-
-  implicit val metaBundleReportFormat: RootJsonFormat[MetaBundleReport] = jsonFormat(
-    MetaBundleReport.apply,
-    fieldName1 = "metadata_creator",
-    fieldName2 = "metadata_version",
-    fieldName3 = "meta",
-    fieldName4 = "project",
-    fieldName5 = "release",
-    fieldName6 = "build_info",
-    fieldName7 = "artifacts"
-  )
 
   @node def apply(
       settings: MetadataSettings,
@@ -83,7 +72,3 @@ object MetaBundleReport {
 }
 
 final case class BuildInfoReport(ccid: String)
-
-object BuildInfoReport {
-  implicit val buildInfoReportFormat: RootJsonFormat[BuildInfoReport] = jsonFormat1(BuildInfoReport.apply)
-}

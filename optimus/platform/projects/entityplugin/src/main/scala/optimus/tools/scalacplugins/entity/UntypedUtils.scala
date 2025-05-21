@@ -45,6 +45,7 @@ trait UntypedUtils extends PluginUtils {
   lazy val AsyncAnnotation = Select(PlatformPkg, tpnames.async)
   lazy val ImpureAnnotation = Select(PlatformPkg, tpnames.impure)
   lazy val NodeSyncAnnotationType = Select(AnnotationPkg, tpnames.nodeSync)
+  lazy val GivenAnyRuntimeEnvAnnotationTpe = Select(PlatformPkg, tpnames.givenAnyRuntimeEnv)
   lazy val MiscFlagsAnnotationType = Select(AnnotationPkg, tpnames.miscFlags)
   lazy val TweakableAnnotationType = Select(AnnotationPkg, tpnames.tweakable)
   lazy val NonTweakableAnnotationType = Select(AnnotationPkg, tpnames.nonTweakable)
@@ -177,6 +178,7 @@ trait UntypedUtils extends PluginUtils {
 
   def getProjectedParam(anno: Tree): Option[Boolean] = getBooleanAnnoParam(anno, names.projected)
   def getFullTextSearchParam(anno: Tree): Option[Boolean] = getBooleanAnnoParam(anno, names.fullTextSearch)
+  def getMonoTemporalParam(anno: Tree): Option[Boolean] = getBooleanAnnoParam(anno, names.monoTemporal)
   def getSchemaVersionParam(anno: Tree): Option[Int] = getIntAnnoParam(anno, names.schemaVersion)
 
   def getStoredProjectedParam(mods: Modifiers): Option[Boolean] =

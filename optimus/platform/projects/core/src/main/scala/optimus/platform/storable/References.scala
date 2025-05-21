@@ -21,6 +21,7 @@ import com.google.common.primitives.Longs
 import net.iharder.base64.Base64
 import optimus.exceptions.RTExceptionTrait
 import optimus.graph.DiagnosticSettings
+import optimus.platform.pickling.ContainsUnresolvedReference
 
 import scala.annotation.tailrec
 import scala.util.Random
@@ -281,7 +282,8 @@ sealed trait StrictDataSizeReference {
  */
 sealed abstract class EntityReference protected (d: Array[Byte])
     extends StorableReference(d)
-    with StrictDataSizeReference {
+    with StrictDataSizeReference
+    with ContainsUnresolvedReference {
   def isTemporary: Boolean
   def getTypeId: Option[Int] = None
 

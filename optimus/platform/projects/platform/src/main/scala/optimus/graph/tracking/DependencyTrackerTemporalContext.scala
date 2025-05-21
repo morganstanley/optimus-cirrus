@@ -11,27 +11,12 @@
  */
 package optimus.graph.tracking
 
-import optimus.core.MonitoringBreadcrumbs
-
 import java.time.Instant
-import java.util
-import java.util.Collections
-import java.util.concurrent.locks.ReentrantLock
-import javax.annotation.concurrent.GuardedBy
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.Partition
-import optimus.graph.AlreadyCompletedPropertyNode
-import optimus.graph.DiagnosticSettings
-import optimus.graph.GraphInInvalidState
-import optimus.graph.NodeKey
-import optimus.graph.NodeTaskInfo
 import optimus.graph.Settings
-import optimus.platform.dal.DSIStorageInfo
 import optimus.platform.dal.QueryTemporality
-import optimus.platform.pickling.PickledMapWrapper
-import optimus.platform.pickling.ReflectiveEntityPickling
 import optimus.platform.storable.Entity
-import optimus.platform.storable.EntityReference
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.storable.StorageInfo
 import optimus.platform.temporalSurface.LeafTemporalSurface
@@ -39,14 +24,9 @@ import optimus.platform.temporalSurface.TickableTemporalContext
 import optimus.platform.temporalSurface._
 import optimus.platform.temporalSurface.impl._
 import optimus.platform._
-import optimus.platform.reactive.pubsub.StreamManager
-import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
 import optimus.scalacompat.collection._
 import optimus.utils.MacroUtils.SourceLocation
 
-// A TrackingLeafTemporalSurface may be a TemporalContext or a TemporalSurface within a TickableTemporalContext
-// this is the junction point (ie an implementation) between the DependencyTracker implementation of Tickable...
-// We need to deserialize and splat the entities on this TemporalContext
 private[optimus] sealed trait TrackingLeafTemporalSurface extends LeafTemporalSurfaceImpl {
   private[optimus] def currentTemporality: QueryTemporality.At
 
@@ -63,16 +43,12 @@ private[optimus] sealed trait TrackingLeafTemporalSurface extends LeafTemporalSu
   private[optimus] def prepareTemporality(futureTickTime: Instant): Unit
 }
 
-private[optimus] trait TrackingTemporalContext {
+private[optimus] sealed trait TrackingTemporalContext {
   tts: TemporalSurface with TemporalSurfaceImpl with TemporalContextImpl =>
-
-  // This is unsound because of https://docs.scala-lang.org/scala3/reference/dropped-features/type-projection.html
-  // and should be changed
-  type TickControl = Map[TrackingLeafTemporalSurface, Instant]
   final def surface: TemporalSurfaceImpl with TemporalSurface = this
 }
 
-trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
+object TickableContexts {
 
   final def createTickableBranchTemporalSurface(
       scope: TemporalSurfaceScopeMatcher,
@@ -123,15 +99,8 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
     result
   }
 
-  private[optimus] trait TrackingTemporalSurface { tts: TemporalSurface with TemporalSurfaceImpl =>
-    private[optimus] final def enclosingTrackingScenario: TemporalDependencyTracker = tracker
-  }
-
-  private[optimus] trait TrackingTemporalContextImpl extends TrackingTemporalContext with TrackingTemporalSurface {
+  private[optimus] sealed trait TrackingTemporalContextImpl extends TrackingTemporalContext {
     tts: TemporalSurface with TemporalSurfaceImpl with TemporalContextImpl =>
-
-    private def resolver = tracker.scenarioStack.ssShared.environment.entityResolver
-    private[optimus] override def resolverOption = Some(resolver)
 
     @node private[optimus] override def deserialize(pe: PersistentEntity, storageInfo: StorageInfo): Entity = {
       load(pe, storageInfo)
@@ -143,8 +112,7 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
       val children: List[TemporalSurface],
       override protected[optimus] val tag: Option[String],
       override protected[optimus] val sourceLocation: SourceLocation)
-      extends BranchTemporalSurfaceImpl
-      with TrackingTemporalSurface {
+      extends BranchTemporalSurfaceImpl {
 
     def canTick: Boolean = true
 
@@ -185,56 +153,20 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
   }
 
   private[optimus] trait TrackingLeafTemporalSurfaceBase
-      extends TrackingTemporalSurface
-      with LeafTemporalSurfaceImpl
+      extends LeafTemporalSurfaceImpl
       with TrackingLeafTemporalSurface {
     private[optimus] val initialTransactionTime: Instant
     private[optimus] val endTransactionTime: Instant
 
-    protected object DynamicTransactionTimeContext extends TransactionTimeContext {
-      var txTime: Instant = initialTransactionTime
-      def frozen = FixedTransactionTimeContext(txTime)
-      private[optimus] override def getTTForEvent(cls: String) =
-        throw new UnsupportedOperationException("Cannot call getTTForEvent on ticking TemporalContext")
-    }
-    private val temporalityLock = new ReentrantLock
-
-    @volatile private var _streamManager = Option.empty[StreamManager]
-    private[optimus] def getStreamManager(ifAbsent: => StreamManager): StreamManager = synchronized {
-      _streamManager match {
-        case Some(existing) => existing
-        case None =>
-          val newSm = ifAbsent
-          _streamManager = Some(newSm)
-          newSm
-      }
-    }
-
-    private[optimus] override def currentTemporalityFor(query: TemporalSurfaceQuery): query.TemporalityType =
-      currentTemporality
-
-    @GuardedBy("temporalityLock")
-    private var _currentTemporality: Option[QueryTemporality.At] = None
-    protected[optimus] override def currentTemporality: QueryTemporality.At = {
-      temporalityLock.lock()
-      try {
-        if (_currentTemporality.isEmpty) {
-          _currentTemporality = Some(
-            QueryTemporality.At(validTime = TimeInterval.Infinity, txTime = DynamicTransactionTimeContext.txTime))
-        }
-        val res = _currentTemporality.get
-        log.debug(s"currentTemporality: $res, DynamicTxTimeContext: ${DynamicTransactionTimeContext.txTime}")
-        res
-      } finally {
-        temporalityLock.unlock()
-      }
+    protected[optimus] val currentTemporality: QueryTemporality.At = {
+      QueryTemporality.At(validTime = TimeInterval.Infinity, txTime = initialTransactionTime)
     }
 
     override private[optimus] def prepareTemporality(futureTime: Instant): Unit = {
       require(
-        !futureTime.isBefore(DynamicTransactionTimeContext.txTime),
+        !futureTime.isBefore(initialTransactionTime),
         s"futureTime($futureTime) should be " +
-          s"after TrackingLeafTemporalSurface time: ${DynamicTransactionTimeContext.txTime}"
+          s"after TrackingLeafTemporalSurface time: ${initialTransactionTime}"
       )
     }
   }
@@ -257,9 +189,7 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
       TemporalSurfaceDefinition.FixedLeafSurface(
         matcher,
         TimeInterval.Infinity,
-        // note that when we are preparing the entities for a given tick, txTime hasn't yet been updated, so we rely
-        // on the new tt being passed in
-        tickingTts.getOrElse(partition, DynamicTransactionTimeContext.txTime),
+        tickingTts.getOrElse(partition, initialTransactionTime),
         newTag
       )
     }
@@ -286,9 +216,7 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
       TemporalSurfaceDefinition.FixedLeafContext(
         matcher,
         TimeInterval.Infinity,
-        // note that when we are preparing the entities for a given tick, txTime hasn't yet been updated, so we rely
-        // on the new tt being passed in
-        tickingTts.getOrElse(partition, DynamicTransactionTimeContext.txTime),
+        tickingTts.getOrElse(partition, initialTransactionTime),
         newTag
       )
     }

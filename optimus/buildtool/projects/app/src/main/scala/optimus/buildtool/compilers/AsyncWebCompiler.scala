@@ -133,7 +133,7 @@ object AsyncWebCompilerImpl {
           if (nodeModulesDir.existsUnsafe) AssetUtils.recursivelyDelete(nodeModulesDir, throwOnFail = true)
 
           AssetUtils.atomicallyWrite(outputJar) { tmp =>
-            import optimus.buildtool.artifacts.JsonImplicits._
+            import optimus.buildtool.artifacts.JsonImplicits.messagesMetadataValueCodec
             val tmpJar = JarAsset(tmp)
             val metadata = MessagesMetadata(compiledMessages, hasErrors = false)
             Jars.createJar(tmpJar, metadata, Some(sandbox.buildDir)) { tempJarStream =>

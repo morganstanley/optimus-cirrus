@@ -95,7 +95,10 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
 
   /** Generates the forward call that matches all the arguments */
   private void writeNativeWrapper(CommonAdapter mv, int access, String name, String desc) {
+    mv.visitCode();
     mv.writeCallForward(className, EntityAgent.nativePrefix(name), access, desc);
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
   }
 
   public MethodVisitor visitMethod(
@@ -110,9 +113,22 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     methodForwardsToCall.removeIf(forwarder -> name.equals(forwarder.from.method));
 
     var isNativeCall = (access & ACC_NATIVE) != 0;
-    CommonAdapter mv =
-        null; // Build up a chain of MethodVisitor to satisfy the transformation requirement
+    CommonAdapter mv = null; // Build up a chain of MethodVisitor to satisfy the transforms
     MethodPatch methodPatch = classPatch.forMethod(name, desc);
+
+    if (methodPatch != null && methodPatch.prefixIsFullReplacement) {
+      try (var nmv = CommonAdapter.newMethod(cv, access, name, desc)) {
+        var fwd = methodPatch.prefix;
+        var callType = methodPatch.forwardToCallIsStatic ? ACC_STATIC : 0;
+        var fwdDesc = nmv.getFwdDescriptor(fwd.descriptor, callType, className);
+        nmv.writeCallForward(fwd.cls, fwd.method, callType, fwdDesc);
+      }
+
+      if (methodPatch.keepOriginalMethodAs != null)
+        return cv.visitMethod(
+            access | ACC_PUBLIC, methodPatch.keepOriginalMethodAs, desc, signature, exceptions);
+      else return null; // Don't call super.visitMethod() as we don't want the original method
+    }
 
     if (classPatch.replaceObjectAsBase != null)
       mv =

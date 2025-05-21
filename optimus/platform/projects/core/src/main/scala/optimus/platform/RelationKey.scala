@@ -40,7 +40,7 @@ object RelationKey {
     }
   }
 
-  def isFieldsComparable(elementType: TypeInfo[_], fields: collection.Seq[String]): Boolean = {
+  def isFieldsComparable(elementType: TypeInfo[_], fields: Seq[String]): Boolean = {
     if (fields == null || fields.isEmpty) false
     val keyPropertyMap = elementType.propertyMap.filter(p => fields.contains(p._1))
     fields.forall(f => {
@@ -74,7 +74,7 @@ trait RelationKey[-T] {
   @nodeSync def of(t: T): AnyRef // gets the key of t
   def of$queued(t: T): NodeFuture[AnyRef]
 
-  def fields: collection.Seq[String] // gets the names of the fields which make up the key
+  def fields: Seq[String] // gets the names of the fields which make up the key
 
   override def toString = getClass.getSimpleName() + "[" + fields.mkString(", ") + "]"
 

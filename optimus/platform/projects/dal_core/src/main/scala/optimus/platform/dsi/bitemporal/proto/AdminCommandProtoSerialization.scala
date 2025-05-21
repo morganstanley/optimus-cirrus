@@ -66,14 +66,14 @@ object ObliterateSerializer
 
     if (proto.hasEntityClassQuery)
       new Obliterate(fromProto(proto.getEntityClassQuery))
-    else if (proto.getReferenceQueryList().asScala.nonEmpty)
-      new Obliterate(proto.getReferenceQueryList().asScala.map { case r: ReferenceQueryProto => fromProto(r) })
+    else if (!proto.getReferenceQueryList.isEmpty)
+      new Obliterate(proto.getReferenceQueryList.asScalaUnsafeImmutable.map(fromProto(_)))
     else if (proto.hasSerializedKeyQuery)
       new Obliterate(fromProto(proto.getSerializedKeyQuery))
     else if (proto.hasEventClassQuery)
       new Obliterate(fromProto(proto.getEventClassQuery))
-    else if (proto.hasEventReferenceQuery)
-      new Obliterate(fromProto(proto.getEventReferenceQuery))
+    else if (!proto.getEventReferenceQueryList.isEmpty)
+      new Obliterate(proto.getEventReferenceQueryList.asScalaUnsafeImmutable.map(fromProto(_)))
     else if (proto.hasEventKeyQuery)
       new Obliterate(fromProto(proto.getEventKeyQuery))
     else
@@ -88,9 +88,12 @@ object ObliterateSerializer
       case q: EntityClassQuery => builder.setEntityClassQuery(toProto(q)).build
       case q: ReferenceQuery =>
         builder.addAllReferenceQuery(command.queries.collect { case r: ReferenceQuery => toProto(r) }.asJava).build
-      case q: SerializedKeyQuery      => builder.setSerializedKeyQuery(toProto(q)).build
-      case q: EventClassQuery         => builder.setEventClassQuery(toProto(q)).build
-      case q: EventReferenceQuery     => builder.setEventReferenceQuery(toProto(q)).build
+      case q: SerializedKeyQuery => builder.setSerializedKeyQuery(toProto(q)).build
+      case q: EventClassQuery    => builder.setEventClassQuery(toProto(q)).build
+      case q: EventReferenceQuery =>
+        builder
+          .addAllEventReferenceQuery(command.queries.collect { case r: EventReferenceQuery => toProto(r) }.asJava)
+          .build
       case q: EventSerializedKeyQuery => builder.setEventKeyQuery(toProto(q)).build
       case o => throw new UnsupportedOperationException(s"Obliteration with query ${o} is not supported")
     }

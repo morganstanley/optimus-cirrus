@@ -30,7 +30,7 @@ object SortedPropertyValues {
     val it = sortedPV.iterator
     while (it.hasNext) {
       val nv = it.next()
-      names(i) = nv._1
+      names(i) = nv._1.intern
       values(i) = nv._2
       i += 1
     }
@@ -42,15 +42,16 @@ object SortedPropertyValues {
     val values = new Array[Any](sortedKeys.length)
     var i = 0
     while (i < sortedKeys.length) {
+      sortedKeys(i) = sortedKeys(i).intern
       values(i) = orgValues(sortedKeys(i))
       i += 1
     }
     new SortedPropertyValues(sortedKeys, values)
   }
 
-  def apply(nv: (String, Any)): SortedPropertyValues = new SortedPropertyValues(Array(nv._1), Array(nv._2))
+  def apply(nv: (String, Any)): SortedPropertyValues = new SortedPropertyValues(Array(nv._1.intern), Array(nv._2))
 
-  def asSortedKeys(keys: Seq[String]): Array[String] = {
+  private def asSortedKeys(keys: Seq[String]): Array[String] = {
     val sortedKeys = keys.toArray
     JArrays.sort(sortedKeys.asInstanceOf[Array[AnyRef]])
     sortedKeys

@@ -257,6 +257,13 @@ trait Query[+T] extends Serializable {
     macro QueryMacros.extendTypedValue[T, U]
 
   /**
+   * Either replaces or extends the relation with coordinates from U
+   */
+  final def extendTypedOrReplaceValue[U](
+      value: U)(implicit extensionOrReplaceType: TypeInfo[U], pos: MethodPosition): Query[T with U] =
+    macro QueryMacros.extendTypedOrReplaceValue[T, U]
+
+  /**
    * The replace operator will replace the value of existing coordinates in the relation.
    */
   final def replace[U >: T](f: T => U)(implicit replaceType: TypeInfo[U], pos: MethodPosition): Query[T] =

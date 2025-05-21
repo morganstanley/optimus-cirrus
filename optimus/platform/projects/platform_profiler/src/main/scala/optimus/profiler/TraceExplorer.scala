@@ -129,7 +129,7 @@ object TraceExplorer extends App {
    * 2. Reconstructed hotspots
    */
   if (cmdLine.doHotspots) for ((file, reader) <- readers) {
-    val pntis: Seq[PNodeTaskInfo] = reader.getHotspots.asScala
+    val pntis: Seq[PNodeTaskInfo] = reader.getHotspots.asScalaUnsafeImmutable
     val writer = new FileWriter(file + ".hotspots.csv")
     try { PNodeTaskInfo.printCSV(Map("" -> pntis).mapValuesNow(_.asJava).asJava, 0, writer) }
     finally { writer.close() }

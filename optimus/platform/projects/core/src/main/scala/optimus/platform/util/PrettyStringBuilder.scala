@@ -85,7 +85,7 @@ class PrettyStringBuilder(val underlying: java.lang.StringBuilder, val html: Boo
     this
   }
 
-  final def append[T](seq: collection.Seq[T], func: T => Unit, separator: String): PrettyStringBuilder = {
+  final def append[T](seq: Seq[T], func: T => Unit, separator: String): PrettyStringBuilder = {
     var afterFirst = false
     seq foreach { item =>
       if (afterFirst) append(separator)

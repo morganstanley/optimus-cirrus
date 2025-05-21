@@ -92,6 +92,11 @@ final case class QueryOps[T](src: Query[T]) {
     src.provider.replaceValue(src, repVal)
   }
 
+  def extendTypedOrReplaceValue[U](
+      value: U)(implicit extensionOrReplaceType: TypeInfo[U], pos: MethodPosition): Query[T with U] = {
+    src.provider.extendTypedOrReplaceValue[T, U](src, value)
+  }
+
   @async def reduce[U >: T](op: Lambda2[U, U, U]): U = {
     src.provider.reduce(src, op)
   }

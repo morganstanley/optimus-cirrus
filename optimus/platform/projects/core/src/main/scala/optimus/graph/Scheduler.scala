@@ -253,7 +253,7 @@ abstract class Scheduler extends EvaluationQueue {
    * maySAS: may have sync -> async -> sync transitions
    */
   final private[graph] def evaluateNodesAsync(
-      nodes: collection.Seq[NodeTask],
+      nodes: Seq[NodeTask],
       doneCallback: Long => Unit,
       callbackInline: Boolean = false,
       effectiveEnqueuer: Awaitable = null): Unit = {

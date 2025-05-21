@@ -117,7 +117,7 @@ object DSIClientCommon extends SimpleStateHolder(() => new DSIClientCommon()) wi
           .map(metaData => {
             values foreach { valuesBuffer += _ }
             resultBuffer += QueryResult(valuesBuffer.result(), metaData)
-            entitiesBuffer.clear()
+            valuesBuffer.clear()
           })
           .getOrElse(
             throw new IllegalStateException(s"Could not find QueryResultMetaData in PartialQueryResult $result."))

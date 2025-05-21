@@ -33,7 +33,7 @@ trait RTVerifierReporter {
 
   /* use only for test purposes! */
   def flushViolations(): Seq[Violation] = {
-    val vs = violations.clone()
+    val vs = violations.toList
     violations.clear()
     vs
   }
@@ -106,7 +106,7 @@ trait RTVerifierReporter {
     else {
       val data: Map[String, Seq[FrameViolation]] =
         violations.groupBy(_.category).map { case (category, vs) =>
-          category -> FrameViolation.convertAndSort(vs)
+          category -> FrameViolation.convertAndSort(vs.toList)
         }
 
       val sb = new JStringBuilder

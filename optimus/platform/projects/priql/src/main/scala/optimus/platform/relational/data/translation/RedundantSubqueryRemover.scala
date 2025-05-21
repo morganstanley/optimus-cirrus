@@ -87,6 +87,15 @@ private object SubqueryMerger {
     }
   }
 
+  def isRightSideOuterJoin(leftMostSel: SelectElement, source: RelationElement): Boolean = {
+    source match {
+      case j: JoinElement if j.joinType == JoinType.RightOuter || j.joinType == JoinType.FullOuter => true
+      case j: JoinElement                       => isRightSideOuterJoin(leftMostSel, j.left)
+      case s: SelectElement if s != leftMostSel => isRightSideOuterJoin(leftMostSel, s.from)
+      case _                                    => false
+    }
+  }
+
   def canMergeWithFrom(select: SelectElement): Boolean = {
     val fromSelect = getLeftMostSelect(select.from)
     if (fromSelect eq null)
@@ -102,6 +111,7 @@ private object SubqueryMerger {
       val frmHasOrderBy = (fromSelect.orderBy ne null) && fromSelect.orderBy.nonEmpty
       val frmHasGroupBy = (fromSelect.groupBy ne null) && fromSelect.groupBy.nonEmpty
       val frmHasAggregates = AggregateChecker.hasAggregates(fromSelect)
+      val frmHasWhere = (fromSelect.where ne null)
       // both cannot have orderby
       if (selHasOrderBy && frmHasOrderBy)
         false
@@ -115,6 +125,9 @@ private object SubqueryMerger {
         false
       // cannot move forward group-by if outer has where clause
       else if (frmHasGroupBy) // need to assert projection is the same in order to move group-by forward
+        false
+      // cannot move where if outer join is right-side-outer
+      else if (frmHasWhere && selHasJoin && isRightSideOuterJoin(fromSelect, select.from))
         false
       // cannot move forward a take if outer has take or skip or distinct
       else if (

@@ -13,18 +13,18 @@ package optimus.graph
 
 import java.io.ByteArrayInputStream
 import java.io.ObjectInputStream
-
 import optimus.graph.diagnostics.messages.ProfilerMessages
 import optimus.graph.PThreadContext._
 import optimus.graph.diagnostics.OGCounterView
 import optimus.graph.diagnostics.PNodeTaskInfo
+
 import java.util.{HashMap => JHashMap}
 import java.util.{ArrayList => JArrayList}
 import java.util.{Arrays => JArrays}
-
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap
 import optimus.core.TPDMask
 import optimus.graph.OGTraceReader.DistributedEvents
+import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfoRecorded
 import optimus.graph.diagnostics.PNodeTaskRecorded
 import optimus.graph.diagnostics.messages.OGCounter
@@ -32,6 +32,7 @@ import optimus.graph.diagnostics.messages.OGEvent
 
 class OGTraceReaderEventProcessor(constructPNodes: Boolean, ignoreBlocks: Boolean) extends ProfilerMessages {
   val root = new PNodeTaskRecorded(OGSchedulerContext.NODE_ID_ROOT)
+  root.info = PNodeTask.startNodeInfo
 
   var ctx: PThreadContext = _
   var timeOffset: Long = _ // for cross-process time synchronization
@@ -39,13 +40,14 @@ class OGTraceReaderEventProcessor(constructPNodes: Boolean, ignoreBlocks: Boolea
   // temporary structures to support id mapping across processes
   val __inProcessTaskIDs = new Int2IntOpenHashMap
   var __inProcessInfoIDs: Int2IntOpenHashMap = _ // assume only blk ID 0 for now, this will be fixed with taskIDs
-  private var __highestPntiIDSeen: Int = 1 // skip 0 (fake PNTI)
+  private var __highestPntiIDSeen: Int = 2 // skip 0 --> fake PNTI, 1 --> startNode
 
   val tasks = new JArrayList[PNodeTaskRecorded]()
   private var stringID = new Array[String](16)
 
   val pntisByBlockID = new JArrayList[Array[PNodeTaskInfo]]()
-  pntisByBlockID.add(new Array[PNodeTaskInfo](0)) // for BLOCK_ID_PROPERTY
+  pntisByBlockID.add(new Array[PNodeTaskInfo](2)) // for BLOCK_ID_PROPERTY
+  pntisByBlockID.get(0)(1) = root.info
 
   val counters = new JArrayList[OGCounterView[_]]()
 

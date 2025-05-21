@@ -102,7 +102,8 @@ object DALBlock {
 
 class PersistResult(
     val tt: Instant,
-    private val entityRefHolders: Map[Entity, EntityReferenceHolder[Entity]] = Map.empty) {
+    private val entityRefHolders: Map[Entity, EntityReferenceHolder[Entity]] = Map.empty,
+    val isEmptyTransaction: Boolean = false) {
 
   def getEntityReferenceHolder[T <: Entity](entity: T): Option[EntityReferenceHolder[T]] = {
     entityRefHolders.get(entity).asInstanceOf[Option[EntityReferenceHolder[T]]]
@@ -113,20 +114,26 @@ class PersistResult(
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case pr: PersistResult => pr.tt == this.tt && pr.entityRefHolders == this.entityRefHolders
-    case _                 => false
+    case pr: PersistResult =>
+      pr.tt == this.tt && pr.isEmptyTransaction == this.isEmptyTransaction && pr.entityRefHolders == this.entityRefHolders
+    case _ => false
   }
 
   override def hashCode(): Int = {
     var h = tt.##
     h = 37 * h + entityRefHolders.##
+    h = 53 * h + isEmptyTransaction.##
     h
   }
 }
 
 object PersistResult {
-  def apply(tt: Instant, entityRefHolders: Map[Entity, EntityReferenceHolder[Entity]] = Map.empty): PersistResult =
-    new PersistResult(tt, entityRefHolders)
+  def apply(
+      tt: Instant,
+      entityRefHolders: Map[Entity, EntityReferenceHolder[Entity]] = Map.empty,
+      isEmptyTransaction: Boolean = false): PersistResult = {
+    new PersistResult(tt, entityRefHolders, isEmptyTransaction)
+  }
 
   def unapply(arg: PersistResult): Option[(Instant, Map[Entity, EntityReferenceHolder[Entity]])] = Some(
     (arg.tt, arg.entityRefHolders))

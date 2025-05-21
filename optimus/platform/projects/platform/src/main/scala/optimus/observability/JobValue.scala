@@ -47,14 +47,14 @@ object JobValue {
       PrefixedJobValue(s"${PrefixedJobValue.hotspotFilter}[${hf.filter};${hf.ftype};${hf.ratio}]")
     case tl: TemporalSurfProfilingLevel =>
       PrefixedJobValue(s"${PrefixedJobValue.temporalSurfProfilingCategory}[$tl]")
-    case l: Level        => PrefixedJobValue(s"${PrefixedJobValue.levelCategory}[$l]")
-    case s: String       => StrJobValue(s)
-    case i: Int          => IntJobValue(i)
-    case t: Instant      => InstantJobValue(t)
-    case b: Boolean      => BoolJobValue(b)
-    case d: Duration     => DurationJobValue(d)
-    case q: Seq[_]       => SeqJobValue(q.map(v => toJobValue(v)))
-    case l: util.List[_] => JListJobValue(l.asScala.map(v => toJobValue(v)))
+    case l: Level             => PrefixedJobValue(s"${PrefixedJobValue.levelCategory}[$l]")
+    case s: String            => StrJobValue(s)
+    case i: Int               => IntJobValue(i)
+    case t: Instant           => InstantJobValue(t)
+    case b: Boolean           => BoolJobValue(b)
+    case d: Duration          => DurationJobValue(d)
+    case q: collection.Seq[_] => SeqJobValue(q.iterator.map(v => toJobValue(v)).toSeq)
+    case l: util.List[_]      => JListJobValue(l.asScalaUnsafeImmutable.map(v => toJobValue(v)))
     case _ =>
       if (debugValue ne null) {
         logger.error("Caught exception while trying to serialize {} [value={}]", debugValue, o)

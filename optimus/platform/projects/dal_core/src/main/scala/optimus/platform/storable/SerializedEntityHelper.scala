@@ -46,7 +46,7 @@ object SerializedEntityHelper {
   ): Seq[FinalTypedReference] =
     propertyValue match {
       case v: FinalTypedReference => Seq(v)
-      case seq: Seq[_]            => seq.flatMap(collectStoredEntityProperty)
+      case seq: collection.Seq[_] => seq.toSeq.flatMap(collectStoredEntityProperty)
       case set: Set[_]            => set.flatMap(collectStoredEntityProperty).toSeq
       case m: Map[_, _]           => m.values.flatMap(collectStoredEntityProperty).toSeq
       case _                      => Seq.empty

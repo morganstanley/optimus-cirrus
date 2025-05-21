@@ -24,13 +24,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // following alarm is to prevent usage of JSR310 outside of the cases where we have to convert to/from JSR310 at
   // call-sites to external libraries (trend jars for example)
   val JSR310_USAGE =
-    error0(
-      20512,
-      OptimusPhases.APICHECK,
-      "Use of JSR310 (javax.time) is deprecated. Use java.time " +
-        "instead. For JSR310 types used in external library APIs, use optimus.utils.datetime.JSR310Conversions " +
-        "implicits to convert to and from java.time at call-sites"
-    )
+    error0(20512, OptimusPhases.APICHECK, "Use of JSR310 (javax.time) is deprecated. Use java.time instead.")
+
+  val ENTITY_MOCK_ERROR = warning1(
+    20513,
+    OptimusPhases.APICHECK,
+    "You should use OptimusMockitoSugar#mock instead of native mockito methods when mocking entity %s"
+  )
 
   val INCORRECT_ADVANCED_USAGE =
     error1(
@@ -344,7 +344,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       21928,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case class has on outer reference that isn't a plain package or object - %s"
+      "@embeddable case class has an outer reference that isn't a plain package or object - %s"
     )
 
   val STABLE_WITHOUT_PARAMS =
@@ -452,6 +452,18 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       OptimusPhases.REF_CHECKS,
       "@reified should be used on def of entity/event/embeddable, the def must be final"
     )
+
+  val INVALID_BITEMPORAL_INHERIT_MONOTEMPORAL =
+    error1(21990, OptimusPhases.DAL_REF_CHECKS, "bi-temporal entity cannot inherit mono-temporal entities: %s")
+  val INVALID_MONOTEMPORAL_INHERIT_BITEMPORAL_WITH_UNIQUE_INDEX =
+    error2(
+      21991,
+      OptimusPhases.DAL_REF_CHECKS,
+      "mono-temporal entity cannot inherit unique index: %s from bi-temporal entity: %s")
+  val INVALID_MONOTEMPORAL_NOTSTORED_ENTITY =
+    error0(21992, OptimusPhases.DAL_REF_CHECKS, "only @stored entity can be mono-temporal")
+  val INVALID_MONOTEMPORAL_OBJECT =
+    error0(21993, OptimusPhases.DAL_REF_CHECKS, "Invalid use of @stored(monoTemporal=true) on object")
 
   val TWEAKNODE_WITH_COVARIANT_TYPE =
     error2(22001, OptimusPhases.REF_CHECKS, "Tweakable node with type %s references covariant type %s")
@@ -872,7 +884,6 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val UNNECESSARY_ASYNC_DEBUG = debug0(10558, OptimusPhases.AUTOASYNC, "Unnecessarily marked async")
   val VIEW_WITH_ASYNC = error0(10559, OptimusPhases.AUTOASYNC, "Views are not compatible with async collections.")
   val AUTO_ASYNC_DEBUG = debug1(10560, OptimusPhases.AUTOASYNC, "AutoAsync: %s")
-  val MOCK_ENTITY = info0(10561, OptimusPhases.AUTOASYNC, "Possible application of mocking library to an entity.")
   val MOCK_NODE = info0(10562, OptimusPhases.AUTOASYNC, "Mocking libraries should not be used with node methods.")
   val MANUAL_ASYNC_COLLECT_APAR =
     info0(

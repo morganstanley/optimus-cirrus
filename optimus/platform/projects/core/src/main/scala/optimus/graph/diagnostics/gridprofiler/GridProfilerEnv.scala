@@ -13,6 +13,8 @@ package optimus.graph.diagnostics.gridprofiler
 
 import java.io.CharArrayWriter
 import java.lang.management.ManagementFactory
+import optimus.graph.diagnostics.DefensiveManagementFactory
+
 import java.time.Instant
 import java.time.temporal.ChronoUnit.MILLIS
 import java.util.concurrent.atomic.AtomicLong
@@ -31,7 +33,6 @@ import optimus.graph.OGSchedulerTimes
 import optimus.graph.cache.Caches
 import optimus.graph.cache.CacheCountersSnapshot
 import optimus.graph.cache.CacheGroup
-import optimus.graph.cache.CacheGroupCtorGlobal
 import optimus.graph.cache.CacheGroupGlobal
 import optimus.graph.cache.CacheGroupOthers
 import optimus.graph.cache.CacheGroupSiGlobal
@@ -68,7 +69,7 @@ final case class DistEnvMetrics(
     gsfBytesSent: Long,
     gsfBytesRcvd: Long
 ) {
-  def combine(other: DistEnvMetrics) = DistEnvMetrics(
+  def combine(other: DistEnvMetrics): DistEnvMetrics = DistEnvMetrics(
     numTasks = numTasks + other.numTasks,
     totalWallTimeMs = totalWallTimeMs + other.totalWallTimeMs,
     minWallTimeMs = math.min(minWallTimeMs, other.minWallTimeMs),
@@ -82,7 +83,7 @@ final case class DistEnvMetrics(
 }
 
 object DistEnvMetrics {
-  def empty = DistEnvMetrics(
+  def empty: DistEnvMetrics = DistEnvMetrics(
     numTasks = 0,
     totalWallTimeMs = 0,
     minWallTimeMs = 0,
@@ -123,7 +124,7 @@ final case class ProcessMetricsEntry(
 
   def remoteWallTime: Long = dist.totalWallTimeMs
 
-  def asSummaryTable: SummaryTable = {
+  private def asSummaryTable: SummaryTable = {
     val gcTimeStopTheWorld = gcStats.gcTimeStopTheWorld
     val gcTimeAll = gcStats.gcTimeAll
     SummaryTable(
@@ -146,7 +147,7 @@ final case class ProcessMetricsEntry(
   // used by the shutdown hook in GridProfiler
   private[diagnostics] def formatSummary: String = {
     val summary = asSummaryTable
-    val cols = collection.Seq(
+    val cols = Seq(
       SummaryTable.wallTime,
       SummaryTable.distOverhead,
       SummaryTable.distTasks,
@@ -164,7 +165,7 @@ final case class ProcessMetricsEntry(
   }
 
   // average the CPU loads and loadavgs, except if one of them was not available (e.g. originated in the windows client), then just use the other
-  private final def averager(l: Double, r: Double, lCount: Int, rCount: Int) =
+  private def averager(l: Double, r: Double, lCount: Int, rCount: Int) =
     if (l < 0 && r < 0) -1.0 else if (l < 0) r else if (r < 0) l else (l * lCount + r * rCount) / (lCount + rCount)
 
   // used by GridProfiler when aggregating metrics that arrived from the grid
@@ -201,7 +202,6 @@ class SizeTrackingFilter extends ch.qos.logback.core.filter.Filter[ILoggingEvent
 }
 
 object ProcessMetricsEntry extends Log {
-  val hostStartTime: Long = System.currentTimeMillis()
   def now(): Long = System.currentTimeMillis()
 
   // average heap usage (in MB) so far. Written from gc thread.
@@ -266,22 +266,17 @@ object ProcessMetricsEntry extends Log {
 
   private[diagnostics] def snap(log: Boolean = false): ProcessMetricsSnapshot = {
     // common counter snapping to share between start and end methods
-    val osBean = ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
+    val osBean = DefensiveManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
     val gcBeans = ManagementFactory.getGarbageCollectorMXBeans
-    // unclear why these were pre-called
-    // osBean.getCpuLoad // cpuLoad is system cpu load
-    // osBean.getProcessCpuLoad // force the bean to read /proc/self/stat now
     def sumCounters(caches: Seq[NodeCCache]) = {
-      caches.map(_.getCountersSnapshot).foldLeft(CacheCountersSnapshot.Empty)(CacheCountersSnapshot.sum(_, _))
+      caches.map(_.getCountersSnapshot).foldLeft(CacheCountersSnapshot.Empty)(CacheCountersSnapshot.sum)
     }
     def cacheSnapshot(cache: NodeCCache) =
       Option(cache).map(_.getCountersSnapshot).getOrElse(CacheCountersSnapshot.Empty)
     val cacheCountersMap: Map[CacheGroup, CacheCountersSnapshot] = Map(
       CacheGroupGlobal -> cacheSnapshot(UNodeCache.global),
       CacheGroupSiGlobal -> cacheSnapshot(UNodeCache.siGlobal),
-      CacheGroupCtorGlobal -> cacheSnapshot(UNodeCache.constructorNodeGlobal),
-      CacheGroupOthers -> sumCounters(
-        Caches.allCaches(includeSiGlobal = false, includeGlobal = false, includeCtorGlobal = false))
+      CacheGroupOthers -> sumCounters(Caches.allCaches(includeSiGlobal = false, includeGlobal = false))
     )
     val now = patch.MilliInstant.now
     val snapshot = ProcessMetricsSnapshot(
@@ -439,7 +434,7 @@ object ProcessMetricsEntry extends Log {
     processMetricsBegin = ProcessMetricsEntry.start(log = true)
   }
 
-  val empty = ProcessMetricsEntry(
+  val empty: ProcessMetricsEntry = ProcessMetricsEntry(
     totalGraphTime = 0L,
     totalUnderUtilizedTime = 0L,
     cacheStateSummary = CacheStateSummary.empty,

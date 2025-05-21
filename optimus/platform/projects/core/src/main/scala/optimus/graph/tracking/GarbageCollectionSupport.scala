@@ -98,14 +98,13 @@ private[tracking] trait GarbageCollectionSupport {
       state: Option[DependencyTrackerRootCleanupState],
       interruptMode: InterruptionFlag,
       triggeredBy: TrackingGraphCleanupTrigger) =
-    new TrackingGraphCleanupActionImpl(state, interruptMode, triggeredBy)
+    new TrackingGraphCleanupAction(state, interruptMode, triggeredBy)
 
-  private[tracking] class TrackingGraphCleanupActionImpl(
+  private[tracking] class TrackingGraphCleanupAction(
       initialState: Option[DependencyTrackerRootCleanupState],
       val interrupt: InterruptionFlag,
       val triggeredBy: TrackingGraphCleanupTrigger)
-      extends DependencyTrackerActionUpdate[Unit]
-      with TrackingGraphCleanupAction {
+      extends DependencyTrackerActionUpdate[Unit] {
     final override protected def disposed = root.isDisposed
     final override private[tracking] def alreadyDisposedResult: Try[Unit] = Success(())
     final override protected def targetScenarioName: String = root.name
@@ -319,10 +318,5 @@ private[graph] object CleanupScheduler {
 
   object NoInterruption extends InterruptionFlag {
     override def isInterrupted: Boolean = false
-  }
-
-  sealed trait TrackingGraphCleanupAction extends DependencyTrackerAction[Unit] {
-    def interrupt: InterruptionFlag
-    def triggeredBy: TrackingGraphCleanupTrigger
   }
 }

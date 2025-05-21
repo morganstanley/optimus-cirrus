@@ -39,6 +39,8 @@ import scala.util.control.NonFatal
 
 @entity private[buildtool] object MavenUtils {
   private[buildtool] val WrongCredMsg = "Credential is invalid!"
+  private[buildtool] val strictTransitiveVerification =
+    Option(System.getProperty("optimus.buildtool.strictTransitiveVerification")).exists(_.toBoolean)
 
   // may make these be configurable in future
   private[buildtool] val maxRetry = 1
@@ -152,20 +154,30 @@ import scala.util.control.NonFatal
       org: String,
       name: String,
       configuration: String,
-      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]): Seq[DependencyDefinition] = {
-    // if ivy configuration-level mapping not exists, then automatically apply name-level mapping
-    // example: for mapping rule "afs.bar -> maven.bar" ("afs.bar" .ivy defined configuration named "afs.bar.core")
-    // when "afs.foo" depends on "afs.bar.core", we will map "afs.bar.core" to "maven.bar" transitively
-    // and output "afs.foo -> maven.bar"
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]): Option[Seq[DependencyDefinition]] = {
+    // if ivy configuration-level mapping not exists and strictTransitiveVerification is disabled,
+    // then automatically apply name-level mapping  example:
+    //   for mapping rule "afs.bar -> maven.bar" ("afs.bar" .ivy defined configuration named "afs.bar.core")
+    //   when "afs.foo" depends on "afs.bar.core", we will map "afs.bar.core" to "maven.bar" transitively
+    //   and output "afs.foo -> maven.bar"
     val configLevelMapping = MappingKey(org, name, configuration)
     val nameLevelMapping = MappingKey(org, name, DefaultConfiguration)
-    afsToMavenMap.getOrElse(configLevelMapping, afsToMavenMap.getOrElse(nameLevelMapping, Nil))
+
+    val configLevelResult = afsToMavenMap.get(configLevelMapping)
+    if (strictTransitiveVerification && !Set("*", "runtime", "default").contains(configuration)) configLevelResult
+    else configLevelResult.orElse(afsToMavenMap.get(nameLevelMapping))
   }
 
   @node def applyDirectMapping(
       dep: DependencyDefinition,
       afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
-  ): Seq[DependencyDefinition] = getMappedMavenDeps(dep.group, dep.name, dep.configuration, afsToMavenMap)
+  ): Either[CompilationMessage, Seq[DependencyDefinition]] =
+    getMappedMavenDeps(dep.group, dep.name, dep.configuration, afsToMavenMap).toRight {
+      CompilationMessage.error(
+        s"""Could not find ivy mapping for configuration `${dep.configuration}`
+           |Consider adding it to `ivyConfigurations` key for AFS dependency `${dep.group}.${dep.name}` (line ${dep.line})""".stripMargin
+      )
+    }
 
   def applyTransitiveMapping(
       org: String,
@@ -173,17 +185,18 @@ import scala.util.control.NonFatal
       configuration: String,
       attr: Seq[(String, String)],
       afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
-  ): Seq[TransitiveMappedResult] = {
-    getMappedMavenDeps(org, name, configuration, afsToMavenMap).map { af =>
-      TransitiveMappedResult(
-        Module(Organization(af.group), ModuleName(af.name), attr.toMap),
-        af.version,
-        // use default config to resolve transitive maven dep properly, for no artifact ivy.runtime extends cases
-        if (af.configuration.isEmpty) DefaultConfiguration else af.configuration
-      )
+  ): Option[Seq[TransitiveMappedResult]] = {
+    getMappedMavenDeps(org, name, configuration, afsToMavenMap).map { deps =>
+      deps.map { af =>
+        TransitiveMappedResult(
+          Module(Organization(af.group), ModuleName(af.name), attr.toMap),
+          af.version,
+          // use default config to resolve transitive maven dep properly, for no artifact ivy.runtime extends cases
+          if (af.configuration.isEmpty) DefaultConfiguration else af.configuration
+        )
+      }
     }
   }
-
 }
 
 final case class MappingKey(group: String, name: String, configuration: String)

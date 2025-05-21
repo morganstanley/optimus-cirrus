@@ -16,6 +16,7 @@ import coursier.Module
 import coursier._
 import coursier.core.ArtifactSource
 import coursier.core.Authentication
+import coursier.core.BomDependency
 import coursier.core.Configuration
 import coursier.core.Extension
 import coursier.core.MinimizedExclusions
@@ -37,9 +38,11 @@ import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.ExternalDependencies
+import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.ExtraLibDefinition
 import optimus.buildtool.config.GroupNameConfig
+import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
 import optimus.buildtool.config.Substitution
@@ -80,6 +83,31 @@ object NativeIvyConstants {
   private[resolvers] val JNIPathAttrib = "jniPath"
 }
 
+@entity class CoursierArtifactResolverSource(
+    resolvers: DependencyMetadataResolvers,
+    dependencies: ExternalDependenciesSource,
+    dependencyCopier: DependencyCopier,
+    globalExcludes: Seq[Exclude] = Nil,
+    globalSubstitutions: Seq[Substitution] = Nil,
+    fileSystem: FileSystem = FileSystems.getDefault,
+    credentials: Seq[Credential] = Nil,
+    remoteAssetStore: RemoteAssetStore = NoOpRemoteAssetStore,
+    enableMappingValidation: Boolean = true
+) extends ExternalDependencyResolverSource {
+  @node def resolver(moduleSet: ModuleSet): CoursierArtifactResolver =
+    CoursierArtifactResolver(
+      resolvers,
+      dependencies.externalDependencies(moduleSet),
+      dependencyCopier,
+      globalExcludes,
+      globalSubstitutions,
+      fileSystem,
+      credentials,
+      remoteAssetStore,
+      enableMappingValidation
+    )
+}
+
 object CoursierArtifactResolver {
   private implicit val graphAdaptor: CoursierGraphAdaptor.type = CoursierGraphAdaptor
   private val JvmDependenciesFilePathStr = JvmDependenciesConfig.path.toString
@@ -104,9 +132,13 @@ object CoursierArtifactResolver {
   private def toDepString(in: String): String = if (in.contains(".")) Text.doubleQuote(in) else in
 
   private[buildtool] def coursierDepToNameString(d: Dependency, withVersion: Boolean = false): String = {
-    val nameStr = s"${toDepString(d.module.organization.value)}.${toDepString(d.module.name.value)}"
+    val nameStr = coursierDepToNameString(d.module)
     if (withVersion) s"$nameStr.${d.version}"
     else nameStr
+  }
+
+  private def coursierDepToNameString(m: Module): String = {
+    s"${toDepString(m.organization.value)}.${toDepString(m.name.value)}"
   }
 
   private[buildtool] def getVariantsDeps(deps: Seq[DependencyDefinition]): Seq[DependencyDefinition] =
@@ -221,7 +253,7 @@ object CoursierArtifactResolver {
     resolvers.allResolvers.map(r => r.name -> r).toMap
 
   private[buildtool] val depModuleToResolversMap: Map[Module, Seq[DependencyMetadataResolver]] =
-    (dependencyDefinitions ++ externalDependencies.mavenDependencies.noVersionMavenDeps).map { d =>
+    dependencyDefinitions.map { d =>
       val dependencyResolvers =
         if (d.resolvers.nonEmpty)
           d.resolvers.map(availableResolversMap)
@@ -253,7 +285,9 @@ object CoursierArtifactResolver {
   }
 
   private val allMappedMavenModules =
-    externalDependencies.mavenDependencies.allMappedMavenDeps.map(toModule).distinct
+    externalDependencies.mavenDependencies.mixedModeMavenDeps.map(toModule).distinct
+
+  private val boms = externalDependencies.mavenDependencies.boms.map(b => BomDependency(toModule(b), b.version))
 
   private val localRepos: Seq[(String, MetadataPattern.Local)] =
     resolvers.defaultResolvers
@@ -282,18 +316,10 @@ object CoursierArtifactResolver {
   @node private def multiSourceDependenciesFingerprint: Seq[String] =
     externalDependencies.multiSourceDependencies.apar
       .flatMap { dep =>
-        fingerprintDependencyDefinitions("multi-source-afs", Seq(dep.definition)) ++
+        fingerprintDependencyDefinitions("multi-source-afs", Seq(dep.afs)) ++
           fingerprintDependencyDefinitions(
             "maven-equivalents",
-            dep.equivalents.toIndexedSeq) :+ s"enableValidation: $enableMappingValidation"
-      }
-      .toIndexedSeq
-      .sorted
-
-  @node private def noVersionMavenDependenciesFingerprint: Seq[String] =
-    externalDependencies.mavenDependencies.noVersionMavenDeps.apar
-      .flatMap { dep =>
-        fingerprintDependencyDefinitions("no-version-maven", Seq(dep))
+            dep.maven.toIndexedSeq) :+ s"enableValidation: $enableMappingValidation"
       }
       .toIndexedSeq
       .sorted
@@ -308,7 +334,7 @@ object CoursierArtifactResolver {
       s"[Substitution]${cfgStr(s.from)} -> ${cfgStr(s.to)}"
     }
     resolvers.allResolvers.flatMap(_.fingerprint) ++ requestedDepsFingerprint ++ defaultDefinitionsFingerprint ++
-      globalExcludesFingerprint ++ multiSourceDependenciesFingerprint ++ noVersionMavenDependenciesFingerprint ++
+      globalExcludesFingerprint ++ multiSourceDependenciesFingerprint ++
       subsFingerprint :+ s"skipDependencyMappingValidation:${deps.skipDependencyMappingValidation}"
   }
 
@@ -408,17 +434,25 @@ object CoursierArtifactResolver {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint
     val distinctDeps = distinctRequestedDeps(deps.all).filter(_.kind != ExtraLibDefinition)
 
-    val mappedAfsDependencies = distinctDeps
+    val (mappingErrors0, mappedAfsDependencies0) = distinctDeps
       .filter(!_.isMaven)
       .apar
-      .map(dep => dep -> MavenUtils.applyDirectMapping(dep, afsGroupNameToMavenMap).to(Seq))
-      .filter(_._2.nonEmpty)
-      .toMap
+      .map(dep => dep -> MavenUtils.applyDirectMapping(dep, afsGroupNameToMavenMap))
+      .partition(_._2.isLeft)
+
+    val mappedAfsDependencies = mappedAfsDependencies0.collect {
+      case (dep, Right(mappedDependency)) if mappedDependency.nonEmpty => dep -> mappedDependency.to(Seq)
+    }.toMap
+
+    val directIdSet = deps.directIds.toSet
+    def isDirect(dep: DependencyDefinition): Boolean = directIdSet.contains(dep)
 
     // We have to keep original order dependencies, as we can shadow wrong classes by mistake
     val distinctDepsWithMapping = distinctDeps.flatMap {
-      case dep if dep.isMaven => Seq(dep)
-      case dep                => mappedAfsDependencies.getOrElse(dep, Seq(dep))
+      case dep if dep.isMaven => Seq((dep, isDirect(dep)))
+      case dep =>
+        val direct = isDirect(dep)
+        mappedAfsDependencies.getOrElse(dep, Seq(dep)).map((_, direct))
     }
 
     // note that requested dependencies always overwrite the defaults (only matters if they are variants requested),
@@ -426,10 +460,13 @@ object CoursierArtifactResolver {
     def groupPerModule(deps: Seq[DependencyDefinition]): Map[Module, DependencyDefinition] =
       deps.groupBy(toModule).map { case (k, vs) => k -> vs.head }
 
-    val allVersions = Versions((defaultDefinitions ++ groupPerModule(deps.directIds)).mapValuesNow(_.version))
+    val allVersions =
+      Versions((defaultDefinitions ++ groupPerModule(deps.directIds)).collect {
+        case (module, defn) if !defn.noVersion => module -> defn.version
+      })
 
     val extraPublications: Map[Module, Seq[Publication]] =
-      (defaultDefinitions ++ groupPerModule(distinctDepsWithMapping)).collect {
+      (defaultDefinitions ++ groupPerModule(distinctDepsWithMapping.map(_._1))).collect {
         case (m, d) if d.ivyArtifacts.nonEmpty =>
           (
             m,
@@ -437,14 +474,23 @@ object CoursierArtifactResolver {
               Publication(name = a.name, `type` = Type(a.tpe), ext = Extension(a.ext), classifier = Classifier(""))))
       }
 
-    val dependencies = distinctDepsWithMapping.apar.map { d => toCoursierDep(d, deps.substitutions, allVersions) }
+    val dependencies = distinctDepsWithMapping.apar.map { case (d, direct) =>
+      val dep = toCoursierDep(d, deps.substitutions, allVersions)
+      CoursierDependency(dep, direct)
+    }
 
     // we don't allow user specify "AFS.variant.sth" for mapped jvm-deps, so it's safe to use directIds directly
     val obtFileDirectVariants = getVariantsDeps(deps.directIds)
-    val resolution = doResolution(dependencies, obtFileDirectVariants, deps.substitutions, allVersions)
+    val resolution =
+      doResolution(dependencies.map(_.dependency), obtFileDirectVariants, deps.substitutions, allVersions)
 
     val mixModeErrors =
       if (enableMappingValidation && !deps.skipDependencyMappingValidation) validateMixModeMavenDeps(resolution)
+      else Nil
+
+    val mappingErrors =
+      if (MavenUtils.strictTransitiveVerification && enableMappingValidation && !deps.skipDependencyMappingValidation)
+        mappingErrors0.collect { case (dep, Left(error)) => error }
       else Nil
 
     val declaredPluginModules = dependencyDefinitions.withFilter(_.isScalacPlugin).map(toModule).toSet
@@ -456,7 +502,7 @@ object CoursierArtifactResolver {
       extraPublications,
       pluginModules = declaredPluginModules,
       macroModules = macroModules,
-      mappingErrors = mixModeErrors,
+      mappingErrors = mixModeErrors ++ mappingErrors,
       mappedDeps = mappedAfsDependencies
     )
   }
@@ -624,6 +670,7 @@ object CoursierArtifactResolver {
     val mapTo = substitutionsMap(scopeSubstitutions, forceVersions)
     val res = Resolution(dependencies = directDeps.distinct)
       .withForceVersions(forceVersions.allVersions)
+      .withBoms(boms)
       .withMapDependencies(
         Some { fromDep =>
           val nameLevel =
@@ -640,7 +687,10 @@ object CoursierArtifactResolver {
 
     asyncGet(res.process.run[Node] { modulesVersions =>
       CoreAPI.nodify(modulesVersions.apar.map { case (module, version) =>
-        (module, version) -> findModuleInRepos(module, version, variants)
+        (module, version) -> {
+          if (version.nonEmpty) findModuleInRepos(module, version, variants)
+          else Left(Seq(s"No version specified or found in boms for ${coursierDepToNameString(module)}"))
+        }
       })
     })
   }
@@ -678,10 +728,11 @@ object CoursierArtifactResolver {
 
   @node private def artifactsForDependency(
       resolution: Resolution,
-      dep: Dependency,
+      dependency: CoursierDependency,
       extraPublications: Map[Module, Seq[Publication]],
       pluginModules: Set[Module],
       macroModules: Set[Module]): Seq[Either[CompilationMessage, ExternalClassFileArtifact]] = {
+    val dep = dependency.dependency
     resolution.projectCache
       .get(dep.moduleVersion)
       .map { case (source, origProj) =>
@@ -696,7 +747,7 @@ object CoursierArtifactResolver {
 
           val artifacts = source match {
             case msIvy: AsyncArtifactSource =>
-              msIvy.artifactsNode(dep, proj, None)
+              msIvy.artifactsNode(dependency, proj, None)
             case _ =>
               source.artifacts(dep, proj, None).map { case (publication, artifact) =>
                 Right(CoursierArtifact(artifact, publication))
@@ -723,7 +774,7 @@ object CoursierArtifactResolver {
                 )
               )
             case Left(error) =>
-              Left(CompilationMessage.error(s"Failed to resolve ${proj.module}#${proj.version}: $error"))
+              Left(CompilationMessage.error(s"Failed to resolve ${proj.module.orgName}#${proj.version}: $error"))
           }
         } else Nil
       }
@@ -801,7 +852,7 @@ object CoursierArtifactResolver {
 
   @node private def getArtifacts(
       resolution: Resolution,
-      directDeps: Seq[Dependency],
+      requestedDeps: Seq[CoursierDependency],
       extraPublications: Map[Module, Seq[Publication]],
       pluginModules: Set[Module],
       macroModules: Set[Module],
@@ -809,32 +860,39 @@ object CoursierArtifactResolver {
       mappedDeps: Map[DependencyDefinition, Seq[DependencyDefinition]]): ResolutionResult = {
     // keep direct dependencies in the order they are specified
     // (so that if we really need to force ordering we can do it by editing the order in the OBT files)
-    val directArtifacts = directDeps.apar.flatMap { dependency =>
+    val requestedArtifacts = requestedDeps.apar.flatMap { dependency =>
       artifactsForDependency(resolution, dependency, extraPublications, pluginModules, macroModules).map(
-        (dependency, _))
+        (dependency.dependency, _))
     }
     // same for native paths and module loads
-    val directJniPaths: Seq[String] = directDeps.flatMap(jniPathsForDependency(resolution, _))
-    val directModuleLoads: Seq[String] = directDeps.flatMap(moduleLoadsForDependency(resolution, _))
+    val requestedJniPaths: Seq[String] =
+      requestedDeps.flatMap(d => jniPathsForDependency(resolution, d.dependency))
+    val requestedModuleLoads: Seq[String] =
+      requestedDeps.flatMap(d => moduleLoadsForDependency(resolution, d.dependency))
 
-    val indirectDependencies = resolution.minDependencies
-      .filterNot(directDeps.toSet)
+    val resolvedDependencies = resolution.minDependencies
+      .filterNot(requestedDeps.map(_.dependency).toSet)
       .toIndexedSeq
       .sortBy(_.moduleVersion.toString())
 
     // sort the remaining artifacts by path (it's arbitrary but at least it's consistent)
     // get both from resolution and coursier resolver here.
-    val indirectArtifacts =
-      indirectDependencies.apar
+    val resolvedArtifacts =
+      resolvedDependencies.apar
         .flatMap { dependency =>
-          artifactsForDependency(resolution, dependency, extraPublications, pluginModules, macroModules).map(
+          val coursierDep = CoursierDependency(dependency, direct = false)
+          artifactsForDependency(resolution, coursierDep, extraPublications, pluginModules, macroModules).map(
             (dependency, _))
         }
         .sortBy { case (dep, arts) =>
           (dep.module.toString, arts.right.toOption.map(_.file.pathFingerprint).getOrElse(""))
         }
-    val indirectJniPaths: Seq[String] = indirectDependencies.flatMap(jniPathsForDependency(resolution, _))
-    val indirectModuleLoads: Seq[String] = indirectDependencies.flatMap(moduleLoadsForDependency(resolution, _))
+    val resolvedJniPaths: Seq[String] = resolvedDependencies.flatMap(jniPathsForDependency(resolution, _))
+    val resolvedModuleLoads: Seq[String] = resolvedDependencies.flatMap(moduleLoadsForDependency(resolution, _))
+
+    val allArtifacts = (requestedArtifacts ++ resolvedArtifacts).distinct
+    val allJniPaths = (requestedJniPaths ++ resolvedJniPaths).distinct
+    val allModuleLoads = (requestedModuleLoads ++ resolvedModuleLoads).distinct
 
     val mavenDependencies = resolution.projectCache
       .collect {
@@ -851,7 +909,7 @@ object CoursierArtifactResolver {
         DependencyCoursierKey(d.module.organization.value, d.module.name.value, "", ""))
 
     val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalClassFileArtifact, mutable.HashSet[DependencyInfo]]
-    (directArtifacts ++ indirectArtifacts).foreach {
+    allArtifacts.foreach {
       case (d, Right(art)) =>
         artifactsToDepInfos.getOrElseUpdate(art, mutable.HashSet()) += coursierDependencyToInfo(d, art.isMaven)
       case _ =>
@@ -859,10 +917,7 @@ object CoursierArtifactResolver {
     val artifactsToDepInfosList = artifactsToDepInfos.toList
     val artifactsDependencies = artifactsToDepInfosList.flatMap(_._2)
 
-    val allJniPaths = (directJniPaths ++ indirectJniPaths).distinct
-    val allModuleLoads = (directModuleLoads ++ indirectModuleLoads).distinct
-
-    val artifactMessages = directArtifacts.collect { case (d, Left(msg)) => msg }
+    val artifactMessages = allArtifacts.collect { case (_, Left(msg)) => msg }
 
     val conflictMessages = resolution.conflicts.groupBy(_.module).map { case (mod, deps) =>
       CompilationMessage(None, s"Conflicting dependency versions for $mod: $deps", CompilationMessage.Error)
@@ -933,6 +988,8 @@ object CoursierArtifactResolver {
   @node def internedDependency(d: Dependency): Dependency = d
   @entersGraph def interned(d: Dependency): Dependency = internedDependency(d)
 }
+
+final case class CoursierDependency(dependency: Dependency, direct: Boolean)
 
 final case class CoursierArtifact(value: Artifact, publication: Publication) {
   def attributes = publication.attributes

@@ -64,9 +64,9 @@ class KnowableUnpickler[T: Manifest](private[optimus] val innerUnpickler: Unpick
   import KnowablePickler.Constants
 
   @node def unpickle(pickled: Any, ctxt: PickledInputStream): Knowable[T] = pickled match {
-    case s: Seq[_] if s.length == 1 && s(0).asInstanceOf[Int] == Constants.NotApplicable => NotApplicable
-    case s: Seq[_] if s.length == 1 && s(0).asInstanceOf[Int] == Constants.Unknown       => Unknown()
-    case s: Seq[_] if s.length == 2 && s(0).asInstanceOf[Int] == Constants.Known =>
+    case s: collection.Seq[_] if s.length == 1 && s(0).asInstanceOf[Int] == Constants.NotApplicable => NotApplicable
+    case s: collection.Seq[_] if s.length == 1 && s(0).asInstanceOf[Int] == Constants.Unknown       => Unknown()
+    case s: collection.Seq[_] if s.length == 2 && s(0).asInstanceOf[Int] == Constants.Known =>
       Known(innerUnpickler.unpickle(s(1), ctxt))
     case o => throw new UnexpectedPickledTypeException(implicitly[Manifest[Knowable[T]]], pickled.getClass)
   }
@@ -183,12 +183,12 @@ object BigDecimalUnpickler extends Unpickler[BigDecimal] {
 
 class OptionUnpickler[T: Manifest](val innerUnpickler: Unpickler[T]) extends Unpickler[Option[T]] {
   @node def unpickle(pickled: Any, ctxt: PickledInputStream): Option[T] = pickled match {
-    case Some(v)                    => Some(innerUnpickler.unpickle(v, ctxt))
-    case None                       => None
-    case null                       => None
-    case s: Seq[_] if s.length == 1 => Some(innerUnpickler.unpickle(s.head, ctxt))
-    case s: Seq[_] if s.length == 0 => None
-    case r: AnyRef                  => Some(innerUnpickler.unpickle(r, ctxt))
+    case Some(v)                               => Some(innerUnpickler.unpickle(v, ctxt))
+    case None                                  => None
+    case null                                  => None
+    case s: collection.Seq[_] if s.length == 1 => Some(innerUnpickler.unpickle(s.head, ctxt))
+    case s: collection.Seq[_] if s.length == 0 => None
+    case r: AnyRef                             => Some(innerUnpickler.unpickle(r, ctxt))
     case o => throw new UnexpectedPickledTypeException(implicitly[Manifest[Option[T]]], pickled.getClass)
   }
 }
@@ -242,7 +242,7 @@ class JavaEnumUnpickler[E <: Enum[E]: Manifest] extends Unpickler[E] {
 
 class MSUUidUnpickler extends Unpickler[MSUuid] {
   @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
-    case buf: Seq[_] =>
+    case buf: collection.Seq[_] =>
       val is64Bit = buf(0).asInstanceOf[Boolean]
       val data = buf(1).asInstanceOf[ImmutableByteArray].data
 
@@ -275,7 +275,7 @@ object ImmutableByteArrayUnpickler extends Unpickler[ImmutableArray[Byte]] {
 
 object OffsetTimeUnpickler extends Unpickler[OffsetTime] {
   @node def unpickle(pickled: Any, ctxt: PickledInputStream): OffsetTime = pickled match {
-    case Seq(utcNanosSinceMidnight: Long, offsetSecs: Int) =>
+    case collection.Seq(utcNanosSinceMidnight: Long, offsetSecs: Int) =>
       // More information about the choice of pickled format in the pickler declaration, but in brief it is a list
       // consisting of:
       // - a long representing nanos since midnight when the LocalTime is adjusted to UTC
@@ -295,10 +295,10 @@ object RolesetModeUnpickler extends Unpickler[RolesetMode] {
   private val sortedSetUnpickler = DefaultUnpicklers.sortedSetUnpickler(DefaultUnpicklers.stringUnpickler)
 
   @node def unpickle(pickled: Any, ctxt: PickledInputStream): RolesetMode = pickled match {
-    case Seq(Constants.AllRoles) => RolesetMode.AllRoles
-    case Seq(Constants.SpecificRolesets, underlying) =>
+    case collection.Seq(Constants.AllRoles) => RolesetMode.AllRoles
+    case collection.Seq(Constants.SpecificRolesets, underlying) =>
       RolesetMode.SpecificRoleset(sortedSetUnpickler.unpickle(underlying, ctxt))
-    case Seq(Constants.UseLegacyEntitlements) => RolesetMode.UseLegacyEntitlements
+    case collection.Seq(Constants.UseLegacyEntitlements) => RolesetMode.UseLegacyEntitlements
     case o =>
       throw new IllegalArgumentException(s"Cannot unpickle RolesetMode from raw value of type ${o.getClass}: $o")
   }
@@ -347,13 +347,15 @@ trait DefaultUnpicklers extends UnpicklersLow1 {
     new OptionUnpickler(under)(manifest)
   def unitUnpickler: Unpickler[Unit] = UnitUnpickler
 
-  def seqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[Seq[T]] =
-    collUnpickler[T, Seq[T]](inner)(manifest[T], IndexedSeq)
+  def seqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[collection.Seq[T]] =
+    collUnpickler[T, collection.Seq[T]](inner)(manifest[T], IndexedSeq)
   def iseqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[immutable.Seq[T]] =
     collUnpickler[T, immutable.Seq[T]](inner)(manifest[T], immutable.IndexedSeq)
 
-  def indexedSeqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[IndexedSeq[T]] =
-    collUnpickler[T, IndexedSeq[T]](inner)(manifest[T], IndexedSeq)
+  def indexedSeqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[collection.IndexedSeq[T]] =
+    collUnpickler[T, collection.IndexedSeq[T]](inner)(manifest[T], IndexedSeq)
+  def iindexedSeqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[immutable.IndexedSeq[T]] =
+    collUnpickler[T, immutable.IndexedSeq[T]](inner)(manifest[T], immutable.IndexedSeq)
   def linearSeqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[immutable.LinearSeq[T]] =
     collUnpickler[T, immutable.LinearSeq[T]](inner)
   def vectorUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[Vector[T]] = collUnpickler[T, Vector[T]](inner)

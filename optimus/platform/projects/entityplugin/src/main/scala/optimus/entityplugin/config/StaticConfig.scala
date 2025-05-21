@@ -21,7 +21,7 @@ object StaticConfig {
   // using getClass.getClassLoader here rather than the thread one as we the plugin classloader (not the OBT one!)
   private val config = ConfigFactory.parseResources(getClass.getClassLoader, "EntityPlugin.conf")
 
-  // regex-ignore-start: cannot use jdk.CollectionConverters in compiler plugins!
+  // regex-ignore-start - cannot use jdk.CollectionConverters in compiler plugins!
   @nowarn("msg=10500 scala.collection.JavaConverters")
   def stringSet(key: String): Set[String] = {
     import scala.collection.JavaConverters._

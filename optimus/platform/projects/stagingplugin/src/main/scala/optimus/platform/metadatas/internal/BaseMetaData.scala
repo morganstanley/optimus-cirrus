@@ -29,6 +29,13 @@ sealed trait BaseMetaData {
 
 case class PIIDetails(name: String, fullyQualifiedName: String, dataSubjectCategories: Seq[String])
 
+case class MetaAnnotationAttributes(
+    owner: String,
+    catalogClass: String,
+    controlsClass: String,
+    description: String,
+    upstreamDatasetClass: String)
+
 case class EntityBaseMetaData(
     fullClassName: String,
     packageName: String,
@@ -58,6 +65,9 @@ case class MetaBaseMetaData(
     packageName: String,
     owner: String,
     catalogClass: String,
+    controlsClass: String,
+    description: String,
+    upstreamDatasetClass: String,
     isEntity: Boolean,
     isStorable: Boolean,
     isObject: Boolean,
@@ -208,9 +218,10 @@ private[optimus] object ClassMetaData {
       case e: EntityBaseMetaData => e.explicitSlotNumber
       case _                     => false
     }
-    val catalogingInfo: Option[(String, String)] = baseMetaData match {
-      case e: MetaBaseMetaData => Some((e.owner, e.catalogClass))
-      case _                   => None
+    val catalogingInfo: Option[(MetaAnnotationAttributes)] = baseMetaData match {
+      case e: MetaBaseMetaData =>
+        Some(MetaAnnotationAttributes(e.owner, e.catalogClass, e.controlsClass, e.description, e.upstreamDatasetClass))
+      case _ => None
     }
     val piiElements = baseMetaData match {
       case e: EntityBaseMetaData => e.piiElements
@@ -231,7 +242,7 @@ private[optimus] class ClassMetaData private (
     private val flags: Byte,
     val slotNumber: Int,
     val explicitSlotNumber: Boolean,
-    val catalogingInfo: Option[(String, String)],
+    val catalogingInfo: Option[MetaAnnotationAttributes],
     val piiElements: Seq[PIIDetails]
 ) {
 

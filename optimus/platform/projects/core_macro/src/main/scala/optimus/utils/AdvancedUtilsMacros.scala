@@ -15,6 +15,8 @@ import optimus.utils.MacroUtils.splice
 import optimus.utils.MacroUtils.typecheckAndValidate
 
 import scala.reflect.macros.blackbox.Context
+import msjava.slf4jutils.scalalog.Logger
+import java.time.Duration
 
 class AdvancedUtilsMacros(val c: Context) {
   import c.universe._
@@ -28,4 +30,36 @@ class AdvancedUtilsMacros(val c: Context) {
       _root_.optimus.platform.AdvancedUtils.timedValueSink($startTime, $result)
     """)
   }
+
+  final def traceLatencyWithDefaultingArgsImpl(log: c.Expr[Logger], action: c.Tree)(f: c.Tree): c.Tree = {
+    val infoThresholdInNanos = c.Expr[Long](q"50_000_000L")
+    val warnThresholdInNanos = c.Expr[Long](q"100_000_000L")
+
+    traceLatencyImpl(log, action, infoThresholdInNanos, warnThresholdInNanos)(f)
+  }
+
+  final def traceLatencyWithDurationImpl(
+      log: c.Expr[Logger],
+      action: c.Tree,
+      infoThreshold: c.Expr[Duration],
+      warnThreshold: c.Expr[Duration])(f: c.Tree): c.Tree = {
+    val infoThresholdInNanos = c.Expr[Long](q"$infoThreshold.toNanos")
+    val warnThresholdInNanos = c.Expr[Long](q"$warnThreshold.toNanos")
+    traceLatencyImpl(log, action, infoThresholdInNanos, warnThresholdInNanos)(f)
+  }
+
+  final def traceLatencyImpl(
+      log: c.Expr[Logger],
+      action: c.Tree,
+      infoThreshold: c.Expr[Long],
+      warnThreshold: c.Expr[Long])(f: c.Tree): c.Tree = {
+    val durationInNanos = c.freshName(TermName("durationInNanos"))
+    val result = c.freshName(TermName("result"))
+    typecheckAndValidate(c)(q"""
+      val ($durationInNanos, $result) = ${timedImpl(f)}
+      _root_.optimus.platform.AdvancedUtils.doLog($log, $durationInNanos, $action, $infoThreshold, $warnThreshold)
+      $result
+    """)
+  }
+
 }

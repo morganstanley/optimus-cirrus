@@ -11,12 +11,23 @@
  */
 package optimus.buildtool.config
 
+import optimus.buildtool.dependencies.DependencySetId
+import optimus.buildtool.dependencies.VariantSetId
+
 final case class ModuleSetId(name: String)
-object ModuleSetId {
-  val Default: ModuleSetId = ModuleSetId("default")
-}
 
 final case class ModuleSet(
     id: ModuleSetId,
-    canDependOn: Set[ModuleSetId]
-)
+    canDependOn: Set[ModuleSet],
+    dependencySets: Set[DependencySetId],
+    variantSets: Set[VariantSetId]
+) {
+  private def transitiveDependencySets: Set[DependencySetId] =
+    dependencySets ++ canDependOn.flatMap(_.transitiveDependencySets)
+
+  def transitiveNonVariantDependencySets: Set[DependencySetId] =
+    transitiveDependencySets.filter(ds => !variantSets.exists(_.dependencySetId == ds))
+}
+object ModuleSet {
+  val empty: ModuleSet = ModuleSet(ModuleSetId("empty"), Set.empty, Set.empty, Set.empty)
+}

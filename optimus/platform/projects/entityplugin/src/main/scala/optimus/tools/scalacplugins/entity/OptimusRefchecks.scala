@@ -447,7 +447,10 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
         alarm(OptimusErrors.SOAP_MUST_BE_HANDLE, dd.pos)
       }
 
-      if (!defSym.isSynthetic && overriddenSyms.nonEmpty && !dd.name.containsName(nme.CONSTRUCTOR)) {
+      if (
+        (!defSym.isSynthetic || hasMiscFlag(defSym, MiscFlags.SYNTHETIC_CHECKED)) && overriddenSyms.nonEmpty && !dd.name
+          .containsName(nme.CONSTRUCTOR)
+      ) {
         // we only check the user written code
         val superAnnos = overriddenSyms.flatMap(_.annotations).map(_.symbol).toSet
         val thisAnnos = defSym.annotations.map(_.symbol).toSet
@@ -484,6 +487,7 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
             alarm(OptimusErrors.LOSE_ANNO_WHEN_OVERRIDE, dd.pos, dd.name, tpnames.entersGraph, tpnames.entersGraph)
           case _ => // other annotations we want to keep in the inheritance chain
         }
+
         addedAnnos.foreach {
           case anno if anno == NodeAnnotation && !overriddenSyms.exists(isNode) =>
             alarm(OptimusErrors.ADD_ANNO_WHEN_OVERRIDE, dd.pos, tpnames.node, dd.name, tpnames.node)
@@ -497,6 +501,11 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
               if anno == EntersGraphAnnotation && !thisAnnos.exists(anno =>
                 anno == KeyAnnotation || anno == IndexedAnnotation) =>
             alarm(OptimusErrors.ADD_ANNO_WHEN_OVERRIDE, dd.pos, tpnames.entersGraph, dd.name, tpnames.entersGraph)
+          case anno
+              if anno == GivenAnyRuntimeEnvAnnotation && !overriddenSyms.exists(s =>
+                s.hasAnnotation(AsyncAnnotation) || s.hasAnnotation(GivenRuntimeEnvAnnotation)) =>
+            alarm(OptimusErrors.ADD_ANNO_WHEN_OVERRIDE, dd.pos, tpnames.async, dd.name, tpnames.givenAnyRuntimeEnv)
+
           case _ => // other annotations we don't want to add in the inheritance chain
         }
       }

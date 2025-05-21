@@ -48,6 +48,7 @@ main {
       ossjava.iharder-base64,
       ossjava.jackson2,
       ossjava.jackson2.jsr310,
+      ossjava.jackson2.module-scala,
       ossjava.javamail,
       ossjava.javassist,
       ossjava.jsr305-annotations,
@@ -57,7 +58,6 @@ main {
       ossjava.scannotation,
       ossjava.slf4j.bridges,
       ossjava.spring,
-      ossscala.jackson-module-scala,
       ossscala.spray-json,
       sam.zookeeper
     ]

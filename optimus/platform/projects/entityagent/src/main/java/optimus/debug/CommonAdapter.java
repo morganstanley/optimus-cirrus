@@ -114,7 +114,7 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     mv.visitVarInsn(localValueType.getOpcode(ISTORE), __localValue);
   }
 
-  protected void ifNotZeroReturn(MethodPatch patch, FieldRef fpatch) {
+  void ifNotZeroReturn(MethodPatch patch, FieldRef fpatch) {
     loadThis();
     mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
     Label label1 = new Label();
@@ -131,11 +131,13 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return "I";
   }
 
-  protected String loadThisOrNull() {
-    if ((methodAccess & ACC_STATIC) != 0 || (!thisIsAvailable && getName().equals("<init>")))
-      mv.visitInsn(ACONST_NULL); // static will just pass null and ctor will temporarily pass null
-    else loadThis();
-    return OBJECT_DESC;
+  protected String loadThisOrNull(MethodPatch patch) {
+    if ((methodAccess & ACC_STATIC) != 0 || (!thisIsAvailable && getName().equals("<init>"))) {
+      if (patch.noArgumentBoxing) return "";
+      else
+        mv.visitInsn(ACONST_NULL); // static will just pass null and ctor will temporarily pass null
+    } else loadThis();
+    return patch.noArgumentBoxing ? "L" + patch.from.cls + ";" : OBJECT_DESC;
   }
 
   protected String dupReturnValueOrNullForVoid(int opcode, boolean boxValueTypes) {
@@ -162,7 +164,7 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
   protected String loadArgsInlineOrAsArray(MethodPatch patch) {
     if (patch.noArgumentBoxing) {
       loadArgs();
-      return ""; // Rely on descriptor explicitly supplied
+      return argTypesAsPartialDescriptor(); // Rely on descriptor explicitly supplied
     } else {
       loadArgArray();
       return OBJECT_ARR_DESC;
@@ -187,13 +189,20 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     }
   }
 
+  public String argTypesAsPartialDescriptor() {
+    StringBuilder desc = new StringBuilder();
+    for (var argType : getArgumentTypes()) {
+      desc.append(argType.getDescriptor());
+    }
+    return desc.toString();
+  }
+
   protected void loadThisIfNonStatic() {
     // cannot load this for static methods!
     if (!isStatic(methodAccess)) loadThis();
   }
 
   void writeCallForward(String className, String name, int access, String desc) {
-    visitCode();
     // call original native method
     loadThisIfNonStatic();
     loadArgs();
@@ -202,8 +211,6 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     visitMethodInsn(opcode, className, name, desc, false);
     var returnType = Type.getReturnType(desc);
     visitInsn(returnType.getOpcode(Opcodes.IRETURN));
-    visitMaxs(0, 0);
-    visitEnd();
   }
 
   public void getThisField(String className, String fieldName, Type fieldType) {
@@ -242,19 +249,31 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return access & ~ACC_PROTECTED & ~ACC_PRIVATE | ACC_PUBLIC;
   }
 
+  public static int accessPart(int access) {
+    return access & (ACC_PRIVATE | ACC_PROTECTED | ACC_PUBLIC);
+  }
+
   public static int invokeStaticOrVirtual(int access) {
     return isStatic(access) ? INVOKESTATIC : INVOKEVIRTUAL;
   }
 
-  public static Boolean isStatic(int access) {
+  public static boolean isStatic(int access) {
     return (access & ACC_STATIC) != 0;
   }
 
-  public static Boolean isCCtor(int access, String name, String desc) {
+  public static boolean isVolatile(int access) {
+    return (access & ACC_VOLATILE) != 0;
+  }
+
+  public static boolean isStaticOrAbstract(int access) {
+    return (access & (ACC_STATIC | ACC_ABSTRACT)) != 0;
+  }
+
+  public static boolean isCCtor(int access, String name, String desc) {
     return (access & ACC_STATIC) == ACC_STATIC && "<clinit>".equals(name) && "()V".equals(desc);
   }
 
-  public static Boolean isInterface(int access) {
+  public static boolean isInterface(int access) {
     return (access & ACC_INTERFACE) != 0;
   }
 
@@ -265,7 +284,7 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
    * Identifies JVM/Scala/Sun owned classes, such as ProfilerEventsWriter, as they should be
    * excluded from the transformation
    */
-  public static Boolean isThirdPartyOwned(ClassLoader loader, String className) {
+  public static boolean isThirdPartyOwned(ClassLoader loader, String className) {
     if (loader == null) return true;
 
     for (String pkg : packagesToIgnore) {
@@ -299,6 +318,12 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return methodDesc;
   }
 
+  public static String stripFirstArgument(String methodDesc) {
+    var firstArgEnd = methodDesc.indexOf(';'); // Non-value type is assumed!
+    if (firstArgEnd > 0) return "(" + methodDesc.substring(firstArgEnd + 1);
+    return methodDesc;
+  }
+
   /** Strip L and ; */
   public static String descToClass(String returnType) {
     if (returnType.startsWith("L") && returnType.endsWith(";"))
@@ -318,5 +343,15 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
   public void close() {
     visitMaxs(0, 0);
     visitEnd();
+  }
+
+  public String getFwdDescriptor(String suggestedDesc, int fwdAccess, String className) {
+    if (suggestedDesc != null) return suggestedDesc;
+    if (isStatic(getAccess()) && isStatic(fwdAccess)) return this.methodDesc;
+    if (!isStatic(fwdAccess))
+      return stripFirstArgument(this.methodDesc);
+
+    // insert first argument the object of the class
+    return this.methodDesc.replace("(", "(L" + className + ";");
   }
 }

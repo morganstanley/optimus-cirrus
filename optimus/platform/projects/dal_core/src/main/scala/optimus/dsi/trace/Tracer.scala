@@ -1296,7 +1296,7 @@ object Tracer {
 
     def getMergedTrace(f: TraceEvent.Event => Boolean): Seq[Interval] = {
       val traces = withStoredTracesReadLock {
-        storedTraces.filter(data => f(data.event))
+        storedTraces.toList.filter(data => f(data.event))
       }
       merge(traces map { case t @ TraceData(_, startTime, _, _) =>
         Interval(startTime, t.endTime)
@@ -1359,7 +1359,7 @@ object Tracer {
     }
 
     def getTraces(filter: TraceEvent.Event => Boolean): Seq[TraceData] = withStoredTracesReadLock {
-      storedTraces filter { t =>
+      storedTraces.toList filter { t =>
         filter(t.event)
       }
     }
@@ -1421,7 +1421,7 @@ object Tracer {
 
     def getCustomDataTraces[T](filter: TraceEvent.Event => Boolean): Seq[TraceCustomData[T]] =
       withStoredTracesReadLock {
-        storedCustomDataTraces.filter(t => filter(t.event)).map(_.asInstanceOf[TraceCustomData[T]])
+        storedCustomDataTraces.toList.filter(t => filter(t.event)).map(_.asInstanceOf[TraceCustomData[T]])
       }
   }
 

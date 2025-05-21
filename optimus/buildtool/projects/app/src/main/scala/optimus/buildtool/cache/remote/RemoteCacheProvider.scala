@@ -37,18 +37,7 @@ import optimus.platform._
     cmdLine.dhtRemoteStore != OptimusBuildToolCmdLineT.NoneArg
   private val writeCmdLine = PartialFunction.condOpt(cmdLine) { case wcl: RemoteStoreCmdLine => wcl }
 
-  private val defaultCacheMode: CacheMode = writeCmdLine.fold[CacheMode](CacheMode.ReadOnly) { cmdLine =>
-    if (cmdLine.remoteCacheMode == NoneArg) {
-      if (cmdLine.remoteCacheForceWrite) CacheMode.ForceWrite
-      else if (cmdLine.remoteCacheWritable) CacheMode.ReadWrite
-      else CacheMode.ReadOnly
-    } else if (cmdLine.remoteCacheMode == "readWrite") CacheMode.ReadWrite
-    else if (cmdLine.remoteCacheMode == "readOnly") CacheMode.ReadOnly
-    else if (cmdLine.remoteCacheMode == "writeOnly") CacheMode.WriteOnly
-    else if (cmdLine.remoteCacheMode == "forceWrite") CacheMode.ForceWrite
-    else if (cmdLine.remoteCacheMode == "forceWriteOnly") CacheMode.ForceWriteOnly
-    else throw new IllegalArgumentException(s"Unrecognized cache mode: ${cmdLine.remoteCacheMode}")
-  }
+  private val defaultCacheMode: CacheMode = writeCmdLine.fold[CacheMode](CacheMode.ReadOnly)(_.cacheMode)
 
   @node @scenarioIndependent private[buildtool] def remoteBuildCache: Option[RemoteArtifactCache] =
     if (isEnabled()) { Some(getCache("build")) }
@@ -98,10 +87,10 @@ import optimus.platform._
 
     val store = cmdLine.dhtRemoteStore match {
       case NoneArg =>
-        log.info(s"DHT remote store not enabled, using EmptyStore")
+        log.debug(s"DHT remote store not enabled, using EmptyStore")
         EmptyStore
       case dht =>
-        log.info(s"Using DHT $cacheType cache at $dht")
+        log.debug(s"Using DHT $cacheType cache at $dht")
 
         val clusterType = DHTStore.zkClusterType(dht)
 

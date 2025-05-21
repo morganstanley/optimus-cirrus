@@ -81,6 +81,7 @@ object NamingConventions {
   val MavenLibsKey = "mavenLibs"
   val LibsKey = "libs"
 
+  val ObtExt = "obt"
   val JarExt = "jar"
   val ZipExt = "zip"
   val TarGzExt = "tar.gz"

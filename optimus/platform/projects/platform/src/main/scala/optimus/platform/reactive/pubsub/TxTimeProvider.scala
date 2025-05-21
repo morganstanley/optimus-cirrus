@@ -151,6 +151,10 @@ private[reactive] class TxTimeProvider(val partition: Partition) {
             log.info(s"streamId($streamId): ticking now broker connected - $msg")
           case PubSubBrokerDisconnectEvent =>
             log.warn(s"streamId($streamId): ticking now broker disconnected  - $msg")
+          case PubSubDelayEvent(types) =>
+            log.warn(s"streamId($streamId): ticking delay for types $types")
+          case PubSubDelayOverEvent(types) =>
+            log.info(s"streamId($streamId): ticking delay recovered for types $types")
         }
     }
   }

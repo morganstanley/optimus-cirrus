@@ -29,7 +29,7 @@ final class ImmediatelyInsideInBackground
 
 final class NoResultEvaluated extends HandlerException("NoResult() step should not be evaluated")
 
-final class IllegalScenarioReferenceTweak(val sr: ScenarioReference, val tweaks: collection.Seq[Tweak])
+final class IllegalScenarioReferenceTweak(val sr: ScenarioReference, val tweaks: Seq[Tweak])
     extends Exception({
       val addendum = if (tweaks.isEmpty) "" else s":\n\t${tweaks mkString "\n\t"}"
       s"Cannot add tweaks to nontweakable ScenarioReference $sr$addendum"

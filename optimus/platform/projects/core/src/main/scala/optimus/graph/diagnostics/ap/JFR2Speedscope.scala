@@ -38,6 +38,7 @@ import one.jfr.Dictionary
 import one.jfr.JfrReader
 import one.jfr.event.CustomSample
 import one.jfr.event.Event
+import one.jfr.event.EventCollector
 import optimus.platform.util.Log
 import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
@@ -135,7 +136,7 @@ object JFR2Speedscope extends App with Log {
   private val methodIdToMethodName = new Dictionary[String]
   // Using JFR reader and event aggregator  provided with async-profiler
   val jfr = new JfrReader(cmdLine.inputFile)
-  val agg = new EventAggregator(cmdLine.threads, true)
+  val agg = new EventAggregator(cmdLine.threads, 0.0)
 
   val speedscope = new Speedscope(cleanLambdas = true)
 
@@ -172,8 +173,8 @@ object JFR2Speedscope extends App with Log {
     )
       agg.collect(event)
 
-  agg.forEach(new EventAggregator.Visitor() {
-    def visit(event: Event, value: Long): Unit = {
+  agg.forEach(new EventCollector.Visitor() {
+    def visit(event: Event, samples: Long, value: Long): Unit = {
       val stackTrace = jfr.stackTraces.get(event.stackTraceId)
       if (stackTrace != null) {
         val methods = stackTrace.methods
@@ -192,7 +193,7 @@ object JFR2Speedscope extends App with Log {
           case c: CustomSample => c.info
           case _               => event.getClass.getSimpleName
         }
-        speedscope.addTrace(eventName, value, trace)
+        speedscope.addTrace(eventName, value * samples, trace)
       }
     }
   })

@@ -21,6 +21,7 @@ import scala.tools.nsc.symtab.Flags
 /*
  * General "utils" for the compiler plugin.  Code here should be shared between pre-typer and post-typer phases.
  */
+// noinspection TypeAnnotation
 trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with OptimusPluginReporter {
 
   val global: Global
@@ -38,7 +39,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
   def DalPkg = Select(PlatformPkg, names.dal)
   def GraphPkg = Select(Select(Ident(nme.ROOTPKG), names.optimus), names.graph)
   def DistPkg = Select(Select(Ident(nme.ROOTPKG), names.optimus), names.dist)
-  def ElevatedPkg = Select(DistPkg, newTermName("elevated"))
   def EntityPkg = Select(Select(Ident(nme.ROOTPKG), names.optimus), names.entity)
   def AnnotationPkg = Select(PlatformPkg, names.annotations)
   def InternalAnnotationPkg = Select(AnnotationPkg, names.internal)
@@ -46,7 +46,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
   def JavaTimePkg = Select(Select(Ident(nme.ROOTPKG), newTermName("java")), newTermName("time"))
   def InternalPkg = Select(PlatformPkg, names.internal)
   def ScalaPkg = Select(Ident(nme.ROOTPKG), nme.scala_)
-  def ScalaReflectPkg = Select(ScalaPkg, names.reflect)
   def JavaLangPkg = Select(Select(Ident(nme.ROOTPKG), nme.java), nme.lang)
   def ScalaAnnotationPkg = Select(Select(Ident(nme.ROOTPKG), nme.scala_), nme.annotation)
   def ScalaMetaAnnotationPkg = Select(ScalaAnnotationPkg, newTermName("meta"))
@@ -80,7 +79,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
       val missingProperty = newTermName("missingProperty")
       val disabledConstructorDefaultValues = newTermName("disabledConstructorDefaultValues")
       val safeResult = newTermName("safeResult")
-      val isTickableContext = newTermName("isTickableContext")
       val getEntityReference = newTermName("getEntityReference")
       val observedValueNode = newTermName("observedValueNode")
       val outerHash = newTermName("outerHash")
@@ -128,10 +126,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
     def outerHash = Select(PlatformPluginHelpers, localNames.outerHash)
     def outerEquals = Select(PlatformPluginHelpers, localNames.outerEquals)
   }
-  object NodeSupport {
-    lazy val thisSym = rootMirror.getRequiredModule("optimus.platform.storable.NodeSupport")
-    lazy val lookupConstructorCache = definitions.getMemberMethod(thisSym, TermName("lookupConstructorCache"))
-  }
 
   object PlatformPkgObj {
     lazy val thisSym = rootMirror.getRequiredModule("optimus.platform.package")
@@ -148,7 +142,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
   def EntityType = Select(StorablePkg, tpnames.Entity)
   def InlineEntityType = Select(StorablePkg, tpnames.InlineEntity)
   def EventType = Select(PlatformPkg, tpnames.BusinessEvent)
-  def StorableType = Select(StorablePkg, tpnames.Storable)
   def ContainedEventType = Select(PlatformPkg, tpnames.ContainedEvent)
 
   def ScenarioType = Select(PlatformPkg, tpnames.Scenario)
@@ -160,22 +153,8 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
 
   def mkImpureBlock(tree: Tree): Tree =
     treeCopy.Block(tree, atPos(tree.pos.focus)(Apply(EvaluationContextVerifyImpure, Nil)) :: Nil, tree)
-  def mkOffGraphBlock(tree: Block): Block =
-    treeCopy.Block(tree, Apply(EvaluationContextVerifyOffGraph, Literal(Constant(true)) :: Nil) :: Nil, tree)
 
-  def mkExistentialType(tycon: Tree) = {
-    val bounds = TypeBoundsTree(rootScalaDot(tpnme.Nothing), rootScalaDot(tpnme.Any))
-    val typeParam = TypeDef(Modifiers(Flags.DEFERRED | Flags.SYNTHETIC), tpnames.tmp, Nil, bounds)
-    ExistentialTypeTree(AppliedTypeTree(tycon, List(Ident(tpnames.tmp))), List(typeParam))
-  }
-
-  // Existential types NodeKey[_] and PropertyInfo[_]
-  def NodeKeyXType = mkExistentialType(NodeKeyType)
-  def PropertyInfoXType = mkExistentialType(Select(GraphPkg, tpnames.PropertyInfo))
-
-  def PropertyNodeType = Select(GraphPkg, tpnames.PropertyNode)
   def CompletableNodeType = Select(GraphPkg, tpnames.CompletableNode)
-  def NodeKeyType = Select(GraphPkg, tpnames.NodeKey)
   def EventCompanionBaseType = Select(StorablePkg, tpnames.EventCompanionBase)
   def EntityCompanionBaseType = Select(StorablePkg, tpnames.EntityCompanionBase)
   def EmbeddableCompanionBaseType = Select(StorablePkg, tpnames.EmbeddableCompanionBase)
@@ -197,7 +176,7 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
   // (val arg1, val arg2...)
   def mkNodeCtorArgs(vparamss: List[List[ValDef]]) = {
     val paramMods = Modifiers(Flags.PARAMACCESSOR | Flags.FINAL)
-    for (vd @ ValDef(mods, name, tpt, rhs) <- dupTreeFlat(vparamss)) yield {
+    for (vd @ ValDef(_, name, tpt, rhs) <- dupTreeFlat(vparamss)) yield {
       ValDef(paramMods, name, tpt, rhs).setPos(vd.pos)
     }
   }
@@ -240,7 +219,7 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
         val head1 = f(head0)
 
         head1 match {
-          case x :: Nil if (x eq head0) =>
+          case x :: Nil if x eq head0 =>
             loop(mapped, unchanged, pending.tail)
           case _ =>
             val b = if (mapped eq null) new ListBuffer[A] else mapped
@@ -351,7 +330,7 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
       body: List[Tree],
       superPos: Position): ClassDef = {
     // "if they have symbols they should be owned by `sym`"
-    assert(mforall(vparamss)(p => (p.symbol eq NoSymbol) || (p.symbol.owner == sym)), ((mmap(vparamss)(_.symbol), sym)))
+    assert(mforall(vparamss)(p => (p.symbol eq NoSymbol) || (p.symbol.owner == sym)), (mmap(vparamss)(_.symbol), sym))
 
     global.ClassDef(
       sym,

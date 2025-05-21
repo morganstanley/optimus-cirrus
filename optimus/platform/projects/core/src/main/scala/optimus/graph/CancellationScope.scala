@@ -316,7 +316,7 @@ sealed private[graph] class NestedCancellationScope(
 /**
  * Default scope for new ScenarioStacks. This ignores all requests.
  */
-private[optimus] object NullCancellationScope extends CancellationScope(Settings.cancelOnException) {
+object NullCancellationScope extends CancellationScope(Settings.cancelOnException) {
   private val moniker: AnyRef = new NullCSMoniker
   // noinspection ScalaUnusedSymbol
   private def writeReplace(): AnyRef = moniker

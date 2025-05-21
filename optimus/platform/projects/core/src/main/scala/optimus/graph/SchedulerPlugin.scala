@@ -540,7 +540,7 @@ object PluginType extends Log {
 
   def completed(eq: EvaluationQueue, task: NodeTask): Unit = {
     if (task.pluginTracked) {
-      val pt = getPluginType(task)
+      val pt = task.getReportingPluginType
       if (Objects.nonNull(pt)) {
         val wasFired = task.getAndSetPluginFired()
         OGLocalTables.borrow(

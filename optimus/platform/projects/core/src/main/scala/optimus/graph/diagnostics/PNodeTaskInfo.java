@@ -24,7 +24,6 @@ import java.util.Objects;
 import com.opencsv.CSVWriter;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import optimus.core.TPDMask;
-import optimus.graph.ConstructorNode;
 import optimus.graph.SourceLocator;
 import optimus.graph.NodeTask;
 import optimus.graph.NodeTaskInfo;
@@ -33,6 +32,7 @@ import optimus.graph.cache.NCPolicy;
 import optimus.graph.cache.NCSupport;
 import optimus.graph.cache.NodeCCache;
 import optimus.graph.diagnostics.trace.ReuseHistogram;
+import optimus.platform.storable.EmbeddableCtrNodeSupport;
 
 /**
  * Summary of execution for all NodeTasks that report executionInfo as the same NodeTaskInfo ~201
@@ -221,7 +221,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
   }
 
   public final boolean isConstructor() {
-    return name.endsWith(ConstructorNode.suffix());
+    return name.endsWith(EmbeddableCtrNodeSupport.suffix);
   }
 
   public final String fullNamePackageShortened() {

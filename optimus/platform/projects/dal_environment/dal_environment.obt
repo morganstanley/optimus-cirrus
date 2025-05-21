@@ -20,7 +20,7 @@ main {
       optimus.silverking.silverking
     ]
     libs = [
-      ipm.watchtower_core
+      com.ms.watchtower.watchtower_core,
       msjava.hdom
       msjava.logbackutils
       msjava.zkapi

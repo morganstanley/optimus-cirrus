@@ -12,7 +12,6 @@
 package optimus.graph;
 
 import static java.lang.System.nanoTime;
-import static optimus.graph.OGTrace.AsyncSuffix;
 import static optimus.graph.OGTrace.trace;
 import static optimus.graph.diagnostics.PNodeTaskInfoUtils.merge;
 import java.lang.ref.Reference;
@@ -126,7 +125,12 @@ public class OGLocalTables extends RemovableLocalTables {
     }
   }
 
-  public static OGLocalTables acquireProfilingContext(boolean threadAttached) {
+  /**
+   * Acquires a profiling context for the current thread.
+   *
+   * @param trackLifeOfThread true if not followed up by a well-defined releaseProfilingContext()
+   */
+  static OGLocalTables acquireProfilingContext(boolean trackLifeOfThread) {
     OGLocalTables prfCtx;
     synchronized (_lock) {
       prfCtx = parkedTables.pop();
@@ -137,9 +141,9 @@ public class OGLocalTables extends RemovableLocalTables {
         activeTables.add(prfCtx);
       }
     }
-    if (threadAttached) prfCtx.owner = new LTRef(prfCtx);
+    if (trackLifeOfThread) prfCtx.owner = new LTRef(prfCtx);
     prfCtx.ownerName = Thread.currentThread().getName();
-    prfCtx.ownerID = Thread.currentThread().getId();
+    prfCtx.ownerID = Thread.currentThread().threadId();
 
     return prfCtx;
   }
@@ -164,8 +168,15 @@ public class OGLocalTables extends RemovableLocalTables {
   /* Used when OGScheduler.current.prfCtx is not available and only inside of acquire/release */
   private static final ThreadLocal<OGLocalTables> borrowedTable = new ThreadLocal<>();
 
+  /**
+   * EvaluationContext can be registered on any thread (i.e. EvaluationContext.initialize()) It's
+   * somewhat expensive to borrow and/or create a new table, but possible (i.e.
+   * acquireProfilingContext(null) Therefore the API used is acquireProfilingContext(owner). Owner
+   * is a weak reference to the thread and then the thread gets garbage collected the OGLocalTables
+   * is collected and the data is processed (i.e. not lost)
+   */
   private static class LTRef extends WeakReference<Thread> {
-    OGLocalTables lt;
+    final OGLocalTables lt;
 
     LTRef(OGLocalTables lt) {
       super(Thread.currentThread(), _refQueue);
@@ -210,7 +221,8 @@ public class OGLocalTables extends RemovableLocalTables {
 
   public OGLocalTables() {
     super();
-    this.ctx = new PThreadContext(Thread.currentThread().getId(), Thread.currentThread().getName());
+    var thread = Thread.currentThread();
+    this.ctx = new PThreadContext(thread.threadId(), thread.getName());
     this.eventsTrace = OGTrace.writer_proto.createCopy(trace);
   }
 
@@ -274,8 +286,8 @@ public class OGLocalTables extends RemovableLocalTables {
   public static void forAllRemovables(Consumer<RemovableLocalTables> process) {
     expungeRemovedThreads();
     synchronized (_lock) {
-      activeTables.foreach(lt -> process.accept(lt));
-      parkedTables.foreach(lt -> process.accept(lt));
+      activeTables.foreach(process::accept);
+      parkedTables.foreach(process::accept);
       applyToExpunged(process);
     }
   }
@@ -303,7 +315,7 @@ public class OGLocalTables extends RemovableLocalTables {
             SchedulerProfileEntry sinceLast = localTable.ctx.observedValuesSinceLast(currentTime);
             if (m != null)
               // Consider: Threads with the same name!
-              m.putIfAbsent(localTable.ownerName + AsyncSuffix + localTable.ownerID, sinceLast);
+              m.putIfAbsent(localTable.ownerName + "@" + localTable.ownerID, sinceLast);
             total.mutateAdd(sinceLast);
           });
 

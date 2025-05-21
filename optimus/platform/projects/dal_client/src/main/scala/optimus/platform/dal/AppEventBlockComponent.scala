@@ -135,12 +135,11 @@ class AppEventBlock(
           reverts.result(),
           entityRefs,
           lockTokens)
-      }(collection.Seq.breakOut)
+      }(Seq.breakOut)
 
     val entityToPutMap =
       bcmds.map(_._1).foldLeft[Map[WriteBusinessEvent.Put, Entity]](Map.empty)((acc, item) => acc ++ item).toMap
 
-    // EVENTS APPEVENT
     (
       entityToPutMap,
       PutApplicationEvent(
@@ -173,7 +172,7 @@ class AppEventBlock(
     if (cmds.nonEmpty)
       resolver.executeAppEvent(cmds, cmdToEntity, entityMutationAllowed, writeRetryAllowed, extractRef)
     else
-      PersistResult(TimeInterval.NegInfinity)
+      PersistResult(TimeInterval.NegInfinity, isEmptyTransaction = true)
   }
 
   protected final def validateAndGetBusinessEventBlocks(ops: Iterable[PersistCacheEntry]): Iterable[CacheValue] = {

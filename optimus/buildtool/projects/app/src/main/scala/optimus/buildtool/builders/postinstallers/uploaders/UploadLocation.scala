@@ -17,6 +17,7 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.DirectoryAsset
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.OsUtils
+import org.apache.commons.lang3.SystemUtils
 
 import java.nio.file.FileSystem
 import java.nio.file.FileSystems
@@ -29,18 +30,21 @@ sealed abstract class UploadLocation {
   protected def location: String
   override def toString: String = location
 
+  /**
+   * must be thread safe
+   */
   def cmds(source: Asset, format: UploadFormat): Seq[Seq[String]]
 
+  /**
+   * must be thread safe and idempotent
+   */
+  def initCmds(format: UploadFormat): Seq[Seq[String]]
+
+  /**
+   * should use skip-old-files to avoid overwriting existing files
+   */
   protected def untarCmd(tar: FileAsset): Seq[String] =
-    Seq(
-      "tar",
-      "xzfp",
-      str(tar),
-      "-C",
-      str(target),
-      "--skip-old-files",
-      "--warning=no-timestamp"
-    )
+    Seq("tar", "xzfp", str(tar), "-C", str(target), "--skip-old-files", "--warning=no-timestamp")
 
   protected def unzipCmd(zip: FileAsset): Seq[String] =
     Seq("unzip", "-n", str(zip), "-d", str(target))
@@ -70,6 +74,9 @@ sealed abstract class UploadLocation {
 
 object UploadLocation {
 
+  val useRsync: Boolean =
+    sys.props.get("UploadLocation.useRsync").map { _.toBoolean }.getOrElse(!OsUtils.isWindows)
+
   final case class Local(target: Directory, decompressAfterUpload: Boolean) extends UploadLocation {
     override protected val location: String = str(target)
 
@@ -84,6 +91,7 @@ object UploadLocation {
         else Seq(copyCmd(zip))
       case x => throw new UnsupportedOperationException(s"Invalid upload combination: $x")
     }
+    override def initCmds(format: UploadFormat) = Seq.empty
   }
 
   final case class Remote(host: String, target: Directory, decompressAfterUpload: Boolean) extends UploadLocation {
@@ -100,20 +108,17 @@ object UploadLocation {
     override def cmds(source: Asset, format: UploadFormat): Seq[Seq[String]] = (source, format) match {
       case (d: DirectoryAsset, Raw) =>
         Seq(
-          overSsh { makeDir(target) },
           copy(d, target)
         )
       case (tar: FileAsset, Tar) =>
         if (decompressAfterUpload) {
           val tempFile = Tmp.resolveFile(tar.name)
           Seq(
-            overSsh { makeDir(Tmp) },
             copy(tar, Tmp),
             overSsh { untarCmd(tempFile) ++ AND ++ delete(tempFile) }
           )
         } else {
           Seq(
-            overSsh { makeDir(target) },
             copy(tar, target)
           )
         }
@@ -121,13 +126,11 @@ object UploadLocation {
         if (decompressAfterUpload) {
           val tempFile = Tmp.resolveFile(zip.name)
           Seq(
-            overSsh { makeDir(Tmp) },
             copy(zip, Tmp),
             overSsh { unzipCmd(tempFile) ++ AND ++ delete(tempFile) }
           )
         } else {
           Seq(
-            overSsh { makeDir(target) },
             copy(zip, target)
           )
         }
@@ -137,17 +140,69 @@ object UploadLocation {
     private def makeDir(target: Directory): Seq[String] =
       Seq("mkdir", "-p", str(target))
 
-    private def copy(source: Asset, target: Directory): Seq[String] = {
+    private def copy(source: Asset, target: Directory): Seq[String] = if (useRsync) {
       val extraArgs = source match {
         case _: FileAsset      => Nil
         case _: DirectoryAsset => Seq("--recursive", "--compress")
       }
       Seq("rsync", "--partial") ++ extraArgs ++ Seq("-e", "ssh", rsyncPath(source), s"$host:${rsyncPath(target)}")
+    } else {
+      val extraArgs = source match {
+        case _: FileAsset      => Nil
+        case _: DirectoryAsset => Seq("-R")
+      }
+      Seq(
+        "scp",
+        "-o",
+        "GSSAPIAuthentication=yes",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "StrictHostKeyChecking=no") ++ extraArgs ++ Seq(
+        source.pathString,
+        s"${SystemUtils.USER_NAME}@$host:${target.pathString.replace("\\", "/")}"
+      )
     }
 
     private def delete(file: FileAsset): Seq[String] = Seq("rm", str(file))
 
-    private def overSsh(baseCmd: Seq[String]): Seq[String] = Seq("ssh", host, baseCmd.mkString(" "))
+    private def overSsh(baseCmd: Seq[String]): Seq[String] = {
+      if (OsUtils.isWindows) {
+        Seq(
+          "ssh",
+          "-vvv",
+          "-K",
+          "-t",
+          "-C",
+          "-Y",
+          "-o",
+          "StrictHostKeyChecking=no",
+          "-o",
+          "UserKnownHostsFile=/dev/null",
+          s"${SystemUtils.USER_NAME}@$host",
+          baseCmd.mkString(" ")
+        )
+      } else {
+        Seq("ssh", s"${SystemUtils.USER_NAME}@$host", baseCmd.mkString(" "))
+      }
+    }
+    override def initCmds(format: UploadFormat) = format match {
+      case Raw =>
+        Seq(overSsh { makeDir(target) })
+      case Tar =>
+        if (decompressAfterUpload) {
+          Seq(overSsh { makeDir(Tmp) })
+        } else {
+          Seq(overSsh { makeDir(target) })
+        }
+      case Zip =>
+        if (decompressAfterUpload) {
+          Seq(overSsh { makeDir(Tmp) })
+        } else {
+          Seq(overSsh { makeDir(target) })
+        }
+      case x => throw new UnsupportedOperationException(s"Invalid upload combination: $x")
+    }
   }
 
   def apply(text: String, decompressAfterUpload: Boolean, fs: FileSystem = FileSystems.getDefault): UploadLocation = {

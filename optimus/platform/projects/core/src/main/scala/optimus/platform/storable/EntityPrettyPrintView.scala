@@ -24,7 +24,7 @@ class EntityPrettyPrintView(val e: Entity) extends AnyVal {
   def prettyPrint: String = "Entity " + e.getClass.getName + headerVersion + "\n" + dumpProps
 
   def dumpProps: String = dumpProps(new HtmlBuilder).toPlaintext
-  def propsSeq: collection.Seq[String] = dumpProps(new HtmlBuilder).toPlaintextSeq
+  def propsSeq: Seq[String] = dumpProps(new HtmlBuilder).toPlaintextSeq
 
   def dumpProps(hb: HtmlBuilder): HtmlBuilder = {
     import optimus.graph._

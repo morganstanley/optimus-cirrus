@@ -62,8 +62,21 @@ object NoReadEmptyChecks {
   // TODO (OPTIMUS-17589): Change this when getEntityReference returns the correct type
   private def checkIsEmpty(node: NodeKey[_]): Boolean = {
     node match {
-      case l: MaybePickledReference[_] if !l.propertyInfo.isDirectlyTweakable =>
-        PluginSupport.getEntityReference(node).isEmpty
+      case l: PropertyNode[_] if !l.propertyInfo.isDirectlyTweakable =>
+        try {
+          PluginSupport.getEntityReference(node).isEmpty
+        } catch {
+          case e: IllegalStateException =>
+            // There is a test that asserts that if the node is a type not
+            // supported by getEntityReference (e.g. it is an @node def)
+            // then an IllegalArgumentException is thrown. However, this
+            // function throws IllegalStateException. We're being conservative
+            // and not changing the exception type thrown by it; instead, we're
+            // wrapping in IllegalArgumentException here
+            throw new IllegalArgumentException(
+              s"Can only use checkIsEmpty method on non tweakable lazy pickled references ${node.getClass}",
+              e)
+        }
       case _ =>
         throw new IllegalArgumentException(
           s"Can only use checkIsEmpty method on non tweakable lazy pickled references ${node.getClass}")

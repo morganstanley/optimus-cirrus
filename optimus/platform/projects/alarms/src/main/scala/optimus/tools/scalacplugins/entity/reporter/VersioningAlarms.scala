@@ -90,10 +90,6 @@ object VersioningAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHel
     abort2(85018, "You are changing some field(s) to %s, but they're not present in destination type %s")
   val CHANGE_FIELD_TYPE_DEST_TYPE_MISMATCH =
     abort2(85019, "You are changing field to type %s, but %s found in destination type declaration.")
-  val INVALID_STEP_IN_EMBEDDABLE = abort0(
-    85020,
-    "Invalid transformation step for embeddable. Embeddables only support 'add' and 'copy' transformation steps.")
-  val NOT_SUPPORTED_TRANSFORMER_IN_EMBEDDABLE = abort0(85021, "UnsafeTransformers are not supported for embeddables.")
 
   val INVALID_MINUS_OPERATION_FOR_TYPES = abort3(
     86000,

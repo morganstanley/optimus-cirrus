@@ -19,7 +19,7 @@ import optimus.graph.diagnostics.pgo
 import optimus.graph.diagnostics.pgo.CacheFilterTweakUsageDecision.removeZero
 
 import java.util.{List => JList}
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
@@ -77,7 +77,7 @@ final case class CacheFilterTweakUsageDecision(
     noBenefit: Boolean = false,
     lowHitRatio: Boolean = false
 ) {
-  val pgoDecisionFields: Seq[Any] = collection.Seq(
+  val pgoDecisionFields: Seq[Any] = Seq(
     name,
     reasonType,
     cacheHit,
@@ -171,7 +171,7 @@ object CacheFilterTweakUsageDecision {
     .map(x => "\"" + x + "\"")
     .mkString(",")
   // TODO (OPTIMUS-46192): do less work on init! This particular call makes debugging hard because breakpoints hit in two places
-  val configWriter: ConfigWriter = ConfigWriter(null, collection.Seq.empty, ConfigWriterSettings.default)
+  val configWriter: ConfigWriter = ConfigWriter(null, Seq.empty, ConfigWriterSettings.default)
   private val cacheFilterDecisiontweakUsageDecisionList: ListBuffer[CacheFilterTweakUsageDecision] = ListBuffer()
   def getList: ListBuffer[CacheFilterTweakUsageDecision] = cacheFilterDecisiontweakUsageDecisionList
   def add(
@@ -211,16 +211,16 @@ object CacheFilterTweakUsageDecision {
     pntis.asScala.map { pnti => pnti.fullName -> pnti }.toMap
 
   final case class PGODiff(
-      extra: collection.Seq[PNodeTaskInfo],
-      missing: collection.Seq[PNodeTaskInfo],
-      extraDisabled: collection.Seq[DecisionDifference],
-      missingDisabled: collection.Seq[DecisionDifference]) {
+      extra: Seq[PNodeTaskInfo],
+      missing: Seq[PNodeTaskInfo],
+      extraDisabled: Seq[DecisionDifference],
+      missingDisabled: Seq[DecisionDifference]) {
 
     /** how many of the PNTIs that appears in both runs resulted in different PGO decisions? */
     def numDifferent: Int = extraDisabled.length + missingDisabled.length
   }
 
-  def flatMapOptconf(optconf: PerEntityConfigGroup): collection.Seq[String] = {
+  def flatMapOptconf(optconf: PerEntityConfigGroup): Seq[String] = {
     optconf.entityToConfig.flatMap { case (prefix, map) =>
       map.propertyToConfig.map { case (name, _) => prefix + name }
     }.toSeq
@@ -259,10 +259,10 @@ object CacheFilterTweakUsageDecision {
     val firstRun = nameToPnti(first)
     val secondRun = nameToPnti(second)
 
-    val extra = mutable.ArrayBuffer[PNodeTaskInfo]() // pnti appears in run2 not in run1
-    val missing = mutable.ArrayBuffer[PNodeTaskInfo]() // pnti appears in run1 not in run2
-    val extraDisabled = mutable.ArrayBuffer[DecisionDifference]() // disabled in run2 not in run1
-    val missingDisabled = mutable.ArrayBuffer[DecisionDifference]() // disabled in run1 not in run2
+    val extra = ArraySeq.newBuilder[PNodeTaskInfo] // pnti appears in run2 not in run1
+    val missing = ArraySeq.newBuilder[PNodeTaskInfo] // pnti appears in run1 not in run2
+    val extraDisabled = ArraySeq.newBuilder[DecisionDifference] // disabled in run2 not in run1
+    val missingDisabled = ArraySeq.newBuilder[DecisionDifference] // disabled in run1 not in run2
 
     val allNames = firstRun.keySet ++ secondRun.keySet
     var comparableCount = 0 // keep count of how many appear in both
@@ -281,7 +281,7 @@ object CacheFilterTweakUsageDecision {
       else extra += secondRun(name) // must appear in second run since that key didn't just come from nowhere
     }
 
-    val pgoDiff = PGODiff(extra, missing, extraDisabled, missingDisabled)
+    val pgoDiff = PGODiff(extra.result(), missing.result(), extraDisabled.result(), missingDisabled.result())
     checkThreshold(threshold, comparableCount, pgoDiff.numDifferent)
     pgoDiff
   }

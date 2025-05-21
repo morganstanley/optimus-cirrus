@@ -21,6 +21,7 @@ main {
     ]
 
     libs = [
+      org.scala-lang.modules.scala-parser-combinators
       ossjava.args4j
       ossjava.commons-compress
       ossjava.hamcrest

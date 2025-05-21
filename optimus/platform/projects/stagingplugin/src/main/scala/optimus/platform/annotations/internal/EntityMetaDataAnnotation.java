@@ -36,6 +36,8 @@ public @interface EntityMetaDataAnnotation {
 
   boolean fullTextSearch() default false;
 
+  boolean monoTemporal() default false;
+
   // these fields are in line with the attribute names
   // if we add/modify fields in this annotation then we need to keep this is step
   // additionally the code that generates this annotation in OptimusNames,
@@ -49,4 +51,5 @@ public @interface EntityMetaDataAnnotation {
   String name_isObject = "isObject";
   String name_projected = "projected";
   String name_fullTextSearch = "fullTextSearch";
+  String name_monoTemporal = "monoTemporal";
 }

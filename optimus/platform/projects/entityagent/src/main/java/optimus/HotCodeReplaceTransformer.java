@@ -127,7 +127,7 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
           "[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/](?:bin[\\\\/]..[\\\\/])?lib/(\\w+)(?:\\.(\\w+))?-runtimeAppPathing\\.jar");
 
   // Example:
-  // /my/network/path/install/optimus/platform/local/install/common/lib/entityagent.jar
+  // /my/network/path/install/optimus/platform/local/install/common/lib/entityagent-runtimeAppPathing.jar
   static final Pattern OBT_INSTALLED_CLASS_JAR =
       Pattern.compile(
           ".*[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/]lib[\\\\/](\\w+)(?:\\.(\\w+))?\\.jar");

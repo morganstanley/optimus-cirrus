@@ -25,7 +25,7 @@ object CommandLocationSerializer {
   }
   final def fromProto(commandLocationProto: CommandLocationProto): CommandLocation = {
     val location = commandLocationProto.getLocation()
-    val indices = commandLocationProto.getCommandIndicesList.asScala.map(_.asInstanceOf[Int])
+    val indices = commandLocationProto.getCommandIndicesList.asScalaUnsafeImmutable.map(_.asInstanceOf[Int])
     CommandLocation(location, indices)
   }
 }

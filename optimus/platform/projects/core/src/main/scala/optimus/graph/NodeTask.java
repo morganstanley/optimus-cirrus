@@ -14,7 +14,7 @@ package optimus.graph;
 import static optimus.graph.OGScheduler.log;
 import static optimus.graph.OGScheduler.schedulerVersion;
 import static optimus.graph.OGTrace.ApSuffix;
-import static optimus.graph.OGTrace.AsyncSuffix;
+import static optimus.graph.OGTrace.AsyncPrefix;
 import static optimus.graph.OGTrace.CachedSuffix;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
 import static optimus.graph.cache.NCSupport.isProxy;
@@ -56,6 +56,7 @@ import optimus.graph.diagnostics.ProfiledEvent;
 import optimus.graph.diagnostics.gridprofiler.GridProfiler;
 import optimus.graph.loom.LNodeClsID;
 import optimus.graph.tracking.CancelOrphanedDependencyTrackerNodesException;
+import optimus.graph.tracking.TrackedNodeInvalidationObserver;
 import optimus.graph.tracking.ttracks.TTrack;
 import optimus.platform.EvaluationQueue;
 import optimus.platform.RuntimeEnvironment;
@@ -144,6 +145,7 @@ public abstract class NodeTask extends NodeAwaiter
   private static final int STATE_TRACKING_VALUE = 0x80;
   private static final int STATE_TWEAKABLE_OWNER = 0x100; // Owner of tweakable listener
   private static final int STATE_XSCENARIO_OWNER = 0x200 | STATE_TWEAKABLE_OWNER; // Owns x-scenario
+  private static final int ACCESSED_DAL = 0x400; // Accessed DAL in this node
   // Currently used by remoting plugin in-proc test code
   private static final int STATE_REMOTED = 0x1000;
   private static final int STATE_ADAPTED = 0x2000; // Marks nodes as adapted,
@@ -452,7 +454,7 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   public String flameFrameName(String extraMods) {
-    var prefix = "@"; // for optimus-attuned eyes
+    var prefix = AsyncPrefix; // for optimus-attuned eyes
     var suffix = ApSuffix; // for categorization by async-profiler
     var pname = NodeName.profileFrom(this).toString();
     var info = executionInfo();
@@ -529,12 +531,8 @@ public abstract class NodeTask extends NodeAwaiter
     initAsFailed(ex, ScenarioStack$.MODULE$.constant());
   }
 
-  /**
-   * NOT thread safe and can ONLY be called in the constructor of a derived class but has MB
-   * [PERF_OGTRACE_STOP_HERE_TO_ATTRIBUTE_TIME_TO_REQUESTING_NODE]
-   */
-  protected final void initAsCompleted(ScenarioStack ss) {
-    state_h.setOpaque(this, _state | STATE_DONE | STATE_STARTED);
+  private final void initAsDone(ScenarioStack ss, int flags) {
+    state_h.setOpaque(this, flags);
     _scenarioStack = ss;
     setLauncherRef(null);
     _waiters = completed; // MB!
@@ -543,16 +541,20 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   /**
+   * NOT thread safe and can ONLY be called in the constructor of a derived class but has MB
+   * [PERF_OGTRACE_STOP_HERE_TO_ATTRIBUTE_TIME_TO_REQUESTING_NODE]
+   */
+  protected final void initAsCompleted(ScenarioStack ss) {
+    initAsDone(ss, _state | STATE_DONE | STATE_STARTED);
+  }
+
+  /**
    * NOT thread safe and can ONLY be called in the constructor of a derived class, but has MB
    * [PERF_OGTRACE_STOP_HERE_TO_ATTRIBUTE_TIME_TO_REQUESTING_NODE]
    */
   protected final void initAsFailed(Throwable ex, ScenarioStack ss) {
     _xinfo = _xinfo.withException(ex);
-    state_h.setOpaque(this, _state | STATE_STARTED | stateFlagsForThrowable(ex));
-    _scenarioStack = ss;
-    setLauncherRef(null);
-    _waiters = completed; // MB!
-    if (Settings.allowTestableClock) OGTrace.publishEvent(getId(), ProfiledEvent.NODE_COMPLETED);
+    initAsDone(ss, _state | STATE_STARTED | stateFlagsForThrowable(ex));
   }
 
   /**
@@ -611,6 +613,18 @@ public abstract class NodeTask extends NodeAwaiter
 
   final boolean notWaitingForCancelledNodesToStop() {
     return (_state & STATE_WAITING_FOR_CANCELLED_NODES) == 0;
+  }
+
+  public boolean accessedDAL() {
+    return (_state & ACCESSED_DAL) != 0;
+  }
+
+  public void markAccessedDAL() {
+    updateState(ACCESSED_DAL, 0);
+  }
+
+  public void removeAccessDALFlag() {
+    updateState(0, ACCESSED_DAL);
   }
 
   private static boolean isScenarioDependent(int state) {
@@ -1084,7 +1098,9 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   /** Marks node as not re-usable from cache, and ensures that it won't run anymore */
-  public void invalidateCache() {
+  public void invalidateCache(TrackedNodeInvalidationObserver observer) {
+    // n.b. we don't have to notify the TrackedNodeInvalidationObserver because we're not tracked
+    // (see override of this method)
     updateState(STATE_INVALID_CACHE | STATE_NOT_RUNNABLE, STATE_DONE_FLAG);
     OGTrace.observer.invalidated(this);
   }
@@ -1280,6 +1296,8 @@ public abstract class NodeTask extends NodeAwaiter
     int state = _state;
     int childState = child._state;
     if (!isScenarioDependent(state) && isScenarioDependent(childState)) markScenarioDependent();
+
+    if (!accessedDAL() && child.accessedDAL()) markAccessedDAL();
 
     if (DiagnosticSettings.traceTweaksEnabled) combineDebugInfo(child);
 
@@ -1940,7 +1958,7 @@ public abstract class NodeTask extends NodeAwaiter
           if (tsk.tryToRecoverFromCycle(mask, eq)) { // Note: this takes additional locks
             cycleIsUnrecoverable = false;
             log.warn("Recovering from cycle on " + tsk.getClass().getSimpleName());
-            MonitoringBreadcrumbs$.MODULE$.sendXSFTCycleRecoveryCrumb(tsk, sb.toString());
+            MonitoringBreadcrumbs$.MODULE$.sendCycleRecoveryCrumb(tsk, sb.toString());
             break;
           }
         }

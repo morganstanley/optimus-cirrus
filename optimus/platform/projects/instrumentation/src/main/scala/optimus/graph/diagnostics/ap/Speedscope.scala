@@ -17,6 +17,7 @@ import java.io.BufferedWriter
 import java.io.FileWriter
 import java.util
 import java.util.concurrent.ConcurrentHashMap
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -40,7 +41,7 @@ class Speedscope(cleanLambdas: Boolean) extends Log {
 
   def snap: (IndexedSeq[String], Map[String, Iterable[Trace]]) = synchronized {
     (
-      allFrames.clone(),
+      allFrames.to(ArraySeq),
       profiles.map { case (pname, traces) =>
         pname -> traces.clone()
       }.toMap)

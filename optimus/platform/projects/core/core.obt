@@ -42,6 +42,7 @@ main {
       ossjava.iharder-base64,
       ossjava.jackson2,
       ossjava.jackson2.jsr310,
+      ossjava.jackson2.module-scala,
       ossjava.jna,
       ossjava.jodatime,
       ossjava.jsr305-annotations,
@@ -50,7 +51,6 @@ main {
       ossjava.opencsv,
       ossjava.slf4j,
       ossjava.spring,
-      ossscala.jackson-module-scala,
       ossscala.scala-collection-compat,
       ossscala.scala.tools,
       sam.zookeeper
@@ -65,10 +65,11 @@ main {
     modules = [
       optimus.platform.breadcrumbs.auth, // ideally this would be an "internal" runtime dep of o.p.breadcrumbs.main but we can't do that so this instead
       optimus.platform.dal_environment.internal
+      optimus.platform.java21compat
     ]
     libs = [
       ossjava.commons-io,
-      ossscala.jackson-module-scala
+      ossjava.jackson2.module-scala
     ]
   }
 }

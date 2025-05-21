@@ -15,7 +15,7 @@ package optimus.dht.common.util;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/* (regex-ignore-line: persistent exception for URL)
+/* (regex-ignore-line - persistent exception for URL)
  * This file is based on https://github.com/google/guava/blob/master/guava/src/com/google/common/util/concurrent/WrappingExecutorService.java
  * Minor changes were made to some of the parameter validation and to error handling. For those
  * changes only:

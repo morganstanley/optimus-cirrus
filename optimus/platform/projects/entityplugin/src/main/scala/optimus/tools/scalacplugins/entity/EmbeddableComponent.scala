@@ -14,7 +14,6 @@ package optimus.tools.scalacplugins.entity
 import optimus.tools.scalacplugins.entity.reporter.OptimusErrors
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 
-import scala.collection.mutable.HashMap
 import scala.tools.nsc._
 import scala.tools.nsc.transform.Transform
 import scala.tools.nsc.symtab.Flags
@@ -43,9 +42,25 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
    * TODO (OPTIMUS-0000): Has bugs, as object entity extends someEntity is really broken
    */
   class EmbeddableTransformer(unit: CompilationUnit) extends TypingTransformer(unit) {
-    private def withConstructorCacheLookUp(dd: DefDef, owner: Symbol): Tree = {
-      val newRhs = Apply(Ident(NodeSupport.lookupConstructorCache), dd.rhs :: Nil)
-      localTyper.typedPos(owner.pos) { newRhs }
+
+    /** Ideally we should use @intern on the class itself */
+    private def shouldInternValues(module: Symbol): Boolean = {
+      val primaryCtorOfClass = module.companionClass.primaryConstructor
+      primaryCtorOfClass.hasAnnotation(NodeAnnotation)
+    }
+
+    private def markEmbeddableAsInterning(module: Symbol): Tree = {
+      localTyper.typedPos(module.pos) { q"$module.__intern()" }
+    }
+
+    private def wrapInIntern(dd: DefDef): Tree = {
+      val owner = dd.symbol.owner
+      val companionObj = owner.companionModule.moduleClass
+      if (shouldInternValues(owner)) {
+        deriveDefDef(dd) { rhs =>
+          atOwner(dd.symbol) { localTyper.typedPos(dd.pos) { q"$companionObj.this.__intern($rhs)" } }
+        }
+      } else super.transform(dd)
     }
 
     override def transform(tree: Tree): Tree = tree match {
@@ -61,34 +76,33 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
           impl.name.toString)
         super.transform(impl)
 
-      case dd @ DefDef(mods, nme.hashCode_, _, List(Nil), _, _) if dd.symbol.owner.hasAttachment[StableAttachment] =>
-        buildHashCode(dd, mods)
+      case md: ModuleDef if shouldInternValues(md.symbol) =>
+        val newModDef = deriveModuleDef(md)(deriveTemplate(_) { body =>
+          markEmbeddableAsInterning(md.symbol) :: body
+        })
+        super.transform(newModDef)
 
-      case dd @ DefDef(mods, nme.equals_, Nil, List(List(param: ValDef)), _, _)
+      case dd @ DefDef(_, nme.hashCode_, _, List(Nil), _, _) if dd.symbol.owner.hasAttachment[StableAttachment] =>
+        buildHashCode(dd)
+
+      case dd @ DefDef(_, nme.equals_, Nil, List(List(param: ValDef)), _, _)
           if dd.symbol.owner.hasAttachment[StableAttachment] =>
-        buildEquals(dd, mods, param)
+        buildEquals(dd, param)
 
-      case dd @ DefDef(mods, names.apply, tparams, vparamss, tpt, rhs)
+      case dd @ DefDef(_, names.apply, _, _, _, _)
           if dd.symbol.owner.companion.isCaseClass && isEmbeddable(dd.symbol.owner.companion) =>
-        val owner = tree.symbol.owner
-        val primaryCtorOfClass = owner.companionClass.primaryConstructor
-        if (primaryCtorOfClass.hasAnnotation(NodeAnnotation)) {
-          val newRhs = atOwner(dd.symbol) { withConstructorCacheLookUp(dd, owner) }
-          treeCopy.DefDef(dd, mods, names.apply, tparams, vparamss, tpt, newRhs)
-        } else super.transform(tree)
-
+        wrapInIntern(dd)
+      case dd @ DefDef(_, names.copy, _, _, _, _) if dd.symbol.owner.isCaseClass && isEmbeddable(dd.symbol.owner) =>
+        wrapInIntern(dd)
       case _ => super.transform(tree)
     }
 
     private def handleClassDef(tree: global.Tree, clz: global.ClassDef) = {
       // unfortunately the annotations on the params don't make it into the accessor methods
       val ignoredParams: Set[String] =
-        clz.symbol.asClass.primaryConstructor
-          .paramss(0)
-          .collect {
-            case p if p.hasAnnotation(NotPartOfIdentityAnnotation) => p.nameString
-          }
-          .toSet
+        clz.symbol.asClass.primaryConstructor.paramss.head.collect {
+          case p if p.hasAnnotation(NotPartOfIdentityAnnotation) => p.nameString
+        }.toSet
 
       val params = clz.symbol.info.decls.iterator.collect {
         case m
@@ -123,10 +137,10 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
 
       // make sure that we have an equals and hashcode - e.g. not inherited from a class with a final one
       // we can check the details of the methods when we traverse them, but we need to ensure that they are there
-      (clz.symbol.info.decl(nme.equals_).alternatives.find { x =>
+      clz.symbol.info.decl(nme.equals_).alternatives.find { x =>
         val params = x.info.paramss
         params.size == 1 && params.head.size == 1 && params.head.head.tpe == definitions.AnyTpe
-      }) match {
+      } match {
         case None =>
           okToProceed = false
           if (stable.embeddable)
@@ -228,7 +242,7 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       }
       result
     }
-    private def buildEquals(dd: global.DefDef, mods: global.Modifiers, param: ValDef) = try {
+    private def buildEquals(dd: global.DefDef, param: ValDef) = try {
       val ownerSymbol = dd.symbol.owner
       val stable = ownerSymbol.attachments.get[StableAttachment].get
       val res = deriveDefDef(dd) { _ =>
@@ -251,11 +265,11 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
               complex * 1000 + pos
             }
 
-            val fields = stable.params.zipWithIndex.sortBy(order).unzip._1
+            val fields = stable.params.zipWithIndex.sortBy(order).map(_._1)
 
             val that = dd.symbol
               .newVariable(freshTermName("equals$that")(unit.fresh), dd.pos.focus) setInfo ownerSymbol.tpe
-            val other = newValDef(that, REF(param.symbol) AS (ownerSymbol.tpe))()
+            val other = newValDef(that, REF(param.symbol) AS ownerSymbol.tpe)()
 
             val identical: Tree = This(ownerSymbol) OBJ_EQ Ident(that)
             val hashEquals = Apply(
@@ -277,14 +291,14 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
             val calcEquals = Block(List(other), identical OR AND(hashEquals :: quickChecks ::: deepChecks: _*))
 
             BLOCK(
-              IF(REF(param.symbol) IS_OBJ (ownerSymbol.tpe)) THEN ({
+              IF(REF(param.symbol) IS_OBJ ownerSymbol.tpe) THEN {
                 calcEquals
-              }) ELSE FALSE
+              } ELSE FALSE
             )
           }
           newMethod
         } else {
-          localTyper.typedPos(dd.pos)(REF(param.symbol) IS_OBJ (ownerSymbol.tpe))
+          localTyper.typedPos(dd.pos)(REF(param.symbol) IS_OBJ ownerSymbol.tpe)
         }
       }
       // it would be nice to be able to make this final
@@ -306,7 +320,7 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
     // it would be better to migrate to optimus so we leave the code for that
     // TODO (OPTIMUS-31928): should be true
     private def useOptimusHashCodeMechanismsForEmbeddable = false
-    private def buildHashCode(dd: global.DefDef, mods: global.Modifiers): DefDef = {
+    private def buildHashCode(dd: global.DefDef): DefDef = {
       val stable = dd.symbol.owner.attachments.get[StableAttachment].get
       val res = deriveDefDef(dd) { rhs =>
         if (useOptimusHashCodeMechanismsForEmbeddable || stable.stable) {
@@ -325,9 +339,9 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
                   Assign(REF(stable.hashcode), Apply(PluginSupport.avoidZero, List(Ident(acc)))))
 
               BLOCK(
-                IF(REF(stable.hashcode) INT_== LIT(0)) THEN ({
+                IF(REF(stable.hashcode) INT_== LIT(0)) THEN {
                   calcHashcode
-                }) ENDIF,
+                } ENDIF,
                 REF(stable.hashcode)
               )
             }
@@ -346,9 +360,9 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
                   Assign(REF(stable.hashcodeValid), Literal(Constant(true))))
 
               BLOCK(
-                IF(NOT(REF(stable.hashcodeValid))) THEN ({
+                IF(NOT(REF(stable.hashcodeValid))) THEN {
                   calcHashcode
-                }) ENDIF,
+                } ENDIF,
                 REF(stable.hashcode)
               )
             }
@@ -369,17 +383,16 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       res.setAttachments(dd.attachments)
       res
     }
+
     private def mkReadResolve(cd: ClassDef): Tree = {
+      val cls = cd.symbol
       localTyper.typedPos(cd.pos) {
-        val readResolveMethod = cd.symbol.newMethod(nme.readResolve, cd.pos).setFlag(SYNTHETIC | FINAL)
+        val readResolveMethod = cls.newMethod(nme.readResolve, cd.pos).setFlag(SYNTHETIC | FINAL)
         readResolveMethod.setInfoAndEnter(NullaryMethodType(definitions.AnyRefTpe))
-        DefDef(readResolveMethod, Apply(Ident(NodeSupport.lookupConstructorCache), This(cd.symbol) :: Nil))
+        DefDef(readResolveMethod, q"${cls.companionModule}.__intern($cls.this)")
       }
     }
 
-    private def knownDirectSubClassesOrderdByPos(owner: Symbol) = {
-      owner.knownDirectSubclasses.toArray.sortBy(_.pos.start)
-    }
     def asString(t: Any, prefix: String = "\n"): String = {
       t match {
         case l: List[_] =>
@@ -399,7 +412,6 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       }
     }
     private class StableAttachment(val embeddable: Boolean, val stable: Boolean, val params: List[MethodSymbol]) {
-      assert(embeddable || stable)
       // set to a symbol if attached to the class symbol
       // its the symbol for the local cache of the hashcode, so we only generate it if we need the field, ie
       // if we are doing the rewrite

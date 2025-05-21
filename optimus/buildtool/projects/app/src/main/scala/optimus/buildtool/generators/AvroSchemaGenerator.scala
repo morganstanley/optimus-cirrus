@@ -82,15 +82,20 @@ import scala.collection.immutable.SortedMap
   ): Option[GeneratedSourceArtifact] = {
     val resolvedInputs = inputs()
     import resolvedInputs._
-    val allTemplates = sourceFiles.map(_._2).merge
     ObtTrace.traceTask(scopeId, GenerateSource) {
       val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
         val tempJar = JarAsset(tempOut)
         // Use a short temp dir name to avoid issues with too-long paths for generated .java files
         val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
+
+        val allTemplates = sourceFiles.apar.map { case (root, files) =>
+          val validated = SourceGenerator.validateFiles(root, files)
+          validated.files
+        }.flatten
+
         val outputDir = tempDir.resolveDir(AvroSchemaGenerator.SourcePath)
         Utils.createDirectories(outputDir)
-        allTemplates.foreach { case (f, c) =>
+        allTemplates.foreach { f =>
           AvroSchemaGenerator.generateAvroToSchema(f, outputDir)
         }
         log.info(s"[$scopeId:$generatorName] avro-schema generation successful")

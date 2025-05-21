@@ -41,7 +41,20 @@ object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with Optimu
     warning2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
 
   val OVERLY_SPECIFIC_LIST_PATTERN =
-    warning0(10008, StagingPhase.POST_TYPER_STANDARDS, "`::` and `List(...)` patterns should only be used on values of type `List` as they will not match other `Seq`-s which can be a source of bugs")
+    warning1(
+      10008,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "`::` and `List(...)` patterns should only be used on values of type `List` as they will not match other `Seq`-s which can be a source of bugs. Found scrutinee type %s."
+    )
+
+  val OVERLY_SPECIFIC_SEQ_PATTERN =
+    warning1(
+      10009,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """`Seq(...)` and `x: Seq[T]` patterns should only be used on values of type (immutable) `Seq`.
+        |They will not match other collections such as `collection.Seq`, which can be a source of bugs.
+        |Write `case immutable.Seq` to silence this message. Found scrutinee type %s.""".stripMargin
+    )
 
 }
 

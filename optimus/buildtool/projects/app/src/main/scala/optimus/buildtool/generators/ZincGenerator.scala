@@ -83,7 +83,7 @@ import scala.collection.immutable.Seq
           Map.empty
       }
 
-    val artifact = Utils.atomicallyWrite(outputJar, replaceIfExists = true) { tempOut =>
+    val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
       val tempJar = JarAsset(tempOut)
       // Use a short temp dir name to avoid issues with too-long paths for generated .java files
       val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
@@ -109,6 +109,7 @@ import scala.collection.immutable.Seq
       SourceGenerator.createJar(zincInputs.generatorName, srcPath, a.messages, a.hasErrors, tempJar, tempDir)()
       a
     }
+    log.debug(s"Generated zinc artifact: ${artifact.sourceJar.pathString}")
     Some(artifact)
   }
 }

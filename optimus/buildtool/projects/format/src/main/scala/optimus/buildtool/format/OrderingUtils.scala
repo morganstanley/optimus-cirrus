@@ -15,7 +15,10 @@ import optimus.buildtool.config.DependencyId
 import optimus.buildtool.config.Id
 import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.OrderedElement
+import optimus.buildtool.dependencies.DependencySetId
+import optimus.buildtool.dependencies.VariantSetId
 
+import scala.annotation.tailrec
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 
@@ -39,9 +42,10 @@ object OrderingUtils {
 
     def name(a: A): String = a.properPath
 
-    def compareParts(x: String, y: String): Int =
+    @tailrec
+    private def compareParts(x: String, y: String): Int =
       (x.headOption, y.headOption) match {
-        case (Some(c1), Some(c2)) if (c1.isDigit && c2.isDigit) => // both are digits, we should now compare versions
+        case (Some(c1), Some(c2)) if c1.isDigit && c2.isDigit => // both are digits, we should now compare versions
           val match1 = versionRegex.findFirstIn(x).get // this is safe because both contain digits
           val match2 = versionRegex.findFirstIn(y).get
 
@@ -79,23 +83,42 @@ object OrderingUtils {
     override def name(a: ModuleSetId): String = a.name
   }
 
+  implicit object DependencySetOrdering extends NamedOrdering[DependencySetId] {
+    override def compare(x: DependencySetId, y: DependencySetId): Int = x.name.compareTo(y.name)
+    override def name(a: DependencySetId): String = a.name
+  }
+
+  implicit object VariantSetOrdering extends NamedOrdering[VariantSetId] {
+    override def compare(x: VariantSetId, y: VariantSetId): Int = x.name.compareTo(y.name)
+    override def name(a: VariantSetId): String = a.name
+  }
+
   private val Diagnostic: (String, ObtFile, Int) => Message =
     if (shouldReportWarnings) Warning else Error
 
-  def checkOrderingIn[A](obtFile: ObtFile, elements: Seq[OrderedElement[A]])(implicit
-      ord: NamedOrdering[A]): Seq[Message] = {
-    val current = elements.sortBy(el => (el.line, el.id))
-    val expected = current.sortBy(_.id)
+  def checkOrderingIn[A](
+      obtFile: ObtFile,
+      elements: Seq[OrderedElement[A]]
+  )(implicit ord: NamedOrdering[A]): Seq[Message] = {
+    checkOrderingInTuples(obtFile, elements.map(e => (e.id, e.line)))
+  }
+
+  def checkOrderingInTuples[A](
+      obtFile: ObtFile,
+      elements: Seq[(A, Int)]
+  )(implicit ord: NamedOrdering[A]): Seq[Message] = {
+    val current = elements.sortBy { case (e, line) => (line, e) }
+    val expected = current.sortBy { case (e, _) => e }
     val firstNotSorted = current.iterator.zip(expected.iterator).filter { case (a, b) => a != b }.take(1)
 
-    def message(expected: OrderedElement[A], actual: OrderedElement[A]): String =
-      s"Wrong ordering: ${ord.name(expected.id)} (line: ${expected.line}) should be defined before: ${ord.name(
-          actual.id)} (line: ${actual.line})"
+    def message(expected: A, expectedLine: Int, actual: A, actualLine: Int): String =
+      s"Wrong ordering: ${ord.name(expected)} (line: $expectedLine) should be defined before: ${ord.name(actual)} (line: $actualLine)"
 
     firstNotSorted
-      .flatMap { case (actual, expected) =>
+      .flatMap { case ((actual, actualLine), (expected, expectedLine)) =>
         // report in both places as sometimes one of them is out of the PR scope
-        Seq(actual.line, expected.line).map(line => Diagnostic(message(expected, actual), obtFile, line))
+        val msg = message(expected, expectedLine, actual, actualLine)
+        Seq(actualLine, expectedLine).map(line => Diagnostic(msg, obtFile, line))
       }
       .to(Seq)
   }

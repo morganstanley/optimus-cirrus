@@ -11,9 +11,9 @@
  */
 package optimus.buildtool.builders.reporter
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import optimus.buildtool.app.ScopedCompilationFactory
 
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.builders.postbuilders.codereview.CodeReviewAnalysisProducer
@@ -28,21 +28,21 @@ import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.scope.ScopedCompilation
+import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.FileDiff
 import optimus.platform._
 import optimus.platform.util.Log
-import spray.json._
 import optimus.scalacompat.collection._
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 object JsonReporter {
-  def writeJsonFile[T: RootJsonFormat](dir: Directory, entity: T, fileName: String): FileAsset = {
-    val dest = dir.path.resolve(fileName)
-    val content = entity.toJson.compactPrint.getBytes(StandardCharsets.UTF_8)
-    Files.createDirectories(dest.getParent)
-    FileAsset(Files.write(dest, content))
+  def writeJsonFile[T: JsonValueCodec](dir: Directory, entity: T, fileName: String): FileAsset = {
+    Files.createDirectories(dir.path)
+    val analysisAsset = dir.resolveFile(fileName)
+    AssetUtils.storeJsonAtomically(analysisAsset.asJson, entity, replaceIfExists = true, zip = false)
+    analysisAsset
   }
 }
 
@@ -56,12 +56,16 @@ class JsonReporter(
 
   @async def writeAnalysis(msgs: Seq[MessagesArtifact], modifiedFiles: Option[FileDiff]): Option[FileAsset] =
     codeReviewSettings.map { settings =>
+      import optimus.buildtool.codereview.CodeReviewCodecs.codeReviewValueCodec
+
       val analysis =
         CodeReviewAnalysisProducer.fromCompilationMessages(msgs.flatMap(_.messages), settings, modifiedFiles)
       writeJsonFile(settings.dir, analysis, StaticConfig.string("codeReviewAnalysisFile"))
     }
 
   @async def writeMetadataReports(scopeIds: Seq[ScopeId], factory: ScopedCompilationFactory): Seq[FileAsset] = {
+    import optimus.buildtool.builders.postbuilders.metadata.MetadataJsonImplicits._
+
     metadataSettings.to(Seq).apar.flatMap { settings =>
       val isMavenRelease = settings.generatePoms
       val isDocker = settings.images.nonEmpty

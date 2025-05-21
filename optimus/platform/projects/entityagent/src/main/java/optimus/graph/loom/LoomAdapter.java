@@ -13,39 +13,9 @@ package optimus.graph.loom;
 
 import static optimus.CoreUtils.stripPrefix;
 import static optimus.CoreUtils.stripSuffix;
-import static optimus.debug.CommonAdapter.dupNamed;
-import static optimus.debug.CommonAdapter.makePrivate;
-import static optimus.debug.CommonAdapter.sameArguments;
-import static optimus.graph.loom.LoomConfig.AsyncAnnotation;
-import static optimus.graph.loom.LoomConfig.COLUMN_NA;
-import static optimus.graph.loom.LoomConfig.CompilerAnnotation;
-import static optimus.graph.loom.LoomConfig.DESERIALIZE;
-import static optimus.graph.loom.LoomConfig.DESERIALIZE_BSM_MT;
-import static optimus.graph.loom.LoomConfig.DESERIALIZE_MT;
-import static optimus.graph.loom.LoomConfig.ExposeArgTypesParam;
-import static optimus.graph.loom.LoomConfig.LoomAnnotation;
-import static optimus.graph.loom.LoomConfig.LoomImmutablesParam;
-import static optimus.graph.loom.LoomConfig.LoomLambdasParam;
-import static optimus.graph.loom.LoomConfig.LoomLcnParam;
-import static optimus.graph.loom.LoomConfig.LoomNodesParam;
-import static optimus.graph.loom.LoomConfig.NF_TRIVIAL;
-import static optimus.graph.loom.LoomConfig.NodeAnnotation;
-import static optimus.graph.loom.LoomConfig.SCALA_ANON_PREFIX;
-import static optimus.graph.loom.LoomConfig.ScenarioIndependentAnnotation;
-import static optimus.graph.loom.LoomConfig.bsmScalaFunc;
-import static optimus.graph.loom.LoomConfig.bsmScalaFuncR;
-import static optimus.graph.loom.LoomConfig.enableCompilerDebug;
-import static optimus.graph.loom.LoomConfig.setCompilerLevelZero;
-import static optimus.graph.loom.LoomConfig.setAssumeGlobalMutation;
-import static optimus.graph.loom.LoomConfig.setTurnOffNodeReorder;
-import static optimus.graph.loom.NameMangler.isImpl;
-import static optimus.graph.loom.NameMangler.isNewNode;
-import static optimus.graph.loom.NameMangler.isQueued;
-import static optimus.graph.loom.NameMangler.mangleName;
-import static optimus.graph.loom.NameMangler.mkLoomName;
-import static optimus.graph.loom.NameMangler.stripImplSuffix;
-import static optimus.graph.loom.NameMangler.stripNewNodeSuffix;
-import static optimus.graph.loom.NameMangler.stripQueuedSuffix;
+import static optimus.debug.CommonAdapter.*;
+import static optimus.graph.loom.LoomConfig.*;
+import static optimus.graph.loom.NameMangler.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -68,6 +38,7 @@ public class LoomAdapter implements Opcodes {
   private static final int NON_NODE_ACCESS = ACC_STATIC | ACC_SYNTHETIC | ACC_ABSTRACT | ACC_BRIDGE;
   private static final int LAMBDA_CANDIDATE_ACCESS = ACC_STATIC | ACC_SYNTHETIC;
 
+  private static final String SKIP_DESC = "T";
   private final HashMap<String, String> implFieldMap = new HashMap<>();
   private final HashMap<String, String> implMethodMap = new HashMap<>();
 
@@ -182,11 +153,15 @@ public class LoomAdapter implements Opcodes {
     findImplMethods();
     findAllNodeAndTrivialFunctions();
     cls.methods.removeIf(this::isTransforming);
-    transformNodeFunctions(); // Function re-ordering
+    transformNodeFunctions(); // Function call re-ordering
     implementDeserializeLLambda();
     implementPrivateLoomMethods();
   }
 
+  /**
+   * Find @loom annotation and extract values names of nodes and lambda calls also names of
+   * immutable types (currently other entities, and values passed into nodes)
+   */
   private void setupNodeAndLambdaCalls() {
     for (var ann : cls.invisibleAnnotations) {
       if (LoomAnnotation.equals(ann.desc)) {
@@ -235,7 +210,8 @@ public class LoomAdapter implements Opcodes {
     // Extract information about fields
     for (var field : cls.fields) {
       var name = field.name;
-      if (isImpl(name)) implFieldMap.put(stripImplSuffix(name), field.desc);
+      if (isImpl(name))
+        implFieldMap.put(stripImplSuffix(name), isVolatile(field.access) ? SKIP_DESC : field.desc);
     }
   }
 
@@ -279,10 +255,10 @@ public class LoomAdapter implements Opcodes {
           tmethod.lineNumber = lineNumber;
         }
       } else if (instr instanceof MethodInsnNode) {
-        trivial = false;
+        var mi = (MethodInsnNode) instr;
+        trivial = trivial && LoomConfig.isTrivialCall(mi);
         // Record the fact that this method makes calls to @node/@async...
         if (tmethod != null) {
-          var mi = (MethodInsnNode) instr;
           if (!tmethod.hasNodeCalls) tmethod.hasNodeCalls = isNodeCall(mi);
           if (enableCompilerDebug(mi)) tmethod.compilerArgs.debug = true;
           if (setCompilerLevelZero(mi)) tmethod.compilerArgs.level = 0;
@@ -473,26 +449,30 @@ public class LoomAdapter implements Opcodes {
     if (asyncMethods.isEmpty()) return false;
 
     if (isQueued(method.name)) {
-      // no need to unmangle the name, as we know that $queued is not mangled
-      var nodeMethod = findMethod(method, stripQueuedSuffix(method.name));
+      var nodeMethod = findMethod(method, unmangleMethod(stripQueuedSuffix(method.name)));
       if (nodeMethod != null) {
         nodeMethod.queuedMethod = method;
         return true;
-      }
+      } // else if (!isStaticOrAbstract(method.access)) LMessage.fatal("How???");
     } else if (isNewNode(method.name)) {
-      // no need to unmangle the name, as we know that $newNode is not mangled
-      var nodeMethod = findMethod(method, stripNewNodeSuffix(method.name));
+      var nodeMethod = findMethod(method, unmangleMethod(stripNewNodeSuffix(method.name)));
       if (nodeMethod != null) {
         nodeMethod.newNodeMethod = method;
         return true;
-      }
+      } // else if (!isStaticOrAbstract(method.access)) LMessage.fatal("How???");
     }
     return false;
+  }
+
+  private String unmangleMethod(String methodName) {
+    return unmangleName(this.mangledClsName, methodName);
   }
 
   private NodeMethod methodAsync(MethodNode method) {
     if ((method.access & NON_NODE_ACCESS) != 0) return null;
     if (method.visibleAnnotations == null && method.invisibleAnnotations == null) return null;
+    //noinspection StringEquality
+    if (implFieldMap.get(method.name) == SKIP_DESC) return null;
 
     var annotations = new ArrayList<AnnotationNode>();
     if (method.visibleAnnotations != null) annotations.addAll(method.visibleAnnotations);

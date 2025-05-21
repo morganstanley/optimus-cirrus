@@ -231,7 +231,7 @@ class ExpressionPriQLFormatter protected (listAbbreviationThreshold: Int) extend
           write(sk.properties.mkString(","))
           write(")")
         }
-      case s: Seq[_] =>
+      case s: collection.Seq[_] =>
         write("Seq(")
         write(s.mkString(","))
         write(")")

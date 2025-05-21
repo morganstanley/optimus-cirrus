@@ -66,12 +66,12 @@ object LoggingInfo {
     }
   }
 
-  def getLogFiles(log: ch.qos.logback.core.spi.AppenderAttachable[_]): collection.Seq[String] = {
+  def getLogFiles(log: ch.qos.logback.core.spi.AppenderAttachable[_]): Seq[String] = {
     val appenders = log.iteratorForAppenders().asScala
     val files = appenders.flatMap {
       case a: ch.qos.logback.core.spi.AppenderAttachable[_] => getLogFiles(a)
       case a: ch.qos.logback.core.FileAppender[_]           => Seq(a.getFile)
-      case a: ch.qos.logback.core.ConsoleAppender[_]        => collection.Seq("console")
+      case a: ch.qos.logback.core.ConsoleAppender[_]        => Seq("console")
       case a                                                => Seq(a.toString)
     }
     files.toSeq

@@ -11,14 +11,13 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import com.github.plokhotnyuk.jsoniter_scala.macros.named
 import optimus.buildtool.artifacts.ExternalArtifactId
 import optimus.buildtool.artifacts.VersionedExternalArtifactId
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.resolvers.WebDependency
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 final case class DependencyReport(
     namespace: String,
@@ -27,23 +26,11 @@ final case class DependencyReport(
     release: Option[String],
     artifact: Option[String],
     qualifiers: Set[QualifierReport],
-    isTransitive: Boolean,
+    @named("is_transitive") isTransitive: Boolean,
     parent: Option[Set[ParentReport]] = None
 )
 
 object DependencyReport {
-
-  implicit val dependencyReportFormat: RootJsonFormat[DependencyReport] = jsonFormat(
-    DependencyReport.apply,
-    fieldName1 = "namespace",
-    fieldName2 = "meta",
-    fieldName3 = "project",
-    fieldName4 = "release",
-    fieldName5 = "artifact",
-    fieldName6 = "qualifiers",
-    fieldName7 = "is_transitive",
-    fieldName8 = "parent"
-  )
 
   def dependencyNamespace(isMaven: Boolean): String = if (isMaven) MavenNamespace else AfsNamespace
 
@@ -130,46 +117,16 @@ case object Runtime extends QualifierReport
 case object TestOnly extends QualifierReport
 case object Tooling extends QualifierReport
 
-object QualifierReport {
-
-  implicit val qualifierReportFormat: RootJsonFormat[QualifierReport] = new RootJsonFormat[QualifierReport] {
-    override def read(json: JsValue): QualifierReport = json.convertTo[String] match {
-      case "at_build"   => Compile
-      case "at_runtime" => Runtime
-      case "at_test"    => TestOnly
-      case "tooling"    => Tooling
-    }
-
-    override def write(obj: QualifierReport): JsValue = obj match {
-      case Compile  => JsString("at_build")
-      case Runtime  => JsString("at_runtime")
-      case TestOnly => JsString("at_test")
-      case Tooling  => JsString("tooling")
-    }
-  }
-
-}
-
 final case class ParentReport(
     namespace: String,
     meta: String,
     project: String,
     release: Option[String],
     qualifiers: Set[QualifierReport],
-    isTransitive: Boolean
+    @named("is_transitive") isTransitive: Boolean
 )
 
 object ParentReport {
-  implicit val parentReportFormat: RootJsonFormat[ParentReport] = jsonFormat(
-    ParentReport.apply,
-    fieldName1 = "namespace",
-    fieldName2 = "meta",
-    fieldName3 = "project",
-    fieldName4 = "release",
-    fieldName5 = "qualifiers",
-    fieldName6 = "is_transitive"
-  )
-
   def generateReport(dep: DependencyDefinition, qualifiers: Set[QualifierReport]): ParentReport =
     ParentReport(
       namespace = NpmNamespace,

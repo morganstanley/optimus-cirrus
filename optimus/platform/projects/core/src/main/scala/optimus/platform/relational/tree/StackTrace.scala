@@ -11,7 +11,7 @@
  */
 package optimus.platform.relational.tree
 
-final case class StackTrace(msg: String, elems: collection.Seq[StackTraceElement]) {
+final case class StackTrace(msg: String, elems: Seq[StackTraceElement]) {
   override def toString() = msg + "\n" + elems.map("        at " + _).mkString("\n")
 }
 
@@ -19,9 +19,9 @@ object StackTrace {
   import Packer._
   implicit val stackTraceElementPacker: Packer[StackTraceElement] = new Packer[StackTraceElement] {
     def serialize(ste: StackTraceElement, state: Packer.WriteState): Unit = {
-      implicitly[Packer[collection.Seq[String]]].serialize(ste.getClassName.split("\\."), state)
+      implicitly[Packer[Seq[String]]].serialize(ste.getClassName.split("\\."), state)
       implicitly[Packer[String]].serialize(ste.getMethodName, state)
-      implicitly[Packer[collection.Seq[String]]].serialize(Option(ste.getFileName).toSeq.flatMap(_.split("\\.")), state)
+      implicitly[Packer[Seq[String]]].serialize(Option(ste.getFileName).toSeq.flatMap(_.split("\\.")), state)
       implicitly[Packer[Int]].serialize(ste.getLineNumber + 2, state)
     }
   }
@@ -29,9 +29,9 @@ object StackTrace {
   implicit val stackTraceElementUnpacker: Unpacker[StackTraceElement] = new Unpacker[StackTraceElement] {
     def deserialize(state: Unpacker.ReadState): StackTraceElement = {
       new StackTraceElement(
-        implicitly[Unpacker[collection.Seq[String]]].deserialize(state) mkString ".",
+        implicitly[Unpacker[Seq[String]]].deserialize(state) mkString ".",
         implicitly[Unpacker[String]].deserialize(state),
-        implicitly[Unpacker[collection.Seq[String]]].deserialize(state) mkString ".",
+        implicitly[Unpacker[Seq[String]]].deserialize(state) mkString ".",
         implicitly[Unpacker[Int]].deserialize(state) - 2
       )
     }
@@ -40,7 +40,7 @@ object StackTrace {
   implicit val stackTracePacker: Packer[StackTrace] = new Packer[StackTrace] {
     def serialize(st: StackTrace, state: Packer.WriteState): Unit = {
       implicitly[Packer[String]].serialize(st.msg, state)
-      implicitly[Packer[collection.Seq[StackTraceElement]]].serialize(st.elems, state)
+      implicitly[Packer[Seq[StackTraceElement]]].serialize(st.elems, state)
     }
   }
 
@@ -48,7 +48,7 @@ object StackTrace {
     def deserialize(state: Unpacker.ReadState): StackTrace = {
       StackTrace(
         implicitly[Unpacker[String]].deserialize(state),
-        implicitly[Unpacker[collection.Seq[StackTraceElement]]].deserialize(state))
+        implicitly[Unpacker[Seq[StackTraceElement]]].deserialize(state))
     }
   }
 }

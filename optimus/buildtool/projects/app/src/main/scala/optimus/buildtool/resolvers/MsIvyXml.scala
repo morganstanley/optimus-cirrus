@@ -106,11 +106,12 @@ private[resolvers] object MsIvyXml {
           }
           val unmappedModule = Module(Organization(org), ModuleName(name), attr.toMap)
           // try transitive maven dependency mapping
-          val mappedMavenDeps: Seq[TransitiveMappedResult] =
+          val mappedMavenDeps: Option[Seq[TransitiveMappedResult]] =
             MavenUtils.applyTransitiveMapping(org, name, toConf, attr, afsToMavenMap)
-          val resolvedDeps =
-            if (mappedMavenDeps.nonEmpty) mappedMavenDeps
-            else Seq(TransitiveMappedResult(unmappedModule, version, toConf))
+
+          val resolvedDeps = mappedMavenDeps
+            .getOrElse(Seq(TransitiveMappedResult(unmappedModule, version, toConf)))
+
           resolvedDeps.map { case resolvedDep =>
             Configuration(fromConf) -> interned(
               Dependency(

@@ -10,10 +10,10 @@
  * limitations under the License.
  */
 package optimus.buildtool.compilers
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.artifacts.CachedMetadata
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.JsonImplicits._
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PythonArtifact
 import optimus.buildtool.artifacts.PythonMetadata
@@ -24,10 +24,10 @@ import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Python
-import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.OsUtils
@@ -39,7 +39,6 @@ import optimus.platform.NodeTry
 import optimus.platform.entity
 import optimus.platform.node
 
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
@@ -61,8 +60,9 @@ object AsyncPythonCompiler {
     sandboxFactory: SandboxFactory,
     logDir: Directory,
     pythonEnvironment: PythonEnvironment,
-    pythonEnabled: NodeFunction0[Boolean])
-    extends AsyncPythonCompiler {
+    pythonEnabled: NodeFunction0[Boolean],
+    mapping: NodeFunction0[Boolean]
+) extends AsyncPythonCompiler {
 
   private def venvLogFile(logDir: Directory, id: ScopeId): FileAsset =
     logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$id.venvCmd.log")
@@ -86,38 +86,36 @@ object AsyncPythonCompiler {
       val sandbox = sandboxFactory(s"${scopeId.properPath}-python-", sourceFiles)
       Utils.createDirectories(sandbox.buildDir)
 
-      val (compilationFailed, compilationMessages) = {
-        val messages =
-          ThinPyappWrapper.createTpa(outputTpa.path, pythonConfig, sandbox, pythonEnvironment)
-        (MessagesArtifact.hasErrors(messages), messages)
-      }
+      val artifact = Utils.atomicallyWrite(outputTpa) { tempPath =>
+        val messages = ThinPyappWrapper.createTpa(tempPath, pythonConfig, sandbox, pythonEnvironment, mapping())
+        val compilationFailed = MessagesArtifact.hasErrors(messages)
 
-      Jars.withJar(outputTpa.asJar) { fs =>
-        val metadata =
-          PythonMetadata(
-            OsUtils.osVersion,
-            compilationMessages,
-            hasErrors = compilationFailed,
-            resolvedInputs.inputsHash,
-            python = pythonConfig.python)
+        Jars.withJar(JarAsset(tempPath)) { fs =>
+          import optimus.buildtool.artifacts.JsonImplicits.pythonMetadataValueCodec
+          val metadata =
+            PythonMetadata(
+              OsUtils.osVersion,
+              messages,
+              hasErrors = compilationFailed,
+              resolvedInputs.inputsHash,
+              python = pythonConfig.python)
 
-        AssetUtils.withTempJson(metadata) { json =>
-          Files.write(fs.resolveFile(CachedMetadata.MetadataFile).path, json.toString.getBytes(StandardCharsets.UTF_8))
+          Files.write(fs.resolveFile(CachedMetadata.MetadataFile).path, writeToArray(metadata))
         }
-      }
 
-      val artifact = PythonArtifact.create(
-        scopeId,
-        outputTpa,
-        OsUtils.osVersion,
-        compilationMessages,
-        compilationFailed,
-        resolvedInputs.inputsHash,
-        pythonConfig.python
-      )
+        PythonArtifact.create(
+          scopeId,
+          outputTpa,
+          OsUtils.osVersion,
+          messages,
+          compilationFailed,
+          resolvedInputs.inputsHash,
+          pythonConfig.python
+        )
+      }
 
       sandbox.close()
-      trace.end(success = !compilationFailed, compilationMessages.count(_.isError))
+      trace.end(success = !artifact.hasErrors, artifact.errors, artifact.warnings)
       log.info(s"${prefix}Completing compilation")
       artifact
     } getOrRecover { case e @ RTException =>

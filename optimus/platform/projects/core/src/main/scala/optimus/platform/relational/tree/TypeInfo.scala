@@ -47,7 +47,7 @@ import scala.runtime.ScalaRunTime
 
 object TypeInfoUtils {
 
-  final case class ParameterizedType(rawType: JavaReflectType, typeArgs: collection.Seq[JavaReflectType])
+  final case class ParameterizedType(rawType: JavaReflectType, typeArgs: Seq[JavaReflectType])
       extends JavaParameterizedType {
     val getActualTypeArguments: Array[JavaReflectType] = typeArgs.toArray
     val getRawType = rawType
@@ -135,8 +135,8 @@ object TypeInfoUtils {
       List(classOf[Entity], classOf[Object]).flatMap(_.getMethods).map(_.getName)
 
   private val tuplePat = "Tuple[1-9]+".r
-  private[tree] def typedName(name: String, typeParams: collection.Seq[TypeInfo[_]]) = typeParams match {
-    case collection.Seq() => name
+  private[tree] def typedName(name: String, typeParams: Seq[TypeInfo[_]]) = typeParams match {
+    case Seq() => name
     case _ =>
       val ts = typeParams.map(_.name).mkString(", ")
       name match {
@@ -247,22 +247,22 @@ object TypeInfo {
         if (clazz == classOf[DynamicObject]) Map.empty
         else TypeInfoUtils.findAllPropertyMethod(clazz, ignoreProxyFinal)
     }
-  implicit val BOOLEAN: TypeInfo[Boolean] = new TypeInfo[Boolean](collection.Seq(classOf[Boolean]), Nil, Nil, Nil)
+  implicit val BOOLEAN: TypeInfo[Boolean] = new TypeInfo[Boolean](Seq(classOf[Boolean]), Nil, Nil, Nil)
   // for List[Nothing] to find Nothing's TypeInfo[Nothing] during macro through inferImplicitValue, it will call summon[T] but WeakTypeTag is WeakTypeTag[T], so we need to provide TypeInfo[Nothing] explicitly
-  implicit val NOTHING: TypeInfo[Nothing] = new TypeInfo[Nothing](collection.Seq(classOf[Nothing]), Nil, Nil, Nil)
-  implicit val INT: TypeInfo[Int] = new TypeInfo[Int](collection.Seq(classOf[Int]), Nil, Nil, Nil)
-  implicit val STRING: TypeInfo[String] = new TypeInfo[String](collection.Seq(classOf[String]), Nil, Nil, Nil)
-  implicit val DOUBLE: TypeInfo[Double] = new TypeInfo[Double](collection.Seq(classOf[Double]), Nil, Nil, Nil)
-  implicit val FLOAT: TypeInfo[Float] = new TypeInfo[Float](collection.Seq(classOf[Float]), Nil, Nil, Nil)
-  implicit val CHAR: TypeInfo[Char] = new TypeInfo[Char](collection.Seq(classOf[Char]), Nil, Nil, Nil)
-  implicit val BYTE: TypeInfo[Byte] = new TypeInfo[Byte](collection.Seq(classOf[Byte]), Nil, Nil, Nil)
-  implicit val LONG: TypeInfo[Long] = new TypeInfo[Long](collection.Seq(classOf[Long]), Nil, Nil, Nil)
-  implicit val SHORT: TypeInfo[Short] = new TypeInfo[Short](collection.Seq(classOf[Short]), Nil, Nil, Nil)
-  implicit val ANY: TypeInfo[Any] = new TypeInfo[Any](collection.Seq(classOf[Any]), Nil, Nil, Nil)
-  implicit val UNIT: TypeInfo[Unit] = new TypeInfo[Unit](collection.Seq(classOf[BoxedUnit]), Nil, Nil, Nil)
-  implicit val NULL: TypeInfo[Null] = new TypeInfo[Null](collection.Seq(classOf[Null$]), Nil, Nil, Nil)
-  val ITERABLE = new TypeInfo[Iterable[_]](collection.Seq(classOf[Iterable[_]]), Nil, Nil, collection.Seq(TypeInfo.ANY))
-  val SET = new TypeInfo[Set[_]](collection.Seq(classOf[Set[_]]), Nil, Nil, collection.Seq(TypeInfo.ANY))
+  implicit val NOTHING: TypeInfo[Nothing] = new TypeInfo[Nothing](Seq(classOf[Nothing]), Nil, Nil, Nil)
+  implicit val INT: TypeInfo[Int] = new TypeInfo[Int](Seq(classOf[Int]), Nil, Nil, Nil)
+  implicit val STRING: TypeInfo[String] = new TypeInfo[String](Seq(classOf[String]), Nil, Nil, Nil)
+  implicit val DOUBLE: TypeInfo[Double] = new TypeInfo[Double](Seq(classOf[Double]), Nil, Nil, Nil)
+  implicit val FLOAT: TypeInfo[Float] = new TypeInfo[Float](Seq(classOf[Float]), Nil, Nil, Nil)
+  implicit val CHAR: TypeInfo[Char] = new TypeInfo[Char](Seq(classOf[Char]), Nil, Nil, Nil)
+  implicit val BYTE: TypeInfo[Byte] = new TypeInfo[Byte](Seq(classOf[Byte]), Nil, Nil, Nil)
+  implicit val LONG: TypeInfo[Long] = new TypeInfo[Long](Seq(classOf[Long]), Nil, Nil, Nil)
+  implicit val SHORT: TypeInfo[Short] = new TypeInfo[Short](Seq(classOf[Short]), Nil, Nil, Nil)
+  implicit val ANY: TypeInfo[Any] = new TypeInfo[Any](Seq(classOf[Any]), Nil, Nil, Nil)
+  implicit val UNIT: TypeInfo[Unit] = new TypeInfo[Unit](Seq(classOf[BoxedUnit]), Nil, Nil, Nil)
+  implicit val NULL: TypeInfo[Null] = new TypeInfo[Null](Seq(classOf[Null$]), Nil, Nil, Nil)
+  val ITERABLE = new TypeInfo[Iterable[_]](Seq(classOf[Iterable[_]]), Nil, Nil, Seq(TypeInfo.ANY))
+  val SET = new TypeInfo[Set[_]](Seq(classOf[Set[_]]), Nil, Nil, Seq(TypeInfo.ANY))
 
   def toTypeInfo(tpe: JavaReflectType): TypeInfo[_] = {
     if (tpe == null) TypeInfo.NOTHING
@@ -282,9 +282,9 @@ object TypeInfo {
 
   def mock(
       className: String,
-      pureStructuralMethods: collection.Seq[Signature] = collection.Seq.empty,
-      primaryConstructorParams: collection.Seq[(String, Class[_])] = collection.Seq.empty,
-      typeParams: collection.Seq[TypeInfo[_]] = collection.Seq.empty
+      pureStructuralMethods: Seq[Signature] = Seq.empty,
+      primaryConstructorParams: Seq[(String, Class[_])] = Seq.empty,
+      typeParams: Seq[TypeInfo[_]] = Seq.empty
   ): TypeInfo[Any] = {
     new TypeInfo[Any](Nil, pureStructuralMethods, primaryConstructorParams, typeParams) {
       override def runtimeClassName = className
@@ -360,7 +360,7 @@ object TypeInfo {
 
     if (cached != null) cached.cast[T]
     else {
-      val created = new TypeInfo[T](collection.Seq(cls), Nil, Nil, Nil)
+      val created = new TypeInfo[T](Seq(cls), Nil, Nil, Nil)
       TypeInfoCache.javaCache.putIfAbsent(cls, created)
       created
     }
@@ -369,7 +369,7 @@ object TypeInfo {
   def fromManifest[T](mf: Manifest[T]): TypeInfo[T] = {
     val erased = mf.runtimeClass
     val tParams = mf.typeArguments.map(fromManifest(_))
-    new TypeInfo[T](collection.Seq(erased), Nil, Nil, tParams)
+    new TypeInfo[T](Seq(erased), Nil, Nil, tParams)
   }
 
   @tailrec private def buildIntersection(base: TypeInfo[_], classes: List[Class[_]]): TypeInfo[_] = classes match {
@@ -416,10 +416,10 @@ object TypeInfo {
     intersect[A with B, C](intersect[A, B](a, b), c)
 
   def createNormalized[T](
-      classes: collection.Seq[Class[_]],
-      pureStructuralMethods: collection.Seq[Signature],
-      primaryConstructorParams: collection.Seq[(String, Class[_])],
-      typeParams: collection.Seq[TypeInfo[_]]
+      classes: Seq[Class[_]],
+      pureStructuralMethods: Seq[Signature],
+      primaryConstructorParams: Seq[(String, Class[_])],
+      typeParams: Seq[TypeInfo[_]]
   ): TypeInfo[T] = {
     val (interfaces, concretes) = classes.partition(_.isInterface)
     val sorted = concretes.distinct.sortBy(_.getName) ++ interfaces.distinct.sortBy(_.getName)
@@ -433,9 +433,9 @@ object TypeInfo {
   }
 
   def createTypeInfo[T](
-      classes: collection.Seq[Class[_]],
-      primaryConstructorParams: collection.Seq[(String, Class[_])],
-      typeParams: collection.Seq[TypeInfo[_]]
+      classes: Seq[Class[_]],
+      primaryConstructorParams: Seq[(String, Class[_])],
+      typeParams: Seq[TypeInfo[_]]
   ): TypeInfo[T] = {
     val key = (classes, typeParams)
     AsyncCollectionHelpers.inlineRT {
@@ -453,7 +453,7 @@ object TypeInfo {
    * removes any classes in the input sequence which are a supertype of any other class in the list. preserves the
    * ordering of the original list
    */
-  def eliminateSupertypes(clss: collection.Seq[Class[_]]): collection.Seq[Class[_]] = {
+  def eliminateSupertypes(clss: Seq[Class[_]]): Seq[Class[_]] = {
     val allSupertypes = clss.flatMap(findAllSupertypes).toSet
     clss.filterNot(allSupertypes)
   }
@@ -695,7 +695,7 @@ object TypeInfoCache {
   // using java CHM for high performance
   import java.util.concurrent.ConcurrentHashMap
   val intersectionCache = new ConcurrentHashMap[(TypeInfo[_], TypeInfo[_]), TypeInfo[_]]()
-  val macroGenCache = new ConcurrentHashMap[(collection.Seq[Class[_]], collection.Seq[TypeInfo[_]]), TypeInfo[_]]()
+  val macroGenCache = new ConcurrentHashMap[(Seq[Class[_]], Seq[TypeInfo[_]]), TypeInfo[_]]()
   val javaCache = new ConcurrentHashMap[Class[_], TypeInfo[_]]()
   val interningCache = new ConcurrentHashMap[TypeInfo[_], TypeInfo[_]]()
   val clazzMethodNamesCache = new ConcurrentHashMap[Class[_], collection.Set[String]]
@@ -716,18 +716,18 @@ object TypeInfoCache {
 object TupleTypeInfo {
   val PairClass = classOf[Tuple2[_, _]]
   def unapply(ti: TypeInfo[_]): Option[(TypeInfo[_], TypeInfo[_])] = ti match {
-    case TypeInfo(PairClass +: _, _, _, collection.Seq(lt, rt)) => Some((lt, rt))
-    case _                                                      => None
+    case TypeInfo(PairClass +: _, _, _, Seq(lt, rt)) => Some((lt, rt))
+    case _                                           => None
   }
   def apply(lt: TypeInfo[_], rt: TypeInfo[_])(implicit tupleTypeInfo: TypeInfo[(_, _)]) =
-    tupleTypeInfo.copy(typeParams = collection.Seq(lt, rt))
+    tupleTypeInfo.copy(typeParams = Seq(lt, rt))
 
 }
 
 class InvocationException(name: String, obj: Any, cause: Option[Throwable] = None)
     extends RuntimeException(s"Method '$name' does not exist on object '$obj' of type ${obj.getClass}", cause.orNull)
 
-final case class TypeInfoParameterizedType(typeArgs: collection.Seq[JavaReflectType], getRawType: JavaReflectType)
+final case class TypeInfoParameterizedType(typeArgs: Seq[JavaReflectType], getRawType: JavaReflectType)
     extends JavaParameterizedType {
   val getActualTypeArguments: Array[JavaReflectType] = typeArgs.toArray
   val getOwnerType: JavaReflectType = null
@@ -739,10 +739,10 @@ final case class TypeInfoRefinedType(parentTypes: List[JavaReflectType]) extends
 // When we want to take reflectLock in this class, we will need to always take "this" lock inside it.
 @nowarn("msg=10003")
 case class TypeInfo[T] private[optimus] (
-    classes: collection.Seq[Class[_]],
-    pureStructuralMethods: collection.Seq[Signature],
-    primaryConstructorParams: collection.Seq[(String, Class[_])],
-    typeParams: collection.Seq[TypeInfo[_]]
+    classes: Seq[Class[_]],
+    pureStructuralMethods: Seq[Signature],
+    primaryConstructorParams: Seq[(String, Class[_])],
+    typeParams: Seq[TypeInfo[_]]
 ) {
   type Type = T
 
@@ -757,8 +757,8 @@ case class TypeInfo[T] private[optimus] (
   //  lazy val name: String = (typedName +: interfaces.map(_.getName)).mkString(" with ") + structuralMembersName
   lazy val name: String = {
     ((classes map (_.getName)) match {
-      case head +: rest     => (TypeInfoUtils.typedName(head, typeParams) +: rest).mkString(" with ")
-      case collection.Seq() => runtimeClassName
+      case head +: rest => (TypeInfoUtils.typedName(head, typeParams) +: rest).mkString(" with ")
+      case Seq()        => runtimeClassName
     }) + structuralMembersName
   }
 
@@ -766,7 +766,7 @@ case class TypeInfo[T] private[optimus] (
     ((classes map (_.getName)) match {
       case head +: rest =>
         (TypeInfoUtils.typedName(head, typeParams) +: rest).map(_.split("\\.").last).mkString(" + ")
-      case collection.Seq() => runtimeClassName
+      case Seq() => runtimeClassName
     }) + structuralMembersName
   }
 
@@ -817,7 +817,7 @@ case class TypeInfo[T] private[optimus] (
 
   private def getPropertyNames(
       ignoreProxyFinal: Boolean,
-      propertyNamesLambda: Map[String, Method] => collection.Seq[String],
+      propertyNamesLambda: Map[String, Method] => Seq[String],
       structuredPropertyNamesFilter: Signature => Boolean
   ) = {
     val nonStructuralPropertyNames =
@@ -826,7 +826,7 @@ case class TypeInfo[T] private[optimus] (
     (nonStructuralPropertyNames ++ structuralPropertyNames).distinct
   }
 
-  private def propertyNamesLambda(m: Map[String, Method]): collection.Seq[String] = {
+  private def propertyNamesLambda(m: Map[String, Method]): Seq[String] = {
     m.keys.toSeq.sorted
   }
 
@@ -840,7 +840,7 @@ case class TypeInfo[T] private[optimus] (
   // ordered by class (which are already ordered) then by name
   val allPropertyNames = getPropertyNames(false, propertyNamesLambda, structuredPropertyNamesFilter)
 
-  private def dimensionPropertyNamesLambda(m: Map[String, Method]): collection.Seq[String] = {
+  private def dimensionPropertyNamesLambda(m: Map[String, Method]): Seq[String] = {
     m.filter { case (_, method) => AnnotationUtils.findAnnotation(method, classOf[dimension]) ne null }
       .keys
       .toSeq
@@ -1065,10 +1065,10 @@ final case class AnonymousField(name: String) extends Field {
 // capture the constructor params of GenericTypeInfo
 final case class GenericTypeInfoSerializationMemento(
     concreteClass: Option[Class[_]],
-    interfaces: collection.Seq[Class[_]],
-    pureStructuralMethods: collection.Seq[Signature],
-    primaryConstructorParams: collection.Seq[(String, Class[_])],
-    typeParams: collection.Seq[TypeInfo[_]]
+    interfaces: Seq[Class[_]],
+    pureStructuralMethods: Seq[Signature],
+    primaryConstructorParams: Seq[(String, Class[_])],
+    typeParams: Seq[TypeInfo[_]]
 ) {
 
   def readResolve: Object =

@@ -18,4 +18,5 @@ trait BrokerProvider {
   def withWriteBroker[T](f: Option[String] => T): T
   def withRandomBroker[T](f: Option[String] => T): T
   def withMultiReadBrokers[T](maxBrokers: Int)(f: Option[String] => T): Seq[T] = { Seq() }
+  def getAllBrokers: Brokers
 }

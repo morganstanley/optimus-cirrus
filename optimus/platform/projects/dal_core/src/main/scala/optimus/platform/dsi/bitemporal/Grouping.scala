@@ -238,7 +238,8 @@ final case class EntityGrouping(
     val maxTimeSliceCount: Int,
     val maxVersionCount: Int,
     val lockToken: Long,
-    val linkedTypes: Option[LinkedTypes])
+    val linkedTypes: Option[LinkedTypes],
+    val monoTemporal: Boolean)
     extends HasDSIId[EntityReference]
     with OptimisticallyVersioned {
 
@@ -257,7 +258,8 @@ final case class EntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      linkedTypes)
+      linkedTypes,
+      monoTemporal)
 
   private def mergeLinkedTypes(newLinkedTypes: Option[LinkedTypes]): Option[LinkedTypes] = {
     (linkedTypes, newLinkedTypes) match {
@@ -274,7 +276,8 @@ final case class EntityGrouping(
       maxVersionCount: Int,
       newTypes: Seq[String],
       newLinkedTypes: Option[LinkedTypes],
-      tt: Instant) =
+      tt: Instant,
+      monoTemporal: Boolean) =
     new EntityGrouping(
       permanentRef,
       cmid,
@@ -283,7 +286,8 @@ final case class EntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      mergeLinkedTypes(newLinkedTypes)
+      mergeLinkedTypes(newLinkedTypes),
+      monoTemporal
     )
 
   override def equals(o: Any): Boolean = o match {
@@ -296,7 +300,7 @@ final case class EntityGrouping(
   final def permanentRef = id
 
   override def toString() =
-    s"Grp(ref=${id}, cmid=${cmid}, cn=${className}, lt=${lockToken}, tsCnt=${maxTimeSliceCount}, vnCnt=${maxVersionCount})"
+    s"Grp(ref=${id}, cmid=${cmid}, cn=${className}, lt=${lockToken}, tsCnt=${maxTimeSliceCount}, vnCnt=${maxVersionCount}, mt=${monoTemporal})"
 }
 
 final case class KeyGrouping(

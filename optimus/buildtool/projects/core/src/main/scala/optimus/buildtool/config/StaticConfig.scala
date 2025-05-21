@@ -19,7 +19,8 @@ import scala.jdk.CollectionConverters._
 
 object StaticConfig {
 
-  private val config = ConfigFactory.parseResources("OptimusBuildTool.conf")
+  // Ensure we use the classloader for core.jar here (otherwise we end up with the intellij app classloader for jetfire)
+  private val config = ConfigFactory.parseResources(StaticConfig.getClass.getClassLoader, "OptimusBuildTool.conf")
 
   def string(key: String): String = if (config.hasPath(key)) config.getString(key) else ""
 

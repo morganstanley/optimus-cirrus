@@ -38,6 +38,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 
 /**
@@ -438,8 +439,8 @@ object CacheAnalysisTool extends App {
       pntiPGODecisionsMap: Map[String, PntiWithPgoDecision],
       showAppletMergedRawData: Boolean = false): (String, List[EffectSummary]) = {
     val ncTestPntiByGlobal, cTestPntiByGlobal, ncTestPntiByApplet, cTestPntiByApplet =
-      mutable.ArrayBuffer[PNodeTaskInfo]()
-    val discrepancyNodes = mutable.ArrayBuffer[ComparisonNodes]()
+      ArraySeq.newBuilder[PNodeTaskInfo]
+    val discrepancyNodes = ArraySeq.newBuilder[ComparisonNodes]
 
     perTestMergedPnti.foreach { pnti =>
       // if we care about applet grouping, else we care only test pgo decision
@@ -473,10 +474,17 @@ object CacheAnalysisTool extends App {
       }
     }
     val testSummary =
-      getTopLevelSummary(testName, ncTestPntiByApplet, cTestPntiByApplet, ncTestPntiByGlobal, cTestPntiByGlobal)
+      getTopLevelSummary(
+        testName,
+        ncTestPntiByApplet.result(),
+        cTestPntiByApplet.result(),
+        ncTestPntiByGlobal.result(),
+        cTestPntiByGlobal.result())
+
+    val discrepancyNodesRes = discrepancyNodes.result()
     val discrepancyNodesSummary =
-      if (discrepancyNodes.nonEmpty)
-        getDiscrepancyNodesSummary(testName, discrepancyNodes)
+      if (discrepancyNodesRes.nonEmpty)
+        getDiscrepancyNodesSummary(testName, discrepancyNodesRes)
       else
         // so UI still show something if there's no discrepancy nodes,
         // otherwise it'll not show this test row if no nodes
@@ -577,7 +585,7 @@ object CacheAnalysisTool extends App {
       testName: String,
       beforeHotspotsNodes: Seq[PNodeTaskInfo],
       afterHotspotsNodes: Seq[PNodeTaskInfo]): List[EffectSummary] = {
-    val allNodes = mutable.ArrayBuffer[ComparisonNodes]()
+    val allNodes = ArraySeq.newBuilder[ComparisonNodes]
     // hotspots nodes are all cached
     val beforeNodeMap =
       beforeHotspotsNodes.apar.map(x => x.fullName() -> PntiWithPgoDecision(x, pgoWouldDisableCache = false)).toMap
@@ -587,7 +595,7 @@ object CacheAnalysisTool extends App {
     allNodeName.foreach { nodeName =>
       allNodes += ((beforeNodeMap.get(nodeName), afterNodeMap.get(nodeName)): ComparisonNodes)
     }
-    getDiscrepancyNodesSummary(testName, allNodes).toList
+    getDiscrepancyNodesSummary(testName, allNodes.result()).toList
   }
 
   @async def filterAndCombineNodeStats(

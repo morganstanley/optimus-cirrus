@@ -35,6 +35,7 @@ class DefaultOrderingFactory extends OrderingFactory {
     classKeyOf[String] -> typeParams0(Ordering.String),
     classKeyOf[java.time.Instant] -> typeParams0(Ordering[java.time.Instant]),
     classKeyOf[java.time.LocalDate] -> typeParams0(Ordering[java.time.LocalDate]),
+    classKeyOf[java.time.DayOfWeek] -> typeParams0(Ordering[java.time.DayOfWeek]),
     /* one type parameter */
     classKeyOf[Option[_]] -> typeParams1(t => Ordering.Option(t)),
     classKeyOf[Iterable[_]] -> typeParams1(t => Ordering.Iterable(t)),

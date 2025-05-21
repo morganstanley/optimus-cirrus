@@ -223,69 +223,77 @@ class AssetUploader(
     .sortBy(_.sizeBytes)(Ordering[Long].reverse) // largest file first
 
   @node private[buildtool] def groupFilesToBatches(distinctFiles: Seq[ArchiveEntry]): Seq[Seq[ArchiveEntry]] = {
-    val filesWithSize = loadFilesSize(distinctFiles)
-    var smallFilesToBeUsed = filesWithSize.toList.sortBy(_.sizeBytes) // smallest file first
-    val batches = Seq.newBuilder[Seq[ArchiveEntry]]
-    val currentBatch = Seq.newBuilder[ArchiveEntry]
-    var currentBatchSize: Long = 0
-    val usedSmallFiles = Seq.newBuilder[ArchiveEntry]
+    val (runtime, batchedFiles) = AdvancedUtils.timed {
+      val filesWithSize = loadFilesSize(distinctFiles)
+      var smallFilesToBeUsed = filesWithSize.toList.sortBy(_.sizeBytes) // smallest file first
+      val batches = Seq.newBuilder[Seq[ArchiveEntry]]
+      val currentBatch = Seq.newBuilder[ArchiveEntry]
+      var currentBatchSize: Long = 0
+      val usedSmallFiles = mutable.Set.empty[ArchiveEntry]
 
-    @tailrec def fillBatch(availableSpace: Long, availableSlot: Int): Unit = if (
-      smallFilesToBeUsed.nonEmpty && availableSlot > 0 && availableSpace > 0
-    ) {
-      val minSizeFile = smallFilesToBeUsed.head
-      if (minSizeFile.sizeBytes <= availableSpace) {
-        currentBatch += minSizeFile
-        usedSmallFiles += minSizeFile
-        smallFilesToBeUsed = smallFilesToBeUsed.drop(1)
-        fillBatch(availableSpace - minSizeFile.sizeBytes, availableSlot - 1)
+      @tailrec def fillBatch(availableSpace: Long, availableSlot: Int): Unit = if (
+        smallFilesToBeUsed.nonEmpty && availableSlot > 0 && availableSpace > 0
+      ) {
+        val minSizeFile = smallFilesToBeUsed.head
+        if (minSizeFile.sizeBytes <= availableSpace) {
+          currentBatch += minSizeFile
+          usedSmallFiles += minSizeFile
+          smallFilesToBeUsed = smallFilesToBeUsed.drop(1)
+          fillBatch(availableSpace - minSizeFile.sizeBytes, availableSlot - 1)
+        }
       }
-    }
 
-    def putFileToBatch(largestEntry: ArchiveEntry): Unit = {
-      currentBatchSize += largestEntry.sizeBytes
-      currentBatch += largestEntry
-    }
-
-    def cleanBatchContainerForNextRound(): Unit = {
-      currentBatch.clear()
-      currentBatchSize = 0
-    }
-
-    def putFileToNextBatch(curFile: ArchiveEntry, curBatchFileNum: Int): Unit = {
-      val remainSize = maxBatchBytes - currentBatchSize
-      val remainSlot = maxBatchSize - curBatchFileNum
-      if (remainSize > 0 && remainSlot > 0)
-        fillBatch(remainSize, remainSlot)
-      val filledCurrentBatch = currentBatch.result()
-      if (filledCurrentBatch.nonEmpty) batches += filledCurrentBatch
-      cleanBatchContainerForNextRound()
-      putFileToBatch(curFile) // put file in new created batch
-    }
-
-    // apply simplified bin-packing(NP complete) algorithm here, we don't need strictly use the minimum batches since
-    // it's may not be helpful to make NFS upload faster
-    filesWithSize.foreach { largestEntry =>
-      val isFirstEntry = filesWithSize.indexOf(largestEntry) == 0
-      val complete = usedSmallFiles.result().contains(largestEntry)
-
-      if (!complete) {
-        val currentBatchResult = currentBatch.result()
-        val noEnoughSpace =
-          largestEntry.sizeBytes + currentBatchSize >= maxBatchBytes || currentBatchResult.size >= maxBatchSize
-
-        if (isFirstEntry || !noEnoughSpace) putFileToBatch(largestEntry)
-        else putFileToNextBatch(largestEntry, currentBatchResult.size)
+      def putFileToBatch(largestEntry: ArchiveEntry): Unit = {
+        currentBatchSize += largestEntry.sizeBytes
+        currentBatch += largestEntry
       }
+
+      def cleanBatchContainerForNextRound(): Unit = {
+        currentBatch.clear()
+        currentBatchSize = 0
+      }
+
+      def putFileToNextBatch(curFile: ArchiveEntry, curBatchFileNum: Int): Unit = {
+        val remainSize = maxBatchBytes - currentBatchSize
+        val remainSlot = maxBatchSize - curBatchFileNum
+        if (remainSize > 0 && remainSlot > 0)
+          fillBatch(remainSize, remainSlot)
+        val filledCurrentBatch = currentBatch.result()
+        if (filledCurrentBatch.nonEmpty) batches += filledCurrentBatch
+        cleanBatchContainerForNextRound()
+        putFileToBatch(curFile) // put file in new created batch
+      }
+
+      // apply simplified bin-packing(NP complete) algorithm here, we don't need strictly use the minimum batches since
+      // it's may not be helpful to make NFS upload faster
+      filesWithSize.foreach { largestEntry =>
+        val isFirstEntry = filesWithSize.headOption.exists { _ == largestEntry }
+        val complete = usedSmallFiles(largestEntry)
+
+        if (!complete) {
+          val currentBatchResult = currentBatch.result()
+          val noEnoughSpace =
+            largestEntry.sizeBytes + currentBatchSize >= maxBatchBytes || currentBatchResult.size >= maxBatchSize
+
+          if (isFirstEntry || !noEnoughSpace) putFileToBatch(largestEntry)
+          else putFileToNextBatch(largestEntry, currentBatchResult.size)
+        }
+      }
+      batches += currentBatch.result() // add last batch into batches
+      batches.result()
     }
-    batches += currentBatch.result() // add last batch into batches
-    batches.result()
+    log.debug(s"Batched ${distinctFiles.size} files into ${batchedFiles.size} batches for upload in ${runtime / 1e6}ms")
+    batchedFiles
   }
 
   @async private def upload(force: Boolean): Unit = {
     val files: Seq[ArchiveEntry] = Tracker.pollForUpload(force)
     if (files.nonEmpty) {
       val batchedFiles = groupFilesToBatches(files)
+      // We can't use async here, the real bottleneck comes from the current total load on the NFS!
+      // We need to throttle the upload process to avoid overloading the NFS.
+      // Ideally, if we can read the current NFS status(NFS: I'm 30% free!) and adjust the setting dynamically,
+      // that will be the best solution.
       batchedFiles.aseq.foreach { batch => uploadBatch(batch, force) }
       // ensuring we process all the files when force = true
       if (force) readyToUpload(Seq.empty, force)

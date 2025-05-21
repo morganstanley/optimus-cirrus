@@ -12,7 +12,6 @@
 package optimus.graph.diagnostics.sampling
 import SamplingProfiler.SamplerTrait
 import optimus.breadcrumbs.ChainedID
-import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.graph.AsyncProfilerIntegration
@@ -24,10 +23,11 @@ import optimus.graph.diagnostics.ap.SampledTimers
 import optimus.graph.diagnostics.ap.StackAnalysis.StackData
 import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.ap.StackAnalysis.StacksAndTimers
+import optimus.graph.diagnostics.ap.StackType._
 import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
 import optimus.graph.diagnostics.sampling.SamplingProfiler.periodicSamplesSource
 import optimus.graph.diagnostics.sampling.SamplingProfiler.stackDataSource
-import optimus.logging.Pid
+
 import optimus.platform.util.Log
 import optimus.utils.FileUtils
 import optimus.utils.MiscUtils.Endoish._
@@ -36,7 +36,6 @@ import optimus.utils.OptimusStringUtils
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
-import scala.collection.immutable
 
 private[sampling] final case class StacksAndCounts(rawDump: String, preSplit: Iterable[TimedStack], dtStopped: Long)
 
@@ -65,6 +64,8 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   // This prevents possibly catastrophic simultaneous shutdown via SP and via
   // AP's VMDeath hook.
   AsyncProfilerIntegration.command(s"status,globals=1,loglevel=${apLogLevel}")
+
+  Option(System.getenv("MALLOC_CONF")).foreach(e => log.info(s"MALLOC_CONF=$e"))
 
   extraStackSamplers.foreach(_.start(sp))
 
@@ -219,7 +220,7 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   // memoframes - memoize frames with integer identifier
   lazy val apStartCmd: String = {
     val event = AsyncProfilerIntegration.containerSafeEvent(settings("event"))
-    s"start,event=$event,cstack=dwarf,etypeframes,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
+    s"start,event=$event,cstack=dwarf,etypeframes,persist,jemalloc,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
   }
 
 }
@@ -229,20 +230,20 @@ object FlameTreatment {
 
   def units(source: String): Units = {
     if (
-      source.startsWith("Alloc") ||
-      source.startsWith("Free") ||
-      source.startsWith("Live")
+      source.startsWith(Alloc) ||
+      source.startsWith(Free) ||
+      source.startsWith(Live)
     ) Bytes
-    else if (source.startsWith("CacheHit")) Count
+    else if (source.startsWith(CacheHit)) Count
     else Nanoseconds
   }
 
-  def sumOverTime(source: String): Boolean = !source.startsWith("Live")
+  def sumOverTime(source: String): Boolean = !source.startsWith(Live)
   def avgOverTime(source: String): Boolean = !sumOverTime(source)
 
   def smplKey(source: String): Key[Map[String, Long]] = units(source) match {
     case Bytes =>
-      if (source.startsWith("Live")) flameLive
+      if (source.startsWith(Live)) flameLive
       else flameAlloc
     case Count => flameCounts
     case _     => flameTimes

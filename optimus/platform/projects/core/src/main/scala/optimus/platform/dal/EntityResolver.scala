@@ -135,8 +135,9 @@ trait EntityResolver {
       eRef: EntityReference,
       temporality: TemporalContext): NodeKey[Option[PersistentEntity]]
 
-  def translateMarkers(markers: java.util.IdentityHashMap[optimus.platform.dal.Marker[_], Tweak]): collection.Seq[Tweak]
+  def translateMarkers(markers: java.util.IdentityHashMap[optimus.platform.dal.Marker[_], Tweak]): Seq[Tweak]
 
+  protected[optimus] /*[platform]*/ def serverTimeWithWitnessTimeUpdated(source: String): Map[Partition, Instant]
   protected[optimus] /*[platform]*/ def serverTime: Map[Partition, Instant]
 
   protected[optimus] /*[platform]*/ def init(config: optimus.config.RuntimeComponents): Unit = {}
@@ -157,15 +158,15 @@ trait EntityResolver {
   @scenarioIndependent
   private[optimus] /*[platform]*/ def enumerateQuery[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       temporality: TemporalContext): Iterable[E]
   private[optimus] /*[platform]*/ def enumerateQuery$queued[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       temporality: TemporalContext): NodeFuture[Iterable[E]]
   private[optimus] /*[platform]*/ def enumerateQuery$newNode[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       temporality: TemporalContext): NodeKey[Iterable[E]]
 
   @nodeSync
@@ -173,15 +174,15 @@ trait EntityResolver {
   // TODO (OPTIMUS-16774): move EntityReferenceHolder to core and fix the signature,and the callers
   private[optimus] /*[platform]*/ def enumerateReferenceQuery[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       loadContext: TemporalContext): Iterable[ReferenceHolder[E]]
   private[optimus] /*[platform]*/ def enumerateReferenceQuery$queued[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       loadContext: TemporalContext): NodeFuture[Iterable[ReferenceHolder[E]]]
   private[optimus] /*[platform]*/ def enumerateReferenceQuery$newNode[E <: Entity](
       query: ElementQuery,
-      classNames: collection.Seq[String],
+      classNames: Seq[String],
       loadContext: TemporalContext): NodeKey[Iterable[ReferenceHolder[E]]]
 
   protected[optimus] /*[platform]*/ def serverInfo: ServerInfo
@@ -201,10 +202,9 @@ private[optimus] trait TemporalContextEntityResolver {
 
   @nodeSync
   @scenarioIndependent
-  def getItemKeys(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType): collection.Seq[operation.ItemKey]
+  def getItemKeys(operation: TemporalSurfaceQuery)(sourceTemporality: operation.TemporalityType): Seq[operation.ItemKey]
   def getItemKeys$queued(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType): NodeFuture[collection.Seq[operation.ItemKey]]
+      sourceTemporality: operation.TemporalityType): NodeFuture[Seq[operation.ItemKey]]
 
   @nodeSync
   @scenarioIndependent
@@ -223,7 +223,6 @@ private[optimus] trait TemporalContextEntityResolver {
   def getSingleItemData$queued(operation: TemporalSurfaceQuery)(
       temporality: operation.TemporalityType,
       key: operation.ItemKey): NodeFuture[operation.ItemData]
-
 }
 
 trait ElementQuery {

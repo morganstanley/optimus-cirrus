@@ -62,7 +62,7 @@ import scala.collection.immutable.IndexedSeq
       scope.config,
       allRuntimeArtifacts,
       scope.upstream.runtimeDependencies,
-      scope.upstream.agentsForOurRuntimeArtifacts)
+      scope.upstream.agentsForOurRuntime)
     val f = fingerprint(manifest, scope)
     val p = pathing(manifest, f, scope)
     Vector(f, p)

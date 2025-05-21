@@ -41,12 +41,12 @@ import optimus.profiler.ui.common.JMenu2
 import optimus.profiler.ui.common.JMenuOps
 import optimus.profiler.ui.common.JPopupMenu2
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.ArraySeq
 
 trait DbgPrintSource {
   def printSource(): Unit
   def task: PNodeTask
-  final def printSourceWithPopUp(selections: ArrayBuffer[_], dataTable: NPSubTableData[_]): Unit = {
+  final def printSourceWithPopUp(selections: ArraySeq[_], dataTable: NPSubTableData[_]): Unit = {
     printSource()
     printSourceWithPopUpFromSelections(selections, dataTable)
   }

@@ -18,18 +18,22 @@ import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
 import optimus.buildtool.format.Success
 
-final case class DockerDefaults(registry: Option[String], baseImage: Option[String])
+final case class DockerDefaults(registry: Option[String], baseImage: Option[String], imageSysName: Option[String])
 
 object DockerDefaults {
 
-  val Empty = DockerDefaults(registry = None, baseImage = None)
+  val Empty: DockerDefaults = DockerDefaults(registry = None, baseImage = None, imageSysName = None)
 
   def load(origin: ObtFile, config: Config, key: String): Result[DockerDefaults] =
     if (config.hasPath(key)) {
       val updatedConfig = config.getConfig(key)
       Result
         .tryWith(origin, updatedConfig) {
-          Success(DockerDefaults(updatedConfig.optionalString("registry"), updatedConfig.optionalString("baseImage")))
+          Success(
+            DockerDefaults(
+              updatedConfig.optionalString("registry"),
+              updatedConfig.optionalString("baseImage"),
+              updatedConfig.optionalString("imageSysName")))
         }
         .withProblems(updatedConfig.checkExtraProperties(origin, Keys.dockerDefaults))
     } else Success(DockerDefaults.Empty)

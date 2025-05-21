@@ -103,16 +103,18 @@ sealed class AsyncPipeline[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def run[Result](sc: StageManagerCreator[A, Result]): Result = run$newNode(sc).get
-  def run$queued[Result](sc: StageManagerCreator[A, Result]): Node[Result] = run$newNode(sc).enqueue
+  def run$queued[Result](sc: StageManagerCreator[A, Result]): NodeFuture[Result] = run$newNode(sc).enqueue
   // noinspection ScalaUnusedSymbol
   def run$withNode[Result](sc: StageManagerCreator[A, Result]): Result = run$newNode(sc).get
-  def run$newNode[Result](sc: StageManagerCreator[A, Result]): Node[Result] = runNode(c, workMarker, maxConcurrency, sc)
+  def run$newNode[Result](sc: StageManagerCreator[A, Result]): Node[Result] =
+    runNode(EvaluationContext.scenarioStack, c, workMarker, maxConcurrency, sc)
 
 }
 
 object AsyncPipeline extends Log {
 
   def runNode[A, CC <: Iterable[A], Result](
+      runScenarioStack: ScenarioStack,
       c: CC,
       workMarker: ProgressMarker,
       maxConcurrency: Int,
@@ -233,12 +235,12 @@ object AsyncPipeline extends Log {
 
     // Accumulate B's into zero or more Z's, possibly holding B's until some threshold is met, or possibly
     // expanding B's into multiple Z's, or both...
-    protected def accumulate(b: collection.Seq[B], isLast: Boolean): collection.Seq[Z]
+    protected def accumulate(b: Seq[B], isLast: Boolean): Seq[Z]
 
     // Return elements to enqueue, embedding the next stage, which knows how to process them.  If isLast==true,
     // then we should release any state we've been accumulating.
-    final def elemsToEnqueue(b: collection.Seq[B], isLast: Boolean): collection.Seq[InputElem[Result]] = {
-      val zs: collection.Seq[Z] = accumulate(b, isLast)
+    final def elemsToEnqueue(b: Seq[B], isLast: Boolean): Seq[InputElem[Result]] = {
+      val zs: Seq[Z] = accumulate(b, isLast)
       val es = zs.map(ElemImpl(_, next))
       if (isLast) es :+ EndMarker(next) else es
 
@@ -258,7 +260,7 @@ object AsyncPipeline extends Log {
         running -= 1
         orderedResults.fold[Iterable[Elem[Result]]] {
           // Running unordered, so, while this is the last input element, there may be more map results
-          val es = stage.elemsToEnqueue(collection.Seq.empty, isLast = running == 0)
+          val es = stage.elemsToEnqueue(Seq.empty, isLast = running == 0)
           log.debug(s"$this accumulateAndEmit 2: ao=empty empty, $running -> $es")
           es
         } { placeholderQueue =>
@@ -272,7 +274,7 @@ object AsyncPipeline extends Log {
             es
           } else {
             // Some mapped results are still outstanding, so don't enqueue anything
-            val es = stage.elemsToEnqueue(collection.Seq.empty, isLast = false)
+            val es = stage.elemsToEnqueue(Seq.empty, isLast = false)
             log.debug(s"$this accumulateAndEmit 4: ao=empty $running -> $es")
             es
           }
@@ -294,7 +296,7 @@ object AsyncPipeline extends Log {
         running -= 1
         // Unordered - process this result and enqueue any emitted batches.  We know we're last
         // if processing has finished for the last element, and no more results are in flight
-        val es = stage.elemsToEnqueue(collection.Seq(b), seenLast && running == 0)
+        val es = stage.elemsToEnqueue(Seq(b), seenLast && running == 0)
         log.debug(s"$this accumulatAndEmit 6 unordered seenlast=$seenLast, running=$running -> $es")
         es
       }
@@ -315,7 +317,7 @@ object AsyncPipeline extends Log {
         while (hs.headOption.exists(_.result.isDefined)) {
           val b: B = hs.dequeue().result.get
           val isLast = seenLast && running == 0 && hs.isEmpty
-          es ++= stage.elemsToEnqueue(collection.Seq(b), isLast)
+          es ++= stage.elemsToEnqueue(Seq(b), isLast)
         }
         log.debug(s"$this accumulatAndEmit 8 ordered seenlast=$seenLast, running=$running -> $es")
         es
@@ -338,7 +340,22 @@ object AsyncPipeline extends Log {
       // Possibly throttle
       throttle match {
         case None    => intermediateNode
-        case Some(t) => t.apply$queued(asNode.apply0$withNode(intermediateNode))
+        case Some(t) =>
+          // throttle node runs in a constant scenario stack but we need to return a node attached to the current
+          // ScenarioStack so that plugin tags and SI params are correctly propagated to downstream tasks via .map
+          new CompletableNode[Intermediate[Result]] {
+            private var child: NodeFuture[Intermediate[Result]] = _
+            override def run(ec: OGSchedulerContext): Unit = {
+              child match {
+                case null =>
+                  child = t.apply$queued(asNode.apply0$withNode(intermediateNode))
+                  child.continueWith(this, ec)
+                case done: Node[Intermediate[Result]]=>
+                  completeFromNode(done, ec)
+              }
+
+            }
+          }
       }
     }
   }
@@ -394,28 +411,35 @@ object AsyncPipeline extends Log {
     override type Z = Result
     override def mapperNode(x: Result) = throw new NotImplementedError()
     override val next = this
-    override protected def accumulate(b: collection.Seq[Result], isLast: Boolean) = throw new NotImplementedError()
+    override protected def accumulate(b: Seq[Result], isLast: Boolean) = throw new NotImplementedError()
     override val throttle: Option[Throttle] = None
     override def mappedIntermediateLast(): Node[Intermediate[Result]] =
       new AlreadyCompletedNode[Intermediate[Result]](new Intermediate[Result] {
-        override def accumulateAndEmit: Iterable[Elem[Result]] = collection.Seq.empty
+        override def accumulateAndEmit: Iterable[Elem[Result]] = Seq.empty
       })
     override def mappedIntermediate(a: Result): Node[Intermediate[Result]] =
       new AlreadyCompletedNode[Intermediate[Result]](new Intermediate[Result] {
-        val accumulateAndEmit: Iterable[Elem[Result]] = collection.Seq(FinalElem(a))
+        val accumulateAndEmit: Iterable[Elem[Result]] = Seq(FinalElem(a))
       })
 
   }
 
-  // Wrap the node with one to which a ss may be safely attached.
-  private def switchState[A](ss: ScenarioState, node: Node[A]): Node[A] = new CompletableNode[A] {
+  /**
+   * Wraps `node` into a new completable node that doesn't have a scenario stack attached to it.
+   *
+   * Underlying `node` will run with tweaks from `tweaksFrom` and SI params from the current scenario
+   */
+  private def switchState[A](tweaksFrom: ScenarioState, node: Node[A]): Node[A] = new CompletableNode[A] {
+    private var child: Node[A] = _
     override def run(ec: OGSchedulerContext): Unit = {
-      val withSS = AdvancedUtils.givenFullySpecifiedScenario$newNode(ss, null)(node)
-      ec.enqueue(withSS)
-      withSS.continueWith(this, ec)
-    }
-    override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-      completeFromNode(child.asInstanceOf[Node[A]], eq)
+      child match {
+        case null =>
+          child = AdvancedUtils.givenFullySpecifiedScenario$newNode(tweaksFrom, null)(node)
+          ec.enqueue(child)
+          child.continueWith(this, ec)
+        case done =>
+          completeFromNode(done, ec)
+      }
     }
   }
 
@@ -441,7 +465,7 @@ object AsyncPipeline extends Log {
       override protected final val next = createNextStage()
       override protected final def mapperNode(a: A): Node[BB] = switchState(ss, mapper(a))
       protected def mapper(a: A): Node[B]
-      override protected def accumulate(b: collection.Seq[B], isLast: Boolean): collection.Seq[Z]
+      override protected def accumulate(b: Seq[B], isLast: Boolean): Seq[Z]
     }
     override final def feedsTo[Result](next: StageManagerCreator[Z, Result]): StageManagerCreator[A, Result] =
       new StageManagerCreator[A, Result] {
@@ -454,18 +478,18 @@ object AsyncPipeline extends Log {
   class Stages private[AsyncPipeline] (max: Int = -1, min: Int = -1, ordered: Boolean = false) {
     @nodeSyncLift
     def scan[A, BB, State, ZZ](@nodeLift f: A => BB)(zero: State)(
-        acc: (State, Option[BB]) => (State, collection.Seq[ZZ])): Stage[A, ZZ] =
+        acc: (State, Option[BB]) => (State, Seq[ZZ])): Stage[A, ZZ] =
       scan$withNode { toNodeFactory(f) }(zero)(acc)
     def scan$withNode[A, BB, State, ZZ](f: A => Node[BB])(zero: State)(
-        acc: (State, Option[BB]) => (State, collection.Seq[ZZ])): Stage[A, ZZ] =
+        acc: (State, Option[BB]) => (State, Seq[ZZ])): Stage[A, ZZ] =
       new StageImpl[A, BB, ZZ](max, min, ordered) {
         override def newStage[Result](next: StageManagerCreator[ZZ, Result]): StageManager[A, Result] =
           new StageBase[Result](next) {
             override val name = "scan"
             override protected def mapper(a: A): Node[B] = f(a)
             private var state: State = zero
-            override protected def accumulate(bs: collection.Seq[B], isLast: Boolean): collection.Seq[Z] = {
-              val emit: collection.Seq[ZZ] = bs.flatMap { b =>
+            override protected def accumulate(bs: Seq[B], isLast: Boolean): Seq[Z] = {
+              val emit: Seq[ZZ] = bs.flatMap { b =>
                 val (newState, zs) = acc(state, Some(b))
                 state = newState
                 zs
@@ -483,7 +507,7 @@ object AsyncPipeline extends Log {
           new StageBase[Result](next) {
             override val name = "map"
             override protected def mapper(a: A): Node[B] = f(a)
-            override protected def accumulate(b: collection.Seq[B], isLast: Boolean): collection.Seq[B] = b
+            override protected def accumulate(b: Seq[B], isLast: Boolean): Seq[B] = b
           }
       }
 
@@ -496,9 +520,7 @@ object AsyncPipeline extends Log {
           new StageBase[Result](next) {
             override val name = "flatMap"
             override protected def mapper(a: A): Node[GenTraversableOnce[B1]] = f(a)
-            override protected def accumulate(
-                b: collection.Seq[GenTraversableOnce[B1]],
-                isLast: Boolean): collection.Seq[B1] = b.flatten
+            override protected def accumulate(b: Seq[GenTraversableOnce[B1]], isLast: Boolean): Seq[B1] = b.flatten
           }
       }
     @nodeSyncLift
@@ -509,7 +531,7 @@ object AsyncPipeline extends Log {
           new StageBase[Result](next) {
             override val name = "filter"
             override protected def mapper(a: A): Node[(A, Boolean)] = f(a).map((a, _))
-            override protected def accumulate(b: collection.Seq[(A, Boolean)], isLast: Boolean): collection.Seq[A] =
+            override protected def accumulate(b: Seq[(A, Boolean)], isLast: Boolean): Seq[A] =
               b.collect { case (a, true) =>
                 a
               }
@@ -533,9 +555,9 @@ object AsyncPipeline extends Log {
     override val name = "Sink"
     override protected def mapperNode(a: A): Node[B] = new AlreadyCompletedNode[A](a)
     private val bld = cbf.newBuilder
-    override protected def accumulate(b: collection.Seq[A], isLast: Boolean): collection.Seq[CC[A]] = {
+    override protected def accumulate(b: Seq[A], isLast: Boolean): Seq[CC[A]] = {
       bld ++= b
-      if (isLast) collection.Seq(bld.result()) else collection.Seq.empty
+      if (isLast) Seq(bld.result()) else Seq.empty
     }
     override protected val next: StageManager[CC[A], CC[A]] =
       new NilStageManager[CC[A]](lazyEmptyResult = cbf.newBuilder.result())

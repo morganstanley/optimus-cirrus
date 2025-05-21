@@ -17,6 +17,7 @@ import org.apache.curator.framework.recipes.locks.InterProcessMutex
 import org.apache.zookeeper.CreateMode
 import org.apache.zookeeper.data.Stat
 
+import scala.collection.immutable.ArraySeq
 import scala.jdk.CollectionConverters._
 
 final case class ZNode(path: String) {
@@ -87,7 +88,7 @@ class CuratorZkOperations(val zk: CuratorFramework, val batch: Int = 500, protec
 
   override def delete(node: ZNode): Unit = zk.delete().forPath(node.path)
 
-  override def getChildren(node: ZNode): Seq[String] = zk.getChildren.forPath(node.path).asScala
+  override def getChildren(node: ZNode): Seq[String] = zk.getChildren.forPath(node.path).asScala.to(ArraySeq)
   override def getChildrenData(node: ZNode, children: List[String]): List[(String, Array[Byte])] = {
     log.info(
       "Getting children data for node: {} using Zk: {}",

@@ -70,8 +70,6 @@ final case class DependencyDefinition(
 
   def noVersion: Boolean = version.isEmpty
 
-  def gradleKey = s"$group:$name:${variant.fold("default")(_ => version)}"
-
   def key: String = path.mkString(".")
 
   override def id: DependencyId =
@@ -101,7 +99,6 @@ final case class DependencyDefinition(
 
   def isScalaSdk: Boolean = id == DependencyDefinition.ScalaId
 
-  def isSameName(to: DependencyDefinition): Boolean = this.group == to.group && this.name == to.name
   @transient
   private[this] val fingerprintSuffix =
     s"-dependency-definition:$group:$name:$variant:$version:configuration=$configuration:resolvers=${resolvers
@@ -113,7 +110,7 @@ final case class DependencyDefinition(
     fingerprintCache.computeIfAbsent(tpe, (tpe: String) => s"$tpe$fingerprintSuffix")
 }
 
-final case class DependencyGroup(name: String, dependencies: Seq[DependencyDefinition])
+final case class DependencyGroup(name: String, dependencies: Seq[DependencyDefinition], line: Int)
 
 final case class NativeDependencyId(name: String) extends Id {
   override def contains(scopeId: ScopeId): Boolean = false
@@ -151,7 +148,7 @@ object DependencyDefinitions {
   val empty: DependencyDefinitions = DependencyDefinitions(Nil, Nil, Nil, Nil)
 }
 
-final case class ExternalDependency(definition: DependencyDefinition, equivalents: Seq[DependencyDefinition])
+final case class ExternalDependency(afs: DependencyDefinition, maven: Seq[DependencyDefinition])
 
 object ExternalDependencies {
   def empty: ExternalDependencies =
@@ -164,15 +161,21 @@ final case class ExternalDependencies(afsDependencies: AfsDependencies, mavenDep
     (afsDependencies.allAfsDeps ++ mavenDependencies.allMavenDeps).toIndexedSeq
   // be used for afs to maven mapping
   def afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
-    multiSourceDependencies.map(d => d.definition -> d.equivalents).toMap
+    multiSourceDependencies.map(d => d.afs -> d.maven).toMap
 
-  lazy val mavenToAfsMap: Map[DependencyDefinition, DependencyDefinition] = {
+  lazy val mavenToAfsMap: Map[String, DependencyDefinition] = {
     for {
       dep <- multiSourceDependencies
-      afsDep = dep.definition
-      mavenDep <- dep.equivalents
-    } yield mavenDep -> afsDep
+      afsDep = dep.afs
+      mavenDep <- dep.maven
+    } yield mavenDep.key -> afsDep
   }.toMap
+}
+
+trait ExternalDependenciesSource {
+  def externalDependencies(ms: ModuleSet): ExternalDependencies
+  def coreExternalDependencies: ExternalDependencies
+  def allExternalDependencies: ExternalDependencies
 }
 
 object AfsDependencies {
@@ -187,7 +190,7 @@ object AfsDependencies {
  *   both afs{} maven{} be defined
  */
 final case class AfsDependencies(unmappedAfsDeps: Seq[DependencyDefinition], afsMappedDeps: Seq[ExternalDependency]) {
-  val allAfsDeps: Seq[DependencyDefinition] = unmappedAfsDeps ++ afsMappedDeps.map(_.definition)
+  val allAfsDeps: Seq[DependencyDefinition] = unmappedAfsDeps ++ afsMappedDeps.map(_.afs)
 }
 
 object MavenDependencies {
@@ -197,19 +200,20 @@ object MavenDependencies {
 /**
  * loaded maven dependencies in *dependencies.obt files
  * @param unmappedMavenDeps
- *   loaded from maven-dependencies.obt and should only be used in 'mavenLibs = []'
- * @param mixModeMavenDeps
- *   only maven{} be defined, open for all modules
- * @param noVersionMavenDeps
- *   transitive maven deps not allowed be directly used in codetree, without version num: maven.foo.bar{}
+ *   Maven dependencies with unknown AFS coordinates. Loaded from maven-dependencies.obt and
+ *   should only be used in 'mavenLibs = []'.
+ * @param mixedModeMavenDeps
+ *   Mapped maven dependencies or those with 'noAfs = true'. Loaded from jvm-dependencies.obt or dependency/variant
+ *   sets.
+ * @param boms
+ *   BOMs for dependency versions. Loaded from dependency/variant sets.
  */
 final case class MavenDependencies(
     unmappedMavenDeps: Seq[DependencyDefinition],
-    mixModeMavenDeps: Seq[DependencyDefinition],
-    noVersionMavenDeps: Seq[DependencyDefinition]) {
-  val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixModeMavenDeps
-  // be used by transitive mapping validation
-  val allMappedMavenDeps: Seq[DependencyDefinition] = noVersionMavenDeps ++ mixModeMavenDeps
+    mixedModeMavenDeps: Seq[DependencyDefinition],
+    boms: Seq[DependencyDefinition]
+) {
+  val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixedModeMavenDeps
 }
 
 final case class DependencyCoursierKey(org: String, name: String, configuration: String, version: String) {

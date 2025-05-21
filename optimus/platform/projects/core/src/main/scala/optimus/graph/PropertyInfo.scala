@@ -55,7 +55,7 @@ private object PropertyInfoUtils {
  * Root class for Property info (metadata for entity properties, independent of instance).
  * Only for @node def/val in @entity class. Do not new PropertyInfo() this probably will not work
  */
-class PropertyInfo[R](_name: String, flags: Long = 0L, val annotations: collection.Seq[StaticAnnotation] = Nil)
+class PropertyInfo[R](_name: String, flags: Long = 0L, val annotations: Seq[StaticAnnotation] = Nil)
     extends NodeTaskInfo(_name, flags, false /* Delayed registration */ )
     with Serializable {
   /*
@@ -171,20 +171,14 @@ class PropertyInfo[R](_name: String, flags: Long = 0L, val annotations: collecti
  * Property info for vals, vars, and def0s (functions with no arguments).
  * TODO (OPTIMUS-0000): Consider using non-abstract PropertyInfo class for abstract members.
  */
-abstract class DefPropertyInfo[E, WhenL, SetL, R](
-    name: String,
-    flags: Long,
-    annotations: collection.Seq[StaticAnnotation] = Nil)
+abstract class DefPropertyInfo[E, WhenL, SetL, R](name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends PropertyInfo[R](name, flags, annotations)
     with ReflectionUtils {
 
   final protected def entityClassTag: ClassTag[E] = ClassTag(entityInfo.runtimeClass.asInstanceOf[Class[E]])
 }
 
-abstract class DefPropertyInfo0[E, WhenL, SetL, R](
-    _name: String,
-    flags: Long,
-    annotations: collection.Seq[StaticAnnotation] = Nil)
+abstract class DefPropertyInfo0[E, WhenL, SetL, R](_name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends DefPropertyInfo[E, WhenL, SetL, R](_name, flags, annotations)
     with ReflectionUtils {
   private lazy val newNodeMethod = lookupMethod(entityInfo.runtimeClass, s"$name$$newNode")
@@ -196,7 +190,7 @@ abstract class DefPropertyInfo0[E, WhenL, SetL, R](
 class ReallyNontweakablePropertyInfo[E <: Storable, R](
     name: String,
     flags: Long,
-    annotations: collection.Seq[StaticAnnotation] = Nil)
+    annotations: Seq[StaticAnnotation] = Nil)
     extends DefPropertyInfo0[E, E => Boolean, E => R, R](name, flags, annotations)
     with ReflectionUtils {
 
@@ -215,14 +209,14 @@ class ReallyNontweakablePropertyInfo[E <: Storable, R](
   }
 }
 
-class GenPropertyInfo(name: String, flags: Long, annotations: collection.Seq[StaticAnnotation] = Nil)
+class GenPropertyInfo(name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends PropertyInfo[Any](name, flags, annotations)
 
 // Property info base classes. These are subclassed directly if property-level tweaks are not allowed
 // (e.g. if a tweak handler is defined)
 // These properties may still be tweakable on an instance level.  PropertyInfo.isTweakable will tell you this.
 // TwkPropertyInfoN (below) extends these and adds Property-level tweak support.
-class PropertyInfo0[E <: Storable, R](name: String, flags: Long, annotations: collection.Seq[StaticAnnotation] = Nil)
+class PropertyInfo0[E <: Storable, R](name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends DefPropertyInfo0[E, E => Boolean, E => R, R](name, flags, annotations)
 class PropertyInfo1[E, P1, R](name: String, flags: Long)
     extends DefPropertyInfo[E, (E, P1) => Boolean, (E, P1) => R, R](name, flags)
@@ -362,7 +356,7 @@ class PropertyInfo21[
     ](name, flags)
 
 // Property-level tweakable propertyInfo classes.
-class TwkPropertyInfo0[E <: Storable, R](name: String, flags: Long, annotations: collection.Seq[StaticAnnotation] = Nil)
+class TwkPropertyInfo0[E <: Storable, R](name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends PropertyInfo0[E, R](name, flags, annotations)
     with PropertyTarget[E, E => Boolean, E => R, R]
 class TwkPropertyInfo1[E, P1, R](name: String, flags: Long)

@@ -15,25 +15,10 @@ import java.time.Instant
 
 import msjava.base.util.uuid.MSUuid
 import optimus.exceptions.RTExceptionTrait
-import optimus.graph.NodeTaskInfo
 import optimus.platform.{HasTTContext, TemporalContext, TimeInterval, ValidTimeInterval}
 import optimus.platform.dsi.bitemporal
-import optimus.platform.dsi.bitemporal.{DSIQueryTemporality, MessageContainsDALEnv, Query}
+import optimus.platform.dsi.bitemporal.{DSIQueryTemporality, Query}
 import optimus.platform.storable._
-
-/**
- * Base class for all DAL exceptions
- */
-abstract class DALException(message: String, cause: Throwable)
-    extends RuntimeException(message, cause)
-    with MessageContainsDALEnv {
-  def this(message: String) = this(message, null)
-}
-abstract class DALRTException(message: String, cause: Throwable)
-    extends DALException(message, cause)
-    with RTExceptionTrait {
-  def this(message: String) = this(message, null)
-}
 
 /**
  * Base class for DAL exceptions specific to an entity instance.
@@ -56,15 +41,6 @@ private object BoundDALException {
 class AmbiguousKeyException(entity: Entity)
     extends DALException("Entity " + entity + " has multiple keys that resolve to different references")
 
-/**
- * A link resolution failure.
- */
-class LinkResolutionException(val ref: EntityReference, val temporalContext: TemporalContext, msg: String)
-    extends DALRTException(msg) {
-  def this(r: EntityReference, temporalContext: TemporalContext) =
-    this(r, temporalContext, s"Invalid entity reference: $r@(temporalContext=$temporalContext)")
-}
-
 class EventLinkResolutionException(val ref: BusinessEventReference, val temporalContext: TemporalContext, msg: String)
     extends DALRTException(msg) {
   def this(r: BusinessEventReference, temporalContext: TemporalContext) =
@@ -72,19 +48,6 @@ class EventLinkResolutionException(val ref: BusinessEventReference, val temporal
 }
 
 class MissingEventEffectLinkException(val ref: VersionedReference, msg: String) extends DALRTException(msg)
-
-// NB: This ctor MUST NOT call sourceEntity.toString, as the Entity toString method will attempt to resolve any links in the key/index
-// it decides to print, which may be the exact property that we are reporting the exception for!
-class SourcedLinkResolutionException(
-    r: EntityReference,
-    temporalContext: TemporalContext,
-    val sourceEntity: Entity,
-    val propertyInfo: NodeTaskInfo)
-    extends LinkResolutionException(
-      r,
-      temporalContext,
-      s"Invalid entity reference from (${sourceEntity.getClass}@${sourceEntity.dal$entityRef}).${propertyInfo.name}: $r@(temporalContext=$temporalContext)"
-    )
 
 /**
  * Base class for exceptions caused by key or unique index already being used by another persisted entry.

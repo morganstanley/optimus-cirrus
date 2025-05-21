@@ -28,7 +28,7 @@ import optimus.graph.tracking.DisposalSupport.KeyAndTracked
  */
 class DisposalInformation(
     private var disposedTracker: DependencyTracker,
-    private var tracked: Map[DependencyTracker, KeyAndTracked]) {
+    private var tracked: Map[DependencyTracker, Map[TrackingScope[_], KeyAndTracked]]) {
 
   def topDisposedScenario: DependencyTracker = {
     checkNotDisposed()
@@ -40,15 +40,18 @@ class DisposalInformation(
     tracked.keySet
   }
 
-  private def forTracker(tracker: DependencyTracker) = tracked.getOrElse(tracker, Nil)
-
   def trackedInScenario[S >: Null <: TrackingMemo](
       trackingScenario: DependencyTracker,
       scope: TrackingScope[S]): Iterator[(NodeKey[_], TrackedNode[_], S)] = {
     checkNotDisposed()
-    forTracker(trackingScenario).iterator.flatMap { case (key, uTrack) =>
-      uTrack.getMemoOption(scope).map((key, uTrack, _))
-    }
+    tracked
+      .getOrElse(trackingScenario, Map.empty)
+      .getOrElse(scope, Nil)
+      .iterator
+      .map { case (key, uTrack) =>
+        (key, uTrack, uTrack.getMemo.asInstanceOf[S])
+      }
+      .filter(_._3 ne null)
   }
 
   /**

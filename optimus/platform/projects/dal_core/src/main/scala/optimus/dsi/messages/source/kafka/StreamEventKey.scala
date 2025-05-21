@@ -13,6 +13,7 @@ package optimus.dsi.messages.source.kafka
 import optimus.dsi.messages.source.kafka.StreamEventKey.recordKeyProperties
 import optimus.platform.dal.messages.MessagesTransactionPayload
 import optimus.platform.dsi.bitemporal.WriteBusinessEvent
+import optimus.platform.storable.Entity
 import optimus.platform.storable.SerializedEntity
 import optimus.utils.CollectionUtils._
 
@@ -22,12 +23,17 @@ private[optimus] final case class StreamEventKey private[optimus] (sortedPropert
   private[messages] def matches(put: WriteBusinessEvent.Put, className: String): Boolean = {
     val ent = put.ent
     if (ent.className != className) false
-    else recordKeyProperties(ent) sameElements sortedPropertyValues
+    else {
+      val entityKeyProperties = recordKeyProperties(ent)
+      val isMatch = entityKeyProperties sameElements sortedPropertyValues
+      isMatch
+    }
   }
 
   def findEntityInTransaction(className: String, transaction: MessagesTransactionPayload): SerializedEntity = {
     val be = transaction.message.putEvent.bes.singleOrThrow(_ => "Expected single business event!")
-    val pe = be.puts.filter(matches(_, className)).singleOrThrow(_ => "Expected single key to match")
+    val pes = be.puts.filter(matches(_, className))
+    val pe = pes.singleOrThrow(_ => "Expected single key to match")
     pe.ent
   }
 
@@ -47,5 +53,4 @@ private[optimus] object StreamEventKey {
   }
 
   private[kafka] def from(entity: SerializedEntity): StreamEventKey = StreamEventKey(recordKeyProperties(entity))
-  def from(key: Any): StreamEventKey = StreamEventKey(Seq(key))
 }

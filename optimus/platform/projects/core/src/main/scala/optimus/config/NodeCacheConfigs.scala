@@ -49,6 +49,7 @@ import scala.util.matching.Regex
 import scala.jdk.CollectionConverters._
 import Constants._
 import optimus.platform.inputs.registry.ProcessGraphInputs
+import optimus.platform.storable.EmbeddableCtrNodeSupport
 
 import java.util.regex.Pattern
 
@@ -124,7 +125,8 @@ private[optimus] object CacheConfig {
     CacheConfig(
       name,
       sharable = true,
-      getDefaultSize(name)
+      getDefaultSize(name),
+      evictOnLowMemory = true
     )
 
   private def getDefaultSize(name: String): Int =
@@ -136,7 +138,8 @@ private[optimus] object CacheConfig {
     CacheConfig(
       name = cache.getName,
       sharable = cache.sharable,
-      cacheSizeLimit = cache.getMaxSize
+      cacheSizeLimit = cache.getMaxSize,
+      evictOnLowMemory = cache.isEvictOnLowMemory
     )
 
   private val log = getLogger(this.getClass)
@@ -145,7 +148,8 @@ private[optimus] object CacheConfig {
 private[optimus] final case class CacheConfig(
     name: String,
     sharable: Boolean,
-    cacheSizeLimit: Int
+    cacheSizeLimit: Int,
+    evictOnLowMemory: Boolean = true
 ) extends BasicJsonElement {
 
   def toJsonString: String = {
@@ -160,6 +164,7 @@ private[optimus] final case class CacheConfig(
 
     addToken("name", name)
     addToken("cacheSize", cacheSizeLimit)
+    if (!evictOnLowMemory) addToken("evictOnLowMemory", evictOnLowMemory)
 
     parts.result().mkString("{ ", ", ", " }")
   }
@@ -172,7 +177,7 @@ private[optimus] final case class CacheConfig(
         .getSharedCache(name)
         .getOrElse({
           CacheConfig.log.info(s"Created instance of shared cache $name")
-          new UNodeCache(name, cacheSizeLimit)
+          new UNodeCache(name, cacheSizeLimit, evictOnLowMemory)
         })
 
       if (!(c.getMaxSize == cacheSizeLimit)) {
@@ -188,23 +193,25 @@ private[optimus] final case class CacheConfig(
             Properties.stackTrace -> Thread.currentThread().getStackTrace.map(_.getMethodName)
           )
         )
-        new UNodeCache(name, cacheSizeLimit)
+        new UNodeCache(name, cacheSizeLimit, evictOnLowMemory)
       } else c
     } else {
       // per property - we dont want to remember this - otherwise we will share the per property caches
       // and a config with a per-property cache is not a shared cache
       CacheConfig.log.info(s"Created instance of per property cache $name")
-      new PerPropertyCache(name, cacheSizeLimit)
+      new PerPropertyCache(name, cacheSizeLimit, evictOnLowMemory)
     }
   }
 
-  override def toString = s"CacheConfig(name = $name, sharable = $sharable, cacheSizeLimit = $cacheSizeLimit"
+  override def toString =
+    s"CacheConfig(name = $name, sharable = $sharable, cacheSizeLimit = $cacheSizeLimit, evictOnLowMemory = $evictOnLowMemory)"
 
   def toDebugString: String = {
     val properties =
       s"name = $name" ::
         s"sharable = $sharable" ::
-        s"cacheSizeLimit = $cacheSizeLimit" :: Nil
+        s"cacheSizeLimit = $cacheSizeLimit" ::
+        s"evictOnLowMemory = $evictOnLowMemory" :: Nil
     s"CacheConfig(${properties.mkString(", ")})"
   }
 }
@@ -216,19 +223,10 @@ private[optimus] sealed trait CachePolicyConfig {
   final def disableCache: Boolean = cachePolicy eq NCPolicy.DontCache
 }
 
-// TODO (OPTIMUS-47353): make cache non-optional, revisit when/why policy is allowed to be null
-final case class ConstructorConfig(cachePolicy: NCPolicy, cache: Option[CacheConfig]) extends CachePolicyConfig {
-  if (!valid)
-    throw new ConstructorConfigParsingException
-
-  private def valid: Boolean = {
-    (cachePolicy eq null) || /* fine, can set any custom cache */
-    (cachePolicy eq NCPolicy.DontCache) && cache.isEmpty /* allow disableCache, but in that case don't set custom cache */
-  }
-}
-
-object ConstructorConfig {
-  def getCacheOption(cc: Option[ConstructorConfig]): Option[CacheConfig] = cc.flatMap(_.cache)
+final case class ConstructorConfig(cachePolicy: NCPolicy) extends CachePolicyConfig {
+  val cache: Option[CacheConfig] = None // we don't support custom cache for constructor nodes
+  if (!valid) throw new ConstructorConfigParsingException
+  private def valid: Boolean = cachePolicy eq NCPolicy.DontCache
 }
 
 // e.g. { "cache": ${Caches.a2}, "gcnative": true, "localSlot": 5,  "cachePolicy": "BasicPolicy", "syncId": 6}
@@ -249,7 +247,7 @@ private[optimus] final case class PropertyConfig(
   def merge(that: PropertyConfig): PropertyConfig = {
     new PropertyConfig(
       name = that.name,
-      cache = PropertyConfig.mergeCache(cache, that.cache, that.disableCache),
+      cache = PropertyConfig.mergeScopedCache(this, that),
       cachePolicy = PropertyConfig.mergeScopedCachePolicy(this, that),
       gcnative = that.gcnative,
       syncId = if (syncId == that.syncId) that.syncId else None,
@@ -292,6 +290,18 @@ private[optimus] object PropertyConfig {
       scopePath = scopePath
     )
 
+  def mergeScopedCache(p1: PropertyConfig, p2: PropertyConfig): Option[CacheConfig] = {
+    val c1 = p1.cache
+    val c2 = p2.cache
+
+    (p1.scopePath, p2.scopePath) match {
+      case (None, None)       => mergeCache(c1, c2, p2.disableCache)
+      case (Some(_), None)    => c2
+      case (None, Some(_))    => c1
+      case (Some(_), Some(_)) => None // we don't support custom caches in scoped optconfs yet
+    }
+  }
+
   def mergeCache(
       cache1: Option[CacheConfig],
       cache2: Option[CacheConfig],
@@ -318,12 +328,32 @@ private[optimus] object PropertyConfig {
   }
 
   private def mergeScopedCachePolicy(propConf: CachePolicyConfig, otherPropConf: CachePolicyConfig): NCPolicy = {
-    if (propConf.scopePath == otherPropConf.scopePath)
-      mergeCachePolicy(propConf, otherPropConf)
-    else {
-      val targetPath = propConf.scopePath.getOrElse("")
-      val otherTargetPath = otherPropConf.scopePath.getOrElse("")
-      propConf.cachePolicy.combineWith(targetPath, otherPropConf.cachePolicy, otherTargetPath)
+    (propConf.scopePath, otherPropConf.scopePath) match {
+      // scoped optconf + global
+      case (Some(path1), None) =>
+        val currentScopedPolicy = Option(propConf.cachePolicy).getOrElse(NCPolicy.Basic)
+        val policyToMergeWith = otherPropConf.cachePolicy // would become global / default policy
+        if (policyToMergeWith == null) {
+          // TODO (OPTIMUS-74618): scoped optconfs should properly support custom caches
+          NCPolicy.composite(null, currentScopedPolicy, path1)
+        } else policyToMergeWith.combineWith("", currentScopedPolicy, path1)
+      // global + scoped optconf
+      case (None, Some(path2)) =>
+        val currentPolicy = propConf.cachePolicy // global optconf
+        val scopedPolicyToMergeWith = Option(otherPropConf.cachePolicy).getOrElse(NCPolicy.Basic) // scoped optconf
+        if (currentPolicy == null) NCPolicy.composite(null, scopedPolicyToMergeWith, path2)
+        else currentPolicy.combineWith("", scopedPolicyToMergeWith, path2)
+      case (Some(path1), Some(path2)) =>
+        if (path1 == path2) mergeCachePolicy(propConf, otherPropConf)
+        else {
+          val targetPath = propConf.scopePath.getOrElse("")
+          val otherTargetPath = otherPropConf.scopePath.getOrElse("")
+          val currentPolicy = Option(propConf.cachePolicy).getOrElse(NCPolicy.Basic)
+          val policyToMergeWith = Option(otherPropConf.cachePolicy).getOrElse(NCPolicy.Basic)
+          if (currentPolicy == null) NCPolicy.composite(null, policyToMergeWith, otherTargetPath)
+          else currentPolicy.combineWith(targetPath, policyToMergeWith, otherTargetPath)
+        }
+      case (None, None) => mergeCachePolicy(propConf, otherPropConf)
     }
   }
 
@@ -451,6 +481,8 @@ private[optimus] object NodeCacheConfigs {
     // Entities that are not yet constructed will pick up the new config via EntityInfo.propertyMetadata)
     for ((oi, _) <- OptimusInfo.registry)
       oi.applyConfig()
+
+    EmbeddableCtrNodeSupport.reapplyConfig()
   }
 
   /**
@@ -622,12 +654,8 @@ private[optimus] object NodeCacheConfigs {
       // case1: class exists in both optconfs
       if (mergedConfig.contains(className)) {
         val constructorConfigOption = mergedConfig.get(className)
-        val cacheConfigOption = ConstructorConfig.getCacheOption(constructorConfigOption)
-        val mergedCache = PropertyConfig.mergeCache(config.cache, cacheConfigOption, disabledCache = false)
-        if (mergedCache.isDefined) {
-          val mergedPolicy = PropertyConfig.mergeCachePolicy(config, constructorConfigOption.get)
-          mergedConfig(className) = ConstructorConfig(mergedPolicy, mergedCache)
-        } else mergedConfig(className) = ConstructorConfig(config.cachePolicy, mergedCache)
+        val mergedPolicy = PropertyConfig.mergeCachePolicy(config, constructorConfigOption.get)
+        mergedConfig(className) = ConstructorConfig(config.cachePolicy)
       }
       // case2: constructor config doesn't exist in optconf2 so we take all configuration from optconf1
       else {
@@ -659,7 +687,7 @@ private[optimus] object NodeCacheConfigs {
    */
   @deprecating("Use GraphConfiguration.configureCachePolicies instead")
   private[optimus] def applyConfig(
-      optconfProviders: util.List[OptconfProvider],
+      optconfProviders: util.List[_ <: OptconfProvider],
       startupProvider: OptconfProvider): Unit = {
     val parsingStart = System.currentTimeMillis()
     val confProviders = optconfProviders.asScala
@@ -670,6 +698,12 @@ private[optimus] object NodeCacheConfigs {
     log.info("Parsing optconf file(s) took " + (parsingEnd - parsingStart) + "ms")
 
     log.info(s"Applying ${optconfProviders.size} optconf(s)")
+    log.info(s"Checking if any optconfs are scoped...")
+    if (confProviders.exists(_.scopePath.nonEmpty)) {
+      confProviders
+        .find(_.scopePath.nonEmpty)
+        .foreach(provider => log.info(s"Found scoped optconf: [${provider.scopePath}]${provider.optconfPath}"))
+    } else log.info(s"No scoped optconfs found.")
 
     // reapply
     initGlobals()
@@ -711,10 +745,10 @@ private[optimus] object NodeCacheConfigs {
     reapplyToConstructedEntities()
   }
 
-  private def optconfPaths(optconfProviders: Seq[OptconfProvider]): String =
+  private def optconfPaths(optconfProviders: Iterable[OptconfProvider]): String =
     optconfProviders.map(_.optconfPath).filter(_ ne null).mkString(",")
 
-  private[config] def mergeOptconfs(optconfProviders: Seq[OptconfProvider]): NodeCacheConfigs = {
+  private[config] def mergeOptconfs(optconfProviders: Iterable[OptconfProvider]): NodeCacheConfigs = {
     optconfProviders.filter(_.nonEmpty).foldLeft(NodeCacheConfigs.empty) { (acc, p) =>
       val second = NodeCacheConfigsParser.parse(p)
       if (Settings.ignorePgoGraphConfig && second.isPgoGen) {
@@ -796,8 +830,6 @@ private[optimus] object NodeCacheConfigs {
 
     UNodeCache.global = ensureCache(UNodeCache.global, UNodeCache.globalCacheName, Settings.cacheSize)
     UNodeCache.siGlobal = ensureCache(UNodeCache.siGlobal, UNodeCache.globalSICacheName, Settings.cacheSISize)
-    UNodeCache.constructorNodeGlobal =
-      ensureCache(UNodeCache.constructorNodeGlobal, UNodeCache.globalCtorCacheName, Settings.cacheCtorSize)
   }
   def getCacheConfigs: Map[String, CacheConfig] = settingsConfig.cacheConfigs
 
@@ -829,9 +861,9 @@ private[optimus] object NodeCacheConfigs {
   def getOptconfProviders: Seq[OptconfProvider] = {
     // technically this will be empty even if they pass in configOverride="" but we disallow that when we parse what
     // they pass in and tell them to use ignoreConfig now
-    val configOverride = ProcessGraphInputs.ConfigOverride.currentValueOrThrow().asScala
+    val configOverride = ProcessGraphInputs.ConfigOverride.currentValueOrThrow().asScala.toList
     if (configOverride.nonEmpty) configOverride
-    else ProcessGraphInputs.ConfigGraph.currentValueOrThrow().asScala
+    else ProcessGraphInputs.ConfigGraph.currentValueOrThrow().asScala.toList
   }
   def stripCfgMargin(cfg: String): String = {
     cfg.replace("\n", "").replace(" ", "")
@@ -1147,7 +1179,7 @@ private[optimus] object NodeCacheConfigsParser {
       val constructorCache: Option[CacheConfig] =
         fields.get("cache").map(_.convertTo[ConfigOrReference]).map(reference2CacheConfig)
       val cachePolicy = fields.get("cachePolicy").map(_.convertTo[String])
-      ConstructorConfig(if (cachePolicy.isEmpty) null else NCPolicy.forName(cachePolicy.get), constructorCache)
+      ConstructorConfig(if (cachePolicy.isEmpty) null else NCPolicy.forName(cachePolicy.get))
     }
 
     val constructorConfigs: Map[String, ConstructorConfig] =

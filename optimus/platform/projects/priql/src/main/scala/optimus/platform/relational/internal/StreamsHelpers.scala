@@ -11,11 +11,9 @@
  */
 package optimus.platform.relational.internal
 
-import optimus.platform.relational.dal.streams.EventProvider
 import optimus.platform.relational.tree.ConstValueElement
 import optimus.platform.relational.tree.MethodArg
 import optimus.platform.relational.tree.MethodArgConstants._
-import optimus.platform.relational.tree.MethodElement
 import optimus.platform.relational.tree.QueryMethod
 import optimus.platform.relational.tree.QueryMethod.INNER_JOIN
 import optimus.platform.relational.tree.QueryMethod.LEFT_OUTER_JOIN
@@ -23,14 +21,6 @@ import optimus.platform.relational.tree.RelationElement
 import optimus.utils.CollectionUtils._
 
 private[platform] object StreamsHelpers {
-  def findFirstEventSrc(element: RelationElement): Option[RelationElement] = element match {
-    case e: EventProvider => Some(e)
-    case m: MethodElement =>
-      val arg = sourceArgRequiredFor(m.methodCode)
-      val src = maybeRelationElement(m.methodArgs, arg)
-      src.flatMap(findFirstEventSrc)
-    case _ => None
-  }
 
   def sourceArgRequiredFor(code: QueryMethod): String =
     code match {
@@ -38,7 +28,7 @@ private[platform] object StreamsHelpers {
       case _                            => source
     }
 
-  private def maybeRelationElement(arguments: List[MethodArg[RelationElement]], name: String): Option[RelationElement] =
+  def maybeRelationElement(arguments: List[MethodArg[RelationElement]], name: String): Option[RelationElement] =
     arguments.collectFirst { case ma: MethodArg[_] if ma.name == name => ma.arg }
 
   def findAllRelationElements(arguments: List[MethodArg[RelationElement]], name: String): List[RelationElement] =

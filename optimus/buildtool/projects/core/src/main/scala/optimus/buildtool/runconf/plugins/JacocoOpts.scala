@@ -19,9 +19,3 @@ final case class JacocoOpts(
     includes: Seq[String] = Seq.empty,
     excludes: Seq[String] = Seq.empty
 )
-
-// Parsed Jacoco opts for agent (no excludes as we compute in-scope class files via OBT)
-final case class ParsedJacocoOpts(
-    minCoveragePct: Option[Int] = None,
-    includes: Seq[String] = Seq.empty
-)

@@ -258,7 +258,7 @@ object SerializedEntitySerializer
       else None
     val cmid = if (proto.hasCmRef) Some(fromProto(proto.getCmRef)) else None
     val slot = if (proto.hasSlot) proto.getSlot else 0
-    val types = proto.getTypesList.asScala.map(_.intern())
+    val types = proto.getTypesList.asScalaUnsafeImmutable.map(_.intern())
     SerializedEntity(
       ref,
       cmid,

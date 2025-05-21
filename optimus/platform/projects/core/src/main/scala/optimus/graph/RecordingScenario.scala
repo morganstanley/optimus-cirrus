@@ -358,6 +358,7 @@ private[optimus] class WhenXSDiffer extends XSDiffer(null, null, null, stopEarly
 }
 
 abstract class ForwardingTweakableListener(val originalTl: TweakableListener) extends TweakableListener {
+
   /** Listener that should be used for scenario stack sensitive batchers */
   override def underlyingListener: TweakableListener = originalTl
 
@@ -417,6 +418,7 @@ class RecordingTweakableListener(
 
   override def onOwnerCompleted(task: NodeTask): Unit = {
     task.replace(task.scenarioStack.withRecorded(recordedTweakables))
+    scenarioStack = null // Aggressively null out even though there could be lingering execution going on...
     _waiterTls = Set.empty
   }
 
@@ -476,7 +478,9 @@ class RecordingTweakableListener(
 
   /** Save the relevant info */
   override def onTweakUsedBy(ttn: TweakTreeNode, node_not_tobe_used: NodeTask): Unit = {
-    if (ttn.trackingDepth <= scenarioStack.trackingDepth) {
+    val ss = scenarioStack
+    if (ss eq null) return // XSOwner already completed and there is no point of collecting more info
+    if (ttn.trackingDepth <= ss.trackingDepth) {
       val tweaked = _tweaked
       if (tweaked == null) return // XSOwner already completed
       val prev = tweaked.putIfAbsent(ttn.key, ttn)
@@ -490,7 +494,7 @@ class RecordingTweakableListener(
       // although the tweak was found in a child of this ScenarioStack (and therefore doesn't affect us)
       // it may have nested dependencies which resolved in our parent(s) and we can't just drop that information
       // so we replay it in to our parent (which may record or ignore it depending on whether it cares or not)
-      scenarioStack.combineTrackData(ttn.nested, node_not_tobe_used)
+      ss.combineTrackData(ttn.nested, node_not_tobe_used)
     }
   }
 }

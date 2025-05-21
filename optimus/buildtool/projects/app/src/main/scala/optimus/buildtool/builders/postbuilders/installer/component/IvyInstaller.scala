@@ -20,6 +20,7 @@ import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.ExternalDependencies
+import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeConfigurationSource
@@ -40,7 +41,7 @@ class IvyInstaller(
     cache: BundleFingerprintsCache,
     pathBuilder: InstallPathBuilder,
     installVersion: String,
-    externalDependencies: ExternalDependencies
+    externalDependencies: ExternalDependenciesSource
 ) extends ComponentInstaller {
 
   override val descriptor = "ivy files"
@@ -99,6 +100,7 @@ class IvyInstaller(
       scopeConfig: ScopeConfiguration,
       includeExternalDeps: Boolean
   ): Seq[String] = {
+    val externalDeps = externalDependencies.externalDependencies(scopeConfig.moduleSet)
     IvyInstaller
       .ivyDescriptor(
         scopeId,
@@ -107,18 +109,21 @@ class IvyInstaller(
         includeArtifact,
         scopeConfig.flags.installSources,
         scopeConfig.internalCompileDependencies,
-        if (includeExternalDeps) scopeConfig.externalCompileDependencies.map(toAfs(scopeId, _)) else Nil,
+        if (includeExternalDeps) scopeConfig.externalCompileDependencies.map(toAfs(scopeId, _, externalDeps)) else Nil,
         scopeConfig.internalRuntimeDependencies,
-        if (includeExternalDeps) scopeConfig.externalRuntimeDependencies.map(toAfs(scopeId, _)) else Nil
+        if (includeExternalDeps) scopeConfig.externalRuntimeDependencies.map(toAfs(scopeId, _, externalDeps)) else Nil
       )
   }
 
-  private def toAfs(scopeId: ScopeId, d: DependencyDefinition): DependencyDefinition = {
+  private def toAfs(
+      scopeId: ScopeId,
+      d: DependencyDefinition,
+      externalDeps: ExternalDependencies
+  ): DependencyDefinition = {
     val afsDep =
       if (d.isMaven)
-        externalDependencies.mavenToAfsMap.getOrElse(
-          d,
-          throw new IllegalArgumentException(s"No AFS equivalent found for ${d.key} [$scopeId]"))
+        externalDeps.mavenToAfsMap
+          .getOrElse(d.key, throw new IllegalArgumentException(s"No AFS equivalent found for ${d.key} [$scopeId]"))
       else d
 
     if (afsDep.noVersion)

@@ -338,7 +338,7 @@ object DALProvider {
 
   def readEntityReferenceHolder[T <: Entity: TypeInfo]: FieldReader => EntityReferenceHolder[T] = r => {
     val eRef = r.readValue(0)(DALProvider.EntityRefType)
-    val txTime = r.readOptionValue(1)(TypeInfo.ANY).collect { case buf: Seq[_] =>
+    val txTime = r.readOptionValue(1)(TypeInfo.ANY).collect { case buf: collection.Seq[_] =>
       val seconds = buf(0).asInstanceOf[Number].longValue
       val nanos = buf(1).asInstanceOf[Int]
       Instant.ofEpochSecond(seconds, nanos)
@@ -349,7 +349,7 @@ object DALProvider {
 
   def readEntityReferenceHolderWithVref[T <: Entity: TypeInfo]: FieldReader => EntityReferenceHolder[T] = r => {
     val eRef = r.readValue(0)(DALProvider.EntityRefType)
-    val txTime = r.readOptionValue(1)(TypeInfo.ANY).collect { case buf: Seq[_] =>
+    val txTime = r.readOptionValue(1)(TypeInfo.ANY).collect { case buf: collection.Seq[_] =>
       val seconds = buf(0).asInstanceOf[Number].longValue
       val nanos = buf(1).asInstanceOf[Int]
       Instant.ofEpochSecond(seconds, nanos)

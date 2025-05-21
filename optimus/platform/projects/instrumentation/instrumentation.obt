@@ -27,7 +27,7 @@ main {
       optimus.async-profiler,
       ossjava.commons-io,
       ossjava.httpcomponents-client.mime,
-      ossjava.metrics-core.variant.kafka
+      ossjava.metrics-core
     ]
   }
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.mbeans

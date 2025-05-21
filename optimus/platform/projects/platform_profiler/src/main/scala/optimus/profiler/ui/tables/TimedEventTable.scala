@@ -40,6 +40,7 @@ import optimus.profiler.ui.TimelineEvent
 import optimus.profiler.ui.browser.GraphBrowser
 import optimus.profiler.ui.common.JPopupMenu2
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 
 class TimedEventView(val event: EventDescription, override val startTimeNanos: Long, override val durationNanos: Long)
@@ -95,7 +96,7 @@ abstract class TimedEventTable[T <: TimedEvent, V <: TimedEventView](tl: NodeTim
     },
     new TableColumnTimeRange[V]("Time Frame", 100) {
       override def valueOf(row: V): TimeSubRange = {
-        val firstAndLastTimes = rows.map { e => (e.startTimeNanos, e.endTimeNanos) }
+        val firstAndLastTimes = rows.iterator.map(e => (e.startTimeNanos, e.endTimeNanos)).to(ArraySeq)
         val fullRange = recomputeMinMaxTime(firstAndLastTimes)
         TimeSubRange(row.startTimeNanos, row.endTimeNanos, fullRange)
       }

@@ -49,7 +49,7 @@ private[compile] object Typer {
       case _: java.lang.Double  => T.Double
       case s: java.lang.String  => T.StringLiteral(s)
       case list: java.util.List[_] =>
-        val types = list.asScala.map(resolve).distinct
+        val types = list.asScalaUnsafeImmutable.map(resolve).distinct
         T.SizedArray(commonType(types), list.size)
       case map: java.util.Map[_, _] =>
         val types = map.values.asScala.map(resolve).toSeq.distinct

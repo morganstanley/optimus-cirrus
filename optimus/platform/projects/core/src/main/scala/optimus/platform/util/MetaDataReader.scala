@@ -93,7 +93,7 @@ trait ResourceFinder {
   def getResources(name: String): Seq[URL]
 }
 class ClasspathResourceFinder(classLoader: ClassLoader) extends ResourceFinder {
-  override def getResources(name: String): collection.Seq[URL] = classLoader.getResources(name).asScala.to(Seq)
+  override def getResources(name: String): Seq[URL] = classLoader.getResources(name).asScala.to(Seq)
 }
 object CurrentClasspathResourceFinder extends ClasspathResourceFinder(ClassLoaderHook.currentClassLoader)
 

@@ -47,6 +47,8 @@ final class DuplexRemoteBalancingDSIProxy(
     new ReadRemoteDSIProxy(brokerContext, brokerProviderResolver, partitionMap, false, secureTransport)
   override def sessionData: SessionData = readLeader.sessionCtx.sessionData
 
+  private[optimus] def getDSIClient: DSIClient = readLeader
+
   override def close(shutdown: Boolean): Unit = {
     writeLeader.close(shutdown)
     readLeader.close(shutdown)

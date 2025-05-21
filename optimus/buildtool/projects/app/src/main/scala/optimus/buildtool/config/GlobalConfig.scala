@@ -42,7 +42,8 @@ final case class GlobalConfig(
     genericRunnerAppDirOverride: Option[Directory],
     pythonEnabled: Boolean,
     extractVenvs: Boolean,
-    installWheels: Boolean
+    installWheels: Boolean,
+    buildAfsMapping: Boolean
 ) {
 
   val versionConfig: VersionConfiguration =
@@ -77,6 +78,7 @@ final case class GlobalConfig(
     val pythonEnabled = stratoConfig.config.booleanOrDefault("internal.obt.python-enabled", default = false)
     val installWheels = stratoConfig.config.booleanOrDefault("internal.obt.python-install-wheels", default = false)
     val extractVenvs = stratoConfig.config.booleanOrDefault("internal.obt.python-extract-venvs", default = false)
+    val buildAfsMapping = stratoConfig.config.booleanOrDefault("internal.obt.python.build-afs-mapping", default = false)
 
     def obtTestplansConfigBoolean(key: String) = stratoConfig.config.getBoolean(s"obt.testplans.$key")
     def obtTestplansConfigString(key: String, default: String) =
@@ -111,7 +113,8 @@ final case class GlobalConfig(
       defaultSrcFilesToUpload = stratoConfig.config.stringListOrEmpty("obt.defaultSrcFilesToUpload").map(_.r),
       filesToExcludeFromUpload = stratoConfig.config.stringListOrEmpty("obt.defaultFilesToExcludeFromUpload").map(_.r),
       genericRunnerAppDirOverride =
-        stratoConfig.config.stringOrDefault("internal.obt.genericRunnerAppDir", "").asDirectory
+        stratoConfig.config.stringOrDefault("internal.obt.genericRunnerAppDir", "").asDirectory,
+      buildAfsMapping = buildAfsMapping
     )
   }
 

@@ -11,20 +11,30 @@
  */
 package optimus.platform;
 
+import java.lang.invoke.VarHandle;
 import java.util.Objects;
 
 import optimus.graph.AlreadyCompletedNode;
 import optimus.graph.AlreadyCompletedPropertyNode;
 import optimus.graph.CorePluginSupport$;
-import optimus.graph.InitedPropertyNodeSync;
 import optimus.graph.Node;
+import optimus.graph.NodeFuture;
 import optimus.graph.NodeTrace;
 import optimus.graph.OptimusCancellationException;
+import optimus.graph.PropertyInfo;
 import optimus.graph.PropertyNode;
 import optimus.graph.loom.*;
+import optimus.platform.pickling.AlreadyUnpickledPropertyNode;
+import optimus.platform.pickling.ContainsUnresolvedReference;
+import optimus.platform.pickling.LazyPickledReference;
+import optimus.platform.pickling.MaybePickledReference;
 import optimus.platform.storable.Entity;
+import optimus.platform.storable.EntityImpl;
+import optimus.platform.storable.EntityReference;
+import optimus.platform.storable.ModuleEntityToken;
+import optimus.platform.storable.NonDALEntityFlavor;
 import optimus.platform.storable.Storable;
-import optimus.platform.temporalSurface.TemporalSurface;
+import optimus.platform.pickling.UnresolvedItemWrapper;
 import scala.Function0;
 import scala.Function1;
 import scala.Function2;
@@ -144,18 +154,99 @@ public class PluginHelpers {
     return p1.getClass() == p2.getClass();
   }
 
-  public static Object safeResult(Node<?> node) {
-    if (node instanceof AlreadyCompletedPropertyNode) {
-      return node.result();
-    } else if (node instanceof InitedPropertyNodeSync<?> syncNode) {
-      TemporalContext tc = syncNode.entity().entityFlavorInternal().dal$temporalContext();
-      if (tc != null && ((TemporalSurface) tc).canTick()) {
-        throw new IllegalArgumentException("cannot call safeResult on a tickable entity");
-      }
-      return syncNode.refreshedValue();
+  public static Object safeResult(Entity e, VarHandle vh) {
+    // safeResult should only be getting called from plugin-generated
+    // argsHash and argsEquals methods, which in turn should only
+    // be getting called for non-DALEntityFlavor entities. For DAL
+    // entities, the equal/hashcode is based on their DAL identity, not their
+    // args.
+    assert (e.entityFlavorInternal() instanceof NonDALEntityFlavor);
+    // the value is always stable for heap entities so we can just
+    // get here rather than getVolatile.
+    return vh.get(e);
+  }
+
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
+  public static <T> T resolveRef(Entity e, VarHandle vh, PropertyInfo<?> propInfo) {
+    var v = vh.getVolatile(e);
+    if (!(v instanceof ContainsUnresolvedReference)) {
+      // A direct entity reference that's already resolved.
+      if (!propInfo.isDirectlyTweakable()) return (T) v;
+      else return (T) new AlreadyUnpickledPropertyNode<>(v, e, propInfo).lookupAndGet();
     } else {
-      throw new IllegalArgumentException("invalid node type : " + node.getClass() + " : " + node);
+      return (T) resolveRefNewNode(e, vh, propInfo).lookupAndGet();
     }
+  }
+
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
+  public static <T> NodeFuture<T> resolveRefQueued(
+      Entity e, VarHandle vh, PropertyInfo<?> propInfo) {
+    var v = vh.getVolatile(e);
+    if (propInfo.isDirectlyTweakable())
+      return (NodeFuture<T>) resolveRefNewNode(e, vh, propInfo).lookupAndEnqueue();
+    else if (v instanceof EntityImpl ent) return (NodeFuture<T>) ent;
+    else if (!(v instanceof ContainsUnresolvedReference))
+      return (NodeFuture<T>) new AlreadyCompletedNode<>(v);
+    else return (NodeFuture<T>) resolveRefNewNode(e, vh, propInfo).lookupAndEnqueue();
+  }
+
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
+  public static <T> PropertyNode<T> resolveRefNewNode(
+      Entity e, VarHandle vh, PropertyInfo<?> propInfo) {
+    Object v;
+    // We need to make sure that in all circumstances, the PropertyNode types that we
+    // return from this function are always extending MaybePickledReference<T>. There currently
+    // is code (e.g. optimus.graph.PluginSupport.getEntityReference) which type-matches on this
+    // for specific logic. We let the compiler help us by declaring our val as
+    // MaybePickledReference<T> but cast it to PropertyNode<T> at the end.
+    MaybePickledReference<?> res;
+    while (true) {
+      v = vh.getVolatile(e);
+      if (!(v instanceof ContainsUnresolvedReference)) {
+        // A structure that contains entity references that is
+        // already resolved
+        res = new AlreadyUnpickledPropertyNode<>((T) v, e, propInfo);
+        break;
+      } else if (v instanceof LazyPickledReference<?> lpr) {
+        // LPR in flight
+        res = lpr;
+        break;
+      } else if (v instanceof ModuleEntityToken) {
+        // This is a simple case, the resolution is not async so just
+        // resolve and set it to res, and let the loop wrap it in
+        // an ACN in the next iteration
+        var module = ((ModuleEntityToken) v).resolve();
+        if (vh.compareAndSet(e, v, module)) {
+          res = new AlreadyUnpickledPropertyNode<T>((T) module, e, propInfo);
+          break;
+        }
+      } else if (v instanceof UnresolvedItemWrapper<?> wrapper) {
+        // A type that contains an unresolved reference that's been wrapped. We have to wrap
+        // types that don't extend ContainsUnresolvedReference in a wrapper so that we know
+        // they are unresolved and need resolving.
+        // we'll create the LPR, and not terminate the loop so we go through the loop again and go
+        // into the LPR case.
+        var lpr =
+            new LazyPickledReference<>(wrapper.unresolved(), propInfo.unpickler(), e, propInfo, vh);
+        if (vh.compareAndSet(e, v, lpr)) {
+          res = lpr;
+          break;
+        }
+      } else {
+        // A type that contains an unresolved reference that is not wrapped because we are able
+        // to extend ContainsUnresolvedReference directly on the type that has the pickled
+        // representation (e.g. EntityReference or SlottedBufferAs*)
+        var lpr = new LazyPickledReference<>(v, propInfo.unpickler(), e, propInfo, vh);
+        if (vh.compareAndSet(e, v, lpr)) {
+          res = lpr;
+          break;
+        }
+      }
+    }
+    return (PropertyNode<T>) (Object) res; // Intellij inspection does not like the cast.
   }
 
   // called from entityplugin generated argsHash methods for inner entities
@@ -170,7 +261,7 @@ public class PluginHelpers {
   public static boolean outerEquals(Entity a, Entity b) {
     Object outerA = a.$info().outerOrNull(a);
     Object outerB = b.$info().outerOrNull(b);
-    return (outerA == null) ? outerB == null : outerA.equals(outerB);
+    return Objects.equals(outerA, outerB);
   }
 
   /**
@@ -209,14 +300,14 @@ public class PluginHelpers {
   public static <V, R> Function1<V, Node<R>> toNodeFactory(Function1<V, R> f) {
     if (f instanceof LNodeFunction1<?, ?>)
       return new AsNodeFactory1<V, R>((LNodeFunction1<V, R>) f);
-    else return new AsNodeFactoryPlain1<V, R>(f);
+    return new AsNodeFactoryPlain1<V, R>(f);
   }
 
   // Used in $queued functions with @nodeLift params
   public static <V, R> Function1<V, Node<R>> toNodeFQ(Function1<V, Node<R>> f) {
     if (f instanceof LNodeFunction1<?, ?>)
       return new AsNodeFactory1<V, R>((LNodeFunction1<V, R>) f);
-    else return f;
+    return f;
   }
 
   public static <V1, V2, R> Function2<V1, V2, Node<R>> toNodeFactory(Function2<V1, V2, R> f) {
@@ -227,7 +318,11 @@ public class PluginHelpers {
   public static <V1, V2, R> Function2<V1, V2, Node<R>> toNodeFQ(Function2<V1, V2, Node<R>> f) {
     if (f instanceof LNodeFunction2<?, ?, ?>)
       return new AsNodeFactory2<>((LNodeFunction2<V1, V2, R>) f);
-    else return f;
+    return f;
+  }
+
+  public static <R> NodeFunction0<R> toNodeF(Function0<R> f) {
+    return (NodeFunction0<R>) f;
   }
 
   // marker to enable debugging mode for loom

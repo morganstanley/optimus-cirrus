@@ -251,7 +251,7 @@ abstract class Formatter {
     }
   }
 
-  trait StaticHandler extends StringHandler {
+  trait StaticHandler extends StringOptionOptionHandler {
     this: Tiers =>
     // Tabulate Rows where we statically know the type of Row, and can convert it into columns
     implicit def staticTabulator[Row: TypeInfo]: Tabulator[Iterable[Row]] = new Tabulator[Iterable[Row]] {
@@ -287,7 +287,7 @@ abstract class Formatter {
     }
   }
 
-  trait StringHandler {
+  trait StringOptionOptionHandler {
     this: Tiers =>
     // Tabulate rows where we know nothing about the row type, so just call toString on each one.
     implicit def toStringTabulator[Row]: Tabulator[Iterable[Row]] =

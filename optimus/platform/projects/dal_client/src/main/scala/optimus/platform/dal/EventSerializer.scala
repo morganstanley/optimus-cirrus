@@ -11,7 +11,6 @@
  */
 package optimus.platform.dal
 
-import java.time.Instant
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.entity.EntityInfoRegistry
@@ -22,13 +21,13 @@ import optimus.platform.internal.IgnoreSyncStacksPlugin
 import optimus.platform.internal.TemporalSource
 import optimus.platform.pickling.AbstractPickledOutputStream
 import optimus.platform.pickling.PickledMapWrapper
-import optimus.platform.pickling.PickledOutputStream
 import optimus.platform.pickling.PropertyMapOutputStream
+import optimus.platform.storable._
 import optimus.platform.temporalSurface._
 import optimus.platform.temporalSurface.advanced.TemporalContextUtils
-import optimus.platform.storable._
 import optimus.platform.versioning.TransformerRegistry
 
+import java.time.Instant
 import scala.collection.concurrent
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -190,8 +189,53 @@ private object SerializedWithEref {
 }
 
 private[optimus] object ContainedEventSerializer extends BusinessEventSerializer {
-  import SerializedContainedEvent._
   import DALImpl._
+  import SerializedContainedEvent._
+
+  /**
+   * Very similar to ContainedEntityDeserializer, but can be simplified because all values in the ents map are
+   * UniqueHeapEntity by construction. This means that pattern matches for AppliedHeapEntity, UniqueHeapEntity
+   * and StoredEntity can be dropped, but overall recursion to find nested entities is the same. Also, the actual
+   * deserialization of the SerializedEntity to Entity (by ContainedEntitySerializer.deserialize) is skipped, since
+   * we only need to deal with SerializedEntity form here. The restoreLinkageProperties call also remains here.
+   */
+  @entity private[dal] class ContainedSerializedEntityDeserializer(ents: Map[EntityReference, SerializedEntity]) {
+
+    private def getContained(eref: EntityReference): SerializedEntity =
+      ents.getOrElse(eref, throw new IllegalArgumentException(s"Couldn't find $eref in EntRefs(${ents.size}): $ents"))
+
+    // TODO (OPTIMUS-71331): handle stored entities referenced by eref (once streams supports that)
+    private def deserRefProperty(prop: Any, results: mutable.ArrayBuffer[EntityReference]): Unit = prop match {
+      case r: TemporaryReference =>
+        val se = getContained(r)
+        deserContainedSe(se, results)
+      case r: FinalTypedReference =>
+        val se = getContained(r)
+        deserContainedSe(se, results)
+      case seq: collection.Seq[_] => seq.foreach(deserRefProperty(_, results))
+      case set: Set[_]            => set.foreach(deserRefProperty(_, results))
+      case m: Map[_, _] => m.foreach { case (k, v) => deserRefProperty(k, results) -> deserRefProperty(v, results) }
+      case _            =>
+    }
+
+    // not a node, there's a mutable array in the args
+    private def deserContainedSe(se: SerializedEntity, results: mutable.ArrayBuffer[EntityReference]): Unit = {
+      val restoredSe = ContainedEntitySerializer.restoreLinkageProperties(se)
+      val props = restoredSe.properties.map { case (k: String, propVal) =>
+        k -> deserRefProperty(propVal, results)
+      }
+      results += restoredSe.copySerialized(properties = props).entityRef
+    }
+
+    // Based on deserEnts in ContainedEntityDeserializer (only handles unique heap entities, until OPTIMUS-71331)
+    @node def flattenedNestedErefs: Map[SerializedEntity, Set[EntityReference]] = {
+      ents.values.map { se =>
+        val results = mutable.ArrayBuffer[EntityReference]()
+        deserContainedSe(se, results)
+        se -> results.toSet
+      }
+    }.toMap
+  }
 
   @entity private[optimus] class ContainedEntityDeserializer(ents: Map[EntityReference, ContainedEntity]) {
 
@@ -217,10 +261,10 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
             // TODO (OPTIMUS-46195): Make them lazily load with LazyPickledReferences
             loadEntityWithGivenContext(r, DALImpl.TemporalContext(vt, tt))
         }
-      case seq: Seq[_]  => seq.aseq.map(deserRefProperty)
-      case set: Set[_]  => set.aseq.map(deserRefProperty)
-      case m: Map[_, _] => m.aseq.map { case (k, v) => deserRefProperty(k) -> deserRefProperty(v) }
-      case o            => o
+      case seq: collection.Seq[_] => seq.aseq.map(deserRefProperty)
+      case set: Set[_]            => set.aseq.map(deserRefProperty)
+      case m: Map[_, _]           => m.aseq.map { case (k, v) => deserRefProperty(k) -> deserRefProperty(v) }
+      case o                      => o
     }
 
     // This is @node to avoid duplicate deserialization for the same entity.
@@ -394,11 +438,11 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
       prop: Any,
       erefMap: Map[EntityReference, Entity]
   ): Any = prop match {
-    case r: EntityReference => erefMap(r)
-    case seq: Seq[_]        => seq.aseq.map(replaceRefs(_, erefMap))
-    case set: Set[_]        => set.aseq.map(replaceRefs(_, erefMap))
-    case m: Map[_, _]       => m.aseq.map { case (k, v) => replaceRefs(k, erefMap) -> replaceRefs(v, erefMap) }
-    case o                  => o
+    case r: EntityReference     => erefMap(r)
+    case seq: collection.Seq[_] => seq.aseq.map(replaceRefs(_, erefMap))
+    case set: Set[_]            => set.aseq.map(replaceRefs(_, erefMap))
+    case m: Map[_, _]           => m.aseq.map { case (k, v) => replaceRefs(k, erefMap) -> replaceRefs(v, erefMap) }
+    case o                      => o
   }
 
   // Gives back Business Event and Map of temporary Entities with erefs to persist later

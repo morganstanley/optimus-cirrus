@@ -19,6 +19,7 @@ import optimus.graph.diagnostics.gridprofiler.GridProfiler.writeAppletNameCsv
 import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils._
 import optimus.graph.diagnostics.gridprofiler.Level
 import optimus.graph.diagnostics.rtverifier.RTVerifierReporter
+import optimus.utils.MacroUtils.SourceLocation
 
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -37,7 +38,7 @@ private[optimus] object ReportOnShutdown {
   def register(suppliedDir: String): Unit = synchronized {
     if (!registered) {
       registered = true
-      sys.addShutdownHook(Report.writeReportsAndCrumbs(suppliedDir))
+      sys.addShutdownHook(Report.writeReportsAndCrumbs(suppliedDir, "ReportOnShutdown:hook"))
     }
   }
 
@@ -51,7 +52,10 @@ private[optimus] object ReportOnShutdown {
 
 private[optimus] object Report {
 
-  private[diagnostics] def writeReportsAndCrumbs(suppliedDir: String): Unit = {
+  // filterAndSendHotspotCrumbs -> writeHotspots -> sendHotspotsCrumbs
+  private[diagnostics] def writeReportsAndCrumbs(suppliedDir: String)(implicit source: SourceLocation): Unit =
+    writeReportsAndCrumbs(suppliedDir, source.toString)
+  private[diagnostics] def writeReportsAndCrumbs(suppliedDir: String, source: String): Unit = {
     val fileStamp = reportUniqueName
     val csvDir = reportCSVFolder(suppliedDir)
 
@@ -61,16 +65,19 @@ private[optimus] object Report {
     csvDir match {
       case Some(dir) =>
         Files.createDirectories(dir)
-        writeCSVFilesAndCrumbs(dir, fileStamp, defaultCSVResultsExtractor)
+        writeCSVFilesAndCrumbs(dir, fileStamp, defaultCSVResultsExtractor, source)
         writeOGTrace(dir, fileStamp)
         writeDiagnostics(dir, fileStamp)
       case None =>
-        filterAndSendHotspotsCrumbs()
+        filterAndSendHotspotsCrumbs(source)
     }
     writeHtmlReport(csvDir, fileStamp)
   }
 
-  def writeCSVFilesAndCrumbs(dir: Path, prefix: String, csvExtractor: CSVResultsExtractor): Unit = {
+  // Report.writeReportsAndCrumbs -> *
+  // [sumo] ProfilerUtils.profileAndDump -> ProfilerResult.writeCSV -> *
+  // hotspotsContent -> writeHotspots -> sendHotspotCrumbs
+  def writeCSVFilesAndCrumbs(dir: Path, prefix: String, csvExtractor: CSVResultsExtractor, source: String): Unit = {
     def write(suffix: String, data: Option[String]): Unit = data.foreach {
       writeToFile(dir.resolve(s"$prefix.$suffix"), _)
     }
@@ -88,7 +95,7 @@ private[optimus] object Report {
     write("profiler_stallTimes.csv", csvExtractor.stallTimesContent)
     write("profiler_environ.csv", csvExtractor.environMetricsContent)
     write("profiler_threads.csv", csvExtractor.threadStatsContent)
-    write(s"$hotspotsFileName.csv", hotspotsContent)
+    write(s"$hotspotsFileName.csv", hotspotsContent(source))
     write("explain_pgo_decision.csv", pgoDecisionContent)
     write("crumbstats.json", crumbStats)
   }

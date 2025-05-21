@@ -343,7 +343,7 @@ class OptimusTaskCls private[optimus /*platform*/ ] (
 
 object OptimusTaskCls {
   private def rolesetsToScala(rolesets: java.util.List[java.util.Set[String]]): RolesetMode =
-    RolesetMode.fromSeqSetString(rolesets.asScala.map(_.asScala.toSet))
+    RolesetMode.fromSeqSetString(rolesets.asScalaUnsafeImmutable.map(_.asScala.toSet))
 }
 
 object OptimusTaskLog

@@ -19,7 +19,7 @@ import optimus.buildtool.artifacts._
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postbuilders.installer.component._
 import optimus.buildtool.builders.postinstallers.PostInstaller
-import optimus.buildtool.config.ExternalDependencies
+import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ObtConfig
@@ -59,6 +59,7 @@ class Installer(
     private[installer] val installDir: Directory,
     private[installer] val depCopyRoot: Directory,
     private[installer] val sourceDir: WorkspaceSourceRoot,
+    private[installer] val buildDir: Directory,
     protected val versionConfig: VersionConfiguration,
     private[installer] val testplanConfig: TestplanConfiguration,
     genericRunnerConfiguration: GenericRunnerConfiguration,
@@ -74,7 +75,7 @@ class Installer(
     useMavenLibs: Boolean = false,
     protected val bundleClassJars: Boolean = false,
     pythonConfiguration: PythonInstallerConfiguration,
-    externalDependencies: ExternalDependencies
+    externalDependencies: ExternalDependenciesSource
 ) extends BaseInstaller
     with PostBuilder
     with Log {
@@ -89,7 +90,7 @@ class Installer(
     if (installTestplans) {
       val workspaceStructure = scopeConfigSource match {
         case obtConfig: ObtConfig => obtConfig.workspaceStructure
-        case _                    => WorkspaceStructure.Empty
+        case _                    => WorkspaceStructure.empty
       }
       Some(
         new TestplanInstaller(
@@ -146,7 +147,7 @@ class Installer(
         new MavenInstaller(this),
         new ElectronInstaller(this, pathBuilder),
         new PythonInstaller(pathBuilder, bundleFingerprintsCache, pythonConfiguration)
-      ) ++ ivyInstaller ++ testplanInstaller
+      ) ++ ivyInstaller
     }
   }
 

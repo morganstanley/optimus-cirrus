@@ -521,7 +521,7 @@ class AsyncMessagesCallbackInvoker(
     ) {
       lastBatchBuildStartTime = System.currentTimeMillis()
       val size = Math.min(commitIds.size, batchsize.get())
-      val ids = commitIds.take(size)
+      val ids = commitIds.take(size).toList
       commitIds.remove(0, size)
       Some(ids)
     } else None

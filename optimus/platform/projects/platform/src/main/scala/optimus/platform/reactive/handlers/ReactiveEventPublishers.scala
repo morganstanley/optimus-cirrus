@@ -21,6 +21,13 @@ object GlobalStatusSource extends ReactiveEventPublisher[GlobalStatusEvent] with
   def stopImpl: Unit = ()
 }
 
+object GlobalPubSubStatusSource
+    extends ReactiveEventPublisher[GlobalStatusEvent]
+    with WithPublicPublish[GlobalStatusEvent] {
+  def startImpl: Unit = ()
+  def stopImpl: Unit = ()
+}
+
 class StatusEventSource extends ReactiveEventPublisher[StateChangeEvent] with WithPublicPublish[StateChangeEvent] {
   def startImpl: Unit = ()
   def stopImpl: Unit = ()

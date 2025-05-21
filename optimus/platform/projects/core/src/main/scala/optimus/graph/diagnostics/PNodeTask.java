@@ -18,7 +18,9 @@ import optimus.core.EdgeIDList;
 import optimus.core.EdgeList;
 import optimus.graph.AlreadyCompletedNode;
 import optimus.graph.NodeTask;
+import optimus.graph.NodeTaskInfo;
 import optimus.graph.NodeTrace;
+import optimus.graph.OGSchedulerContext;
 import optimus.graph.PThreadContext;
 import optimus.platform.ScenarioStack;
 import optimus.platform.storable.Entity;
@@ -29,7 +31,13 @@ import optimus.platform.storable.Entity;
  */
 public abstract class PNodeTask {
   static final NodeTask fakeTask = new AlreadyCompletedNode<>(Integer.MIN_VALUE);
-  public static final PNodeTaskInfo fakeInfo = new PNodeTaskInfo(Integer.MIN_VALUE, "", "fakeInfo");
+
+  public static final String fakeInfoName = "fakeInfo";
+  public static final PNodeTaskInfo fakeInfo =
+      new PNodeTaskInfo(Integer.MIN_VALUE, "", fakeInfoName);
+
+  public static final PNodeTaskInfo startNodeInfo =
+      new PNodeTaskInfo(OGSchedulerContext.NODE_ID_ROOT, "", NodeTaskInfo.Names.startName);
   public static final PNodeTaskInfo syncEntryGroupInfo =
       new PNodeTaskInfo(Integer.MIN_VALUE, "", "[SyncEntryGroup]");
 
@@ -218,6 +226,14 @@ public abstract class PNodeTask {
   }
 
   public abstract String stateAsString();
+
+  public final boolean isUnattachedNode() {
+    return !getCallees().hasNext() && getCallers().isEmpty();
+  }
+
+  public final boolean isSpeculativeProxy() {
+    return isProxy() && getCallers().isEmpty() && getCallees().hasNext();
+  }
 
   public String dependsOnTweakableString() {
     return "";

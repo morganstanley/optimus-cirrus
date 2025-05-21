@@ -60,6 +60,9 @@ object DAL
 
   def obliterateEvent(ref: BusinessEventReference) = resolver.obliterateEvent(ref)
 
+  def obliterateEvents(ref: Seq[BusinessEventReference], classNameOpt: Option[String]) =
+    resolver.obliterateEvents(ref, classNameOpt)
+
   def obliterateEventForClass(ref: BusinessEventReference, className: String) =
     resolver.obliterateEventForClass(ref, className)
 

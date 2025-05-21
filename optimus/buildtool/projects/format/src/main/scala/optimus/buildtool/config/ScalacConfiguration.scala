@@ -29,7 +29,6 @@ final case class ScalacConfiguration(
     warnings.withParent(parent.warnings)
   )
 
-  def optionsArray: Array[String] = options.toArray
   def targetOption: Option[String] = target.map(t => s"-target:$t")
   def resolvedOptions: Seq[String] = options ++ targetOption
 

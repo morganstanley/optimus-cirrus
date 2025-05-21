@@ -71,8 +71,16 @@ object PythonConstants {
         .mkString(" ")
     }
 
-    def runScriptCmd(artifactName: String, script: String, args: Seq[String], config: TpaConfig): String = {
-      (Seq(unpackedArtifactPython(artifactName, config), unpackedArtifactScript(artifactName, script, config)) ++ args)
+    def runScriptCmd(
+        artifactName: String,
+        script: String,
+        args: Seq[String],
+        config: TpaConfig,
+        test: Boolean = false): String = {
+      val pythonExecutable = if (test) "pytest" else "python"
+      (Seq(
+        unpackedArtifactVenv(artifactName, config).resolve("bin").resolve(pythonExecutable),
+        unpackedArtifactScript(artifactName, script, config)) ++ args)
         .mkString(" ")
     }
 
@@ -109,7 +117,7 @@ object PythonConstants {
       Seq(
         "pip",
         "download",
-        "--only-binary=:all:",
+        "--prefer-binary",
         "--no-deps") ++ cacheString ++ requireHashesString ++ requirementsString ++ destString
     }
   }

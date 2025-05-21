@@ -84,12 +84,14 @@ abstract class DependencyTrackerAction[T] extends NodeCauseInfo {
   /**
    * Work to be done before performing the action.
    */
-  def beforeAction(q: DependencyTrackerQueue): Unit
+  def beforeAction(): Unit = ()
 
   /**
    * Work to be done after performing the action.
    */
-  def afterAction(q: DependencyTrackerQueue): Unit
+  def afterAction(): Unit = {
+    token.release()
+  }
 
   /**
    * Execute the action synchronously.
@@ -143,7 +145,7 @@ abstract class DependencyTrackerAction[T] extends NodeCauseInfo {
     node.tryAddToWaiterList(this)
   }
 
-  final def attachCauseInfoAndScenarioStack(nodes: collection.Seq[NodeTask]): Unit = {
+  final def attachCauseInfoAndScenarioStack(nodes: Seq[NodeTask]): Unit = {
     nodes foreach { node =>
       if (node.scenarioStack() eq null) node.attach(applyInScenarioStack)
       node.tryAddToWaiterList(this)
@@ -267,6 +269,11 @@ abstract class DependencyTrackerAction[T] extends NodeCauseInfo {
     TrackingActionEventCause(sb.toString.stripLineEnd) // don't want a new line baked into a TrackingActionEventCause
   }
 
+  // must be initialised here (rather than in beforeAction) because if beforeAction throws an exception
+  // (which cause.getToken can do), then we end up with a null field and get an NPE in token.release when we run
+  // afterAction (which still can run even if beforeAction failed - see optimus.graph.tracking.DependencyTrackerQueue.executeTry)
+  protected val token: EventCause.Token = cause.createAndTrackToken()
+
   /**
    * For monitoring via the graph debugger
    */
@@ -333,8 +340,9 @@ trait DependencyTrackerActionEvaluateBase[T] extends DependencyTrackerAction[T] 
    * @param q
    *   Ignored.
    */
-  override def beforeAction(q: DependencyTrackerQueue): Unit = {
+  override def beforeAction(): Unit = {
     if (Settings.timeTrackingScenarioEvaluate) logProgress(DependencyTrackerActionProgress.START_DELAY)
+    super.beforeAction()
   }
 
   /**
@@ -343,8 +351,9 @@ trait DependencyTrackerActionEvaluateBase[T] extends DependencyTrackerAction[T] 
    * @param q
    *   Ignored.
    */
-  override def afterAction(q: DependencyTrackerQueue): Unit = {
+  override def afterAction(): Unit = {
     if (Settings.timeTrackingScenarioEvaluate) logProgress(DependencyTrackerActionProgress.END_ACTION)
+    super.afterAction()
   }
 }
 
@@ -438,7 +447,7 @@ trait DependencyTrackerActionManyNodesBase extends DependencyTrackerAction[Unit]
    * @return
    *   The set of nodes to evaluate.
    */
-  protected def asNodes: collection.Seq[NodeTask]
+  protected def asNodes: Seq[NodeTask]
   protected def disposed: Boolean
   protected def targetScenarioName: String
   private final def alreadyDisposedResult: Try[Unit] = {
@@ -564,22 +573,16 @@ abstract class DependencyTrackerActionUpdate[T]
    * @param q
    *   Queue in which to start a batch.
    */
-  final override def beforeAction(q: DependencyTrackerQueue): Unit = {
+  final override def beforeAction(): Unit = {
     if (Settings.timeTrackingScenarioUpdate) logProgress(DependencyTrackerActionProgress.START_DELAY)
-    q.startBatch(cause)
   }
-  // must be initialised here, rather than in beforeAction because, if beforeAction throws an exception
-  // (which cause.getToken can do), then we end up with a null field and get an NPE in token.release when we run
-  // afterAction (which still can run even if beforeAction failed - see optimus.graph.tracking.DependencyTrackerQueue.executeTry)
-  private[this] val token: EventCause.Token = cause.createAndTrackToken()
 
   /**
    * Generate logging messages and end a batch in the queue.
    */
-  final override def afterAction(q: DependencyTrackerQueue): Unit = {
+  final override def afterAction(): Unit = {
     if (Settings.timeTrackingScenarioUpdate) logProgress(DependencyTrackerActionProgress.END_ACTION)
-    q.endBatch
-    token.release()
+    super.afterAction()
     if (Settings.timeTrackingScenarioUpdate) logProgress(DependencyTrackerActionProgress.NOTIFY_ACTION)
   }
 }

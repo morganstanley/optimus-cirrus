@@ -54,8 +54,8 @@ private[platform] final case class DsiResponseWrapper(underlying: DSIResponsePro
     extends AnyVal
     with DalServiceResponse {
   override def isPartial: Boolean = underlying.getIsPartial
-  override def results: Seq[ResultProto] = underlying.getResultsList.asScala
-  override def commandIndices: Seq[Int] = underlying.getCommandIndicesList.asScala.map(_.intValue)
+  override def results: Seq[ResultProto] = underlying.getResultsList.asScalaUnsafeImmutable
+  override def commandIndices: Seq[Int] = underlying.getCommandIndicesList.asScalaUnsafeImmutable.map(_.intValue)
   override def establishSessionResult: Option[EstablishSessionResultProto] =
     if (underlying.hasEstablishSessionResult) Some(underlying.getEstablishSessionResult)
     else None
@@ -114,7 +114,7 @@ class DalProtoClientMessageReceiver(
     val dalResponse = response.getDalResponseProto
     if (dalResponse.hasDsiResponse) {
       val dsiResponse = dalResponse.getDsiResponse
-      val results: Seq[Result] = dsiResponse.getResultsList.asScala.map(fromProto)
+      val results: Seq[Result] = dsiResponse.getResultsList.asScalaUnsafeImmutable.map(fromProto)
       results match {
         case Seq(ErrorResult(t, _)) => throw t
         case other                  => throw new BackendException(s"expected an ErrorResult, got: $other")

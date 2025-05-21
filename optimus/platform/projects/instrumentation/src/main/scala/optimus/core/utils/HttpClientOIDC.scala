@@ -11,7 +11,7 @@
  */
 package optimus.core.utils
 
-import msjava.kerberos.auth.MSKerberosConfiguration
+import com.ms.infra.kerberos.configuration.MSKerberosConfiguration
 import org.apache.http.HttpRequest
 import org.apache.http.HttpRequestInterceptor
 import org.apache.http.HttpResponse
@@ -33,7 +33,7 @@ import java.util.UUID
 
 object HttpClientOIDC {
   {
-    MSKerberosConfiguration.setClientConfiguration()
+    MSKerberosConfiguration.getDefault.setClientConfiguration()
   }
   def create(connectionTimeout: Int = 30000, nThreads: Int = 1): CloseableHttpClient = {
     val credentialsProvider = new BasicCredentialsProvider

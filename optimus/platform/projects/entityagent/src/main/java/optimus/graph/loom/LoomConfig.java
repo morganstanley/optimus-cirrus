@@ -14,6 +14,7 @@ package optimus.graph.loom;
 import static java.lang.invoke.MethodType.methodType;
 import static org.objectweb.asm.Opcodes.INVOKESTATIC;
 import java.lang.invoke.MethodType;
+import java.util.HashMap;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.Method;
@@ -121,6 +122,24 @@ public class LoomConfig {
           Type.INT_TYPE, // nodeFlags
           Type.getObjectType("[Ljava/lang/String;"));
 
+  private static final HashMap<LNodeCall, Boolean> trivialCalls = new HashMap<>();
+
+  private static void registerTC(String owner, String method, String desc) {
+    trivialCalls.put(new LNodeCall(owner, method, desc), Boolean.TRUE);
+  }
+
+  static {
+    registerTC("scala/Predef$", "Map", "()Lscala/collection/immutable/Map$;");
+    registerTC("scala/collection/immutable/Map$", "empty", "()Lscala/collection/immutable/Map;");
+    registerTC("optimus/scala212/DefaultSeq$", "Seq", "()Lscala/collection/Seq$;");
+    registerTC("scala/collection/Seq$", "empty", "()Lscala/collection/SeqOps;");
+    registerTC("scala/collection/immutable/Seq$", "empty", "()Lscala/collection/SeqOps;");
+    registerTC("scala/Predef$", "Set", "()Lscala/collection/immutable/Set$;");
+    registerTC("scala/collection/immutable/Set$", "empty", "()Lscala/collection/immutable/Set;");
+    registerTC("scala/package$", "List", "()Lscala/collection/immutable/List$;");
+    registerTC("scala/collection/immutable/List$", "empty", "()Lscala/collection/immutable/List;");
+  }
+
   // TODO (OPTIMUS-66991): revisit once we are on Scala 2.13 only
   private static Class<?> seqClass() {
     try {
@@ -140,7 +159,7 @@ public class LoomConfig {
   private static final String PH_LEVEL_ZERO = "setCompilerLevelZero";
 
   private static final String FLOW_CONTROL = "optimus/platform/FlowControl";
-  private static final String TURN_OFF_REORDER = "turOffNodeReorder";
+  private static final String TURN_OFF_REORDER = "turnOffNodeReorder";
   private static final String ASSUME_GLOBAL_MUTATION = "mutatesGlobalState";
 
   public static boolean enableCompilerDebug(MethodInsnNode mi) {
@@ -165,5 +184,9 @@ public class LoomConfig {
     return mi.getOpcode() == INVOKESTATIC
         && mi.owner.equals(FLOW_CONTROL)
         && mi.name.equals(ASSUME_GLOBAL_MUTATION);
+  }
+
+  public static boolean isTrivialCall(MethodInsnNode mi) {
+    return trivialCalls.containsKey(new LNodeCall(mi.owner, mi.name, mi.desc));
   }
 }

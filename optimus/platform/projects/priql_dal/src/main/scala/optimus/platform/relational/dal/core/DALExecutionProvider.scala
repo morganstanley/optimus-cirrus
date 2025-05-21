@@ -120,7 +120,7 @@ class DALExecutionProvider[T](
       case Nil | List(
             PropertyDef(
               _,
-              Function(ConvertOps.ToEntity.Name, Property(Special, List(DALProvider.EntityRef), _) :: Nil))) =>
+              Function(ConvertOps.ToEntity.Name, Property(Special, Seq(DALProvider.EntityRef), _) :: Nil))) =>
         // no projection (for Query.execute)
         where match {
           case None if sortBy.isEmpty && take.isEmpty =>
@@ -139,17 +139,7 @@ class DALExecutionProvider[T](
               if (index.unique || index.storableClass == entity) && sortBy.isEmpty && take.isEmpty =>
             val RichConstant(v, _, _) = AsyncValueEvaluator.evaluate(r)
             val sk = index.toSerializedKey(checkLoadContext(v, loadCtx))
-            val k = if (index.unique) {
-              new UniqueKey[OptimusEntity] {
-                def toSerializedKey: SerializedKey = sk
-                def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
-              }
-            } else {
-              new NonUniqueKey[OptimusEntity] {
-                def toSerializedKey: SerializedKey = sk
-                def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
-              }
-            }
+            val k = mkKey(sk, index)
             // query equivalent to Entity.index.find(...) or Entity.get(...)
             val result = Query.Tracer.trace(
               executeOptions.pos,
@@ -211,6 +201,19 @@ class DALExecutionProvider[T](
 object DALExecutionProvider extends DALQueryUtil {
 
   val entitledOnlyUnsupportedForCount = "entitledOnly is not supported for count query"
+
+  private def mkKey(sk: SerializedKey, index: IndexColumnInfo) = {
+    if (index.unique)
+      new UniqueKey[OptimusEntity] {
+        def toSerializedKey: SerializedKey = sk
+        def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+      }
+    else
+      new NonUniqueKey[OptimusEntity] {
+        def toSerializedKey: SerializedKey = sk
+        def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+      }
+  }
 
   @node @scenarioIndependent
   def unsafeFindByExpressionDoNotUse(command: ExpressionQueryCommand, loadContext: TemporalContext): QueryResultSet = {

@@ -33,7 +33,7 @@ import java.awt.event.ActionEvent
 import java.util.prefs.Preferences
 import javax.swing.JButton
 import javax.swing.JSplitPane
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.ArraySeq
 
 object NodeTreeBrowser {
 
@@ -44,14 +44,16 @@ object NodeTreeBrowser {
 
   /** Create an independent (its own view toolbar) NodeTreeBrowser */
   def apply(root: PNodeTask, showChildren: Boolean = true): NodeTreeBrowser = {
-    val cfg = ExpandConfig(skipInternal = true, if (showChildren) NodeTreeTable.children else NodeTreeTable.parents)
+    val cfg = ExpandConfig(
+      skipInternal = !GraphDebuggerUI.showInternal.get,
+      if (showChildren) NodeTreeTable.children else NodeTreeTable.parents)
     val showNodesFrom = if (showChildren) SHOW_NODES_FROM_CHILDREN else SHOW_NODES_FROM_PARENTS
     new NodeTreeBrowser(root, cfg, splitVertical = false, viewWithToolbar = true, showNodesFrom = showNodesFrom)
   }
 
   /** Create a part for the larger UI */
   def apply(showNodesFrom: Int): NodeTreeBrowser = {
-    val cfg = ExpandConfig(skipInternal = true, NodeTreeTable.children)
+    val cfg = ExpandConfig(skipInternal = !GraphDebuggerUI.showInternal.get, NodeTreeTable.children)
     new NodeTreeBrowser(null, cfg, splitVertical = true, viewWithToolbar = false, showNodesFrom)
   }
 }
@@ -95,7 +97,7 @@ final class NodeTreeBrowser(
     nview.showNode(null) // Don't show details by default
   }
 
-  def showNodes(ntsks: ArrayBuffer[PNodeTask]): Unit = {
+  def showNodes(ntsks: ArraySeq[PNodeTask]): Unit = {
     ntree.showNodes(ntsks, expand = btnExpandCollapse.isChecked)
     nview.showNode(null) // Don't show details by default
   }

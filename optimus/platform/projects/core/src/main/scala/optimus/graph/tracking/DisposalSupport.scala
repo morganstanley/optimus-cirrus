@@ -15,8 +15,6 @@ import optimus.graph.NodeKey
 import optimus.graph.cache.Caches
 
 import scala.collection.mutable
-import scala.util.Success
-import scala.util.Try
 
 /**
  * Implementation trait which provides support for disposing a DependencyTracker correctly
@@ -32,11 +30,14 @@ trait DisposalSupport {
   }
   final def isDisposed: Boolean = _disposed
 
-  private[tracking] def doDispose(clearCacheOfDisposedNodes: Boolean, immediate: Boolean, cause: EventCause): Unit = {
+  private[tracking] def doDispose(
+      cacheClearMode: CacheClearMode,
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     if (!_disposed) {
-      val disposalMutableInfo = mutable.Map.empty[DependencyTracker, KeyAndTracked]
+      val disposalMutableInfo = mutable.Map.empty[DependencyTracker, Map[TrackingScope[_], KeyAndTracked]]
 
-      disposeThisAndChildren(disposalMutableInfo, cause)
+      disposeThisAndChildren(disposalMutableInfo, cause, observer)
       this match {
         case root: DependencyTrackerRoot => DependencyTrackerRoot.removeRoot(root)
         case _                           => parent.removeDisposedChildren()
@@ -51,39 +52,34 @@ trait DisposalSupport {
 
       // we need to clear from the caches explicitly as invalidation will just mark the node as invalid in the cache
       // and still used the slot in the cache used
-      if (clearCacheOfDisposedNodes)
-        Caches.lazyClearDisposedTrackers(immediate)
+      Caches.lazyClearDisposedTrackers(cacheClearMode)
     }
   }
 
   private[tracking] def disposeThisAndChildren(
-      info: mutable.Map[DependencyTracker, KeyAndTracked],
-      cause: EventCause): Unit = {
+      info: mutable.Map[DependencyTracker, Map[TrackingScope[_], KeyAndTracked]],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     if (!_disposed) {
+      // Report final queue stats to the root BEFORE we dispose this tracker. The queue will then stop reporting
+      // regular snapped stats (even though it's still reachable). If we did this after disposing, there would be a
+      // brief period where the queue was not reachable but the final stats were missing, causing a drop in the
+      // cumulative stats across all queues.
+      if (queueOwner == this) DependencyTrackerRoot.collectDisposedQueueStats(queue)
+
       children foreach { c =>
-        c.disposeThisAndChildren(info, cause)
+        c.disposeThisAndChildren(info, cause, observer)
       }
       _disposed = true
       removeDisposedChildren()
 
-      info(this) = userNodeTracker.flat
+      info(this) = allUserNodeTrackers.map(u => u.scope -> u.flat).toMap
 
       disposeChildList()
       tweakableTracker.disposeTweakableTracker()
-      userNodeTracker.disposeUserNodeTracker()
-      disposeSnapshot(cause)
+      allUserNodeTrackers.foreach(_.disposeUserNodeTracker())
+      disposeSnapshot(cause, observer)
     }
-  }
-
-  private[tracking] class TSA_Dispose(clearDisposedNodes: Boolean, immediate: Boolean) extends TSA_BasicUpdateAction {
-    def this(clearDisposedNodes: Boolean) = this(clearDisposedNodes, false)
-
-    /**
-     * special case is for a dispose - we are forgiving and regard a dispose of an already disposed scenario as a
-     * Success NO-OP
-     */
-    override private[tracking] def alreadyDisposedResult: Try[Unit] = Success(())
-    override protected def doUpdate(): Unit = doDispose(clearDisposedNodes, immediate, cause)
   }
 }
 

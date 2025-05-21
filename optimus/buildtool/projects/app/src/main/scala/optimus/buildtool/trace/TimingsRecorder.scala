@@ -11,13 +11,14 @@
  */
 package optimus.buildtool.trace
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToString
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import com.sun.management.OperatingSystemMXBean
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 import java.lang.management.ManagementFactory
 import java.nio.file.Files
@@ -60,13 +61,7 @@ object TimingsRecorder {
       unlocked_units: Seq[Long],
       unlocked_signature_units: Seq[Long])
 
-  private[TimingsRecorder] implicit val TimingsTraceResultJsonFormat: RootJsonFormat[TimingsTraceResult] = jsonFormat7(
-    TimingsTraceResult.apply)
-
   private[TimingsRecorder] final case class ConcurrencyResult(t: Double, active: Long, waiting: Long, blocked: Long)
-
-  private[TimingsRecorder] implicit val ConcurrencyResultJsonFormat: RootJsonFormat[ConcurrencyResult] = jsonFormat4(
-    ConcurrencyResult.apply)
 
   private def toEpocMicro(i: Instant): Long =
     (i.getEpochSecond * 1000000L) + (i.getNano / 1000L)
@@ -155,7 +150,6 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
       category: CategoryTrace,
       time: Instant = patch.MilliInstant.now()): DefaultTaskTrace = {
     category match {
-      case DhtOperation(_, _) => NoOpTaskTrace
       case _ => {
         val t = new TimingsRecorderTask(scopeId, category, time)
         traces.synchronized {
@@ -168,6 +162,7 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
 
   private def completedTasks: List[TimingsRecorderTask] = traces.synchronized { traces.result() }.filter(_.isDone)
 
+  lazy implicit val samplerJsValueCodec: JsonValueCodec[List[(Double, Double)]] = JsonCodecMaker.make
   private def getSamplerJsData(timingsEnd: Instant): String = {
     def tween(start: Long, end: Long): Double = (end - start) * 1e-6
     val globalStart = toEpocMicro(timingsStart)
@@ -175,8 +170,10 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
     val snaps = sampler.snaps.filter(snap => snap.timeMicro > globalStart && snap.timeMicro < globalEnd)
     log.debug(s"took ${snaps.size} snapshots")
 
-    snaps.map(s => (tween(globalStart, s.timeMicro), s.`%cpu`)).toJson.toString
+    writeToString(snaps.map(s => (tween(globalStart, s.timeMicro), s.`%cpu`)))
   }
+
+  lazy implicit val timingTraceJsonValueCodec: JsonValueCodec[List[TimingsTraceResult]] = JsonCodecMaker.make
 
   private def getJsData(timingsEnd: Instant): (String, Long) = {
     def tween(start: Long, end: Long): Double = ((end - start) * 1e-5).round * 1e-1 // round to tenth of sec
@@ -189,7 +186,7 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
 
     log.debug(s"${tasks.size} completed tasks")
 
-    val jsonData = tasks
+    val data = tasks
       .groupBy(task => jsCategorize(task.scopeId, task.category))
       .collect {
         case (Some(jsCat), tasks) => {
@@ -201,7 +198,7 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
               case _                    => false
             }
           }
-          val sigTime = if (signatures.size > 0) Some(signatures.map(_.endTimeMicros).max) else None
+          val sigTime = if (signatures.nonEmpty) Some(signatures.map(_.endTimeMicros).max) else None
 
           TimingsTraceResult(
             i = 0, // we update this later
@@ -214,16 +211,14 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
           )
         }
       }
-      .toSeq
+      .toList
       .sortBy(_.start)
       .zipWithIndex
       .map { case (result, index) =>
         result.copy(i = index)
       }
-      .toJson
-      .toString
 
-    (jsonData, buildDuration.ceil.round)
+    (writeToString(data), buildDuration.ceil.round)
   }
 
   def buildReport: String = {

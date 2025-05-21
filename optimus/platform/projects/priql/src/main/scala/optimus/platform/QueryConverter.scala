@@ -87,12 +87,7 @@ object QueryConverter extends LowPriorityConverters {
     // key will be ignored, provider won't change.
     def convert[T <: E](src: Query[T], key: RelationKey[T], p: QueryProvider)(implicit
         itemType: TypeInfo[T],
-        pos: MethodPosition): Query[T] = {
-      if (StreamsHelpers.findFirstEventSrc(src.element).isEmpty) src
-      else
-        throw new IllegalArgumentException(
-          "from(events(Entity)) queries require TableConverter, import optimus.platform.relational.streams._")
-    }
+        pos: MethodPosition): Query[T] = src
   }
 
   implicit def csvEntityConverter[E <: Entity]: QueryConverter[E, CsvSource] = new CsvEntityConverter[E]

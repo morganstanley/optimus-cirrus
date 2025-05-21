@@ -22,31 +22,27 @@ import optimus.ui.ScenarioReference
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import scala.util.Try
 
 object OverInvalidationDetection extends ThreadLocal[EventCause] {
 
-  def checkOverInvalidationInUTrack(utrack: TrackedNode[_], memos: Iterable[TrackingMemo]): Unit = {
+  def checkOverInvalidationInUTrack(utrack: TrackedNode[_], memo: TrackingMemo): Unit = {
     val invalidateCause = get()
     if (invalidateCause ne null) {
       val invalidateRootCause = invalidateCause.root
-      val it = memos.iterator
-      while (it.hasNext) {
-        val lastEvalCause = it.next().cause
-        if (invalidateRootCause eq lastEvalCause.root) {
-          val msg =
-            s">>>>> Overly invalidating node in the same handler: $utrack. This could cause potential performance issue. Enable TraceNodes in graph debugger to check the node path."
-          val eventStack =
-            s"Previous evaluation cause stack:\n${lastEvalCause.causeStack}\n\nCurrent invalidation cause stack:\n${invalidateCause.causeStack}"
-          RTVerifierReporter.reportAppletViolation(
-            category = RTVerifierCategory.UTRACK_OVER_INVALIDATION,
-            key = msg,
-            details = eventStack,
-            appletId = appletId(utrack.dependencyTracker.root))
-          if (DiagnosticSettings.debugAssist) {
-            log.warn(msg)
-            log.warn(eventStack)
-          }
+      val lastEvalCause = utrack.cause
+      if (invalidateRootCause eq lastEvalCause.root) {
+        val msg =
+          s">>>>> Overly invalidating node in the same handler: $utrack. This could cause potential performance issue. Enable TraceNodes in graph debugger to check the node path."
+        val eventStack =
+          s"Previous evaluation cause stack:\n${lastEvalCause.causeStack}\n\nCurrent invalidation cause stack:\n${invalidateCause.causeStack}"
+        RTVerifierReporter.reportAppletViolation(
+          category = RTVerifierCategory.UTRACK_OVER_INVALIDATION,
+          key = msg,
+          details = eventStack,
+          appletId = appletId(utrack.dependencyTracker.root))
+        if (DiagnosticSettings.debugAssist) {
+          log.warn(msg)
+          log.warn(eventStack)
         }
       }
     }
@@ -84,7 +80,10 @@ object OverInvalidationDetection extends ThreadLocal[EventCause] {
  * (here "user" means a user of DependencyTracker, e.g. UI or Reactive). The user can attach arbitrary memos to the
  * tracked nodes.
  */
-private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
+private[graph] final class UserNodeTracker[M >: Null <: TrackingMemo](
+    tracker: DependencyTracker,
+    val scope: TrackingScope[M]) {
+  userNodeTracker =>
 
   /**
    * A map from PropertyNodes to UTracks for those nodes. UTracks can be read from multiple eval threads, but we don't
@@ -103,7 +102,8 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
 
   private[tracking] def disposeUserNodeTracker(): Unit = utracks = null
 
-  private[tracking] def invalidateAll(): Unit = utracks.values.stream().forEach(_.invalidate())
+  private[tracking] def invalidateAll(observer: TrackedNodeInvalidationObserver): Unit =
+    utracks.values.stream().forEach(_.invalidate(observer))
 
   /**
    * Update user tracking information for a given NodeKey and TrackingScope.
@@ -121,10 +121,7 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
    * @return
    *   the TrackedNode, if the memoUpdater tracked the node (returned non null)
    */
-  private[tracking] def userTrackUpdate[T, M >: Null <: TrackingMemo](
-      key: NodeKey[T],
-      scope: TrackingScope[M],
-      memoUpdater: M => M): TrackedNode[T] = {
+  private[tracking] def userTrackUpdate[T](key: NodeKey[T], memoUpdater: M => M): TrackedNode[T] = {
     if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.logTrack(tracker.name, key, scope)
     if (tracker.isDisposed) {
       log.error(s"DependencyTracker ${tracker.name} disposed! track() called on $key")
@@ -136,9 +133,9 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
           (_, utrk) => {
             if (utrk eq null) {
               val newMemo = memoUpdater(null)
-              if (newMemo ne null) new UTrack(Map(scope -> newMemo), key) else null
+              if (newMemo ne null) new UTrack(newMemo, key) else null
             } else {
-              utrk.updateMemo(scope, memoUpdater)
+              utrk.updateMemo(memoUpdater)
             }
           }
         )
@@ -157,7 +154,7 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
    *   The result type of the node.
    */
   private[tracking] final class UTrack[T] private[UserNodeTracker] (
-      private[this] var memos: Map[TrackingScope[_], TrackingMemo],
+      @volatile private[this] var memo: M,
       inputKey: NodeKey[T]) { utrack =>
 
     // Implementation details:
@@ -198,25 +195,13 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
     }
 
     /* Invalidate child UTrackNode */
-    private[UserNodeTracker] def invalidate(): Unit = {
+    private[UserNodeTracker] def invalidate(observer: TrackedNodeInvalidationObserver): Unit = {
       lock.writeLock().lock()
-      try _current.invalidateCache()
+      try _current.invalidateCache(observer)
       finally lock.writeLock().unlock()
     }
 
-    /**
-     * Get the memo for this UTrack in a given TrackingScope. An Option is returned, which is None if no memo is
-     * present.
-     *
-     * @param scope
-     *   The scope in which to get the memo.
-     * @tparam M
-     *   The memo type.
-     * @return
-     *   The memo in the given scope, or None.
-     */
-    private[tracking] def getMemoOption[M >: Null <: TrackingMemo](scope: TrackingScope[M]): Option[M] =
-      synchronized(memos.get(scope)).asInstanceOf[Option[M]]
+    private[tracking] def getMemo: M = memo
 
     /**
      * Apply an update function to the memo for this UTrack in a given TrackingScope.
@@ -230,31 +215,17 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
      * @return
      *   Whether the utrack can be removed from the DependencyTracker
      */
-    private[UserNodeTracker] def updateMemo[M >: Null <: TrackingMemo](
-        scope: TrackingScope[M],
-        memosUpdater: M => M): UTrack[T] = synchronized {
-      val curMemo = getMemoOption(scope).orNull
-      val newMemo = memosUpdater(curMemo)
+    private[UserNodeTracker] def updateMemo(memosUpdater: M => M): UTrack[T] = synchronized {
+      val prevMemo = memo
+      memo = memosUpdater(memo)
       if (Settings.trackingScenarioLoggingEnabled)
-        DependencyTrackerLogging.logTrackUpdateMemo(tracker.name, anyCurrent, scope, curMemo, newMemo)
-      if (newMemo eq null) {
-        memos -= scope
-        if (memos.isEmpty) {
-          null
-        } else this
-      } else {
-        if (newMemo ne curMemo) { memos = memos.updated(scope, newMemo) }
-        this
-      }
+        DependencyTrackerLogging.logTrackUpdateMemo(tracker.name, anyCurrent, scope, prevMemo, memo)
+      if (memo eq null) null else this
     }
 
-    private[tracking] def updateCause(cause: EventCause): Unit = synchronized {
-      // we never return a UTrack where a memo in a given scope has a cause with a different scope
-      memos.get(cause.scope).foreach { memo => memo.setCause(cause) }
-    }
-
-    private[tracking] def registerRunningNode(node: Node[T]): TrackedNode[T] = {
+    private[tracking] def registerRunningNode(node: Node[T], cause: EventCause): TrackedNode[T] = {
       read { current =>
+        current.setCause(cause)
         node.continueWithIfEverRuns(current, null)
         OGTrace.observer.manualStart(current)
         current
@@ -262,8 +233,8 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
     }
 
     /**
-     * This is a proxy object around a PropertyNode, which holds user information in the form of TrackingMemos
-     * associated with this Node for a given TrackingScope.
+     * This is a proxy object around a PropertyNode, which holds user information in the form of a TrackingMemo
+     * associated with this Node within this scope and dependency tracker.
      */
     private final class UTrackNode extends ProxyPropertyNode[T] with TrackedNode[T] {
       // Make a full key
@@ -279,20 +250,20 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
        */
       private[optimus] override def dependencyTracker: DependencyTracker = tracker
       override def key: NodeKey[T] = tidyKey
+      private[optimus] override def scope: TrackingScope[_] = userNodeTracker.scope
 
-      /**
-       * Get the memo for this UTrack in a given TrackingScope. An Option is returned, which is None if no memo is
-       * present.
-       *
-       * @param scope
-       *   The scope in which to get the memo.
-       * @tparam M
-       *   The memo type.
-       * @return
-       *   The memo in the given scope, or None.
-       */
-      private[tracking] def getMemoOption[M >: Null <: TrackingMemo](scope: TrackingScope[M]): Option[M] =
-        utrack.getMemoOption(scope)
+      private[optimus] def getMemo: M = utrack.getMemo
+
+      private var tokens: List[EventCause.Token] = Nil
+      @volatile private var _cause: EventCause = NoEventCause
+      private[optimus] override def cause: EventCause = _cause
+      private[optimus] def setCause(cause: EventCause): Unit = synchronized {
+        // we will only call the completion notification once, so we only pass a single (arbitrary) event cause there,
+        // but we do want to keep all requesting EventCauses active, so we take a token from all of them and only
+        // release after the callback is complete
+        _cause = cause
+        tokens ::= cause.createAndTrackToken()
+      }
 
       /**
        * Get proxied PropertyNode.
@@ -309,7 +280,7 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
       override def run(ec: OGSchedulerContext): Unit =
         throw new GraphInInvalidState("UTrack should never be run directly")
 
-      override def onChildCompleted(eq: EvaluationQueue, ntsk: NodeTask): Unit = {
+      override def onChildCompleted(eq: EvaluationQueue, ntsk: NodeTask): Unit = try {
         val doNotify = {
           if (isDone) false
           else {
@@ -337,22 +308,38 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
 
         // we have completed the node, do callbacks if we are the current node
         if (doNotify) doIf(this) { previous =>
-          EvaluationContext.asIfCalledFrom(this, eq) { tracker.queue.notifyNodeCompleted(this, previous) }
+          EvaluationContext.asIfCalledFrom(this, eq) {
+            if (memo ne null) tracker.root.notifyNodeCompleted(this, previous)
+          }
         }
         else if (Settings.schedulerAssertsExt) {
           throw new GraphInInvalidState("Got two completion callbacks on the same UTrackNode")
         }
-      }
+      } finally
+        synchronized {
+          var failure: Exception = null
+          // Release all tokens, even if one or more throws. Collect all failures.
+          tokens.foreach { t =>
+            try t.release()
+            catch {
+              case f: Exception =>
+                if (failure eq null) failure = f
+                else failure.addSuppressed(f)
+            }
+          }
+          tokens = Nil
+          if (failure ne null) throw failure
+        }
 
-      override def invalidateCache(): Unit = swapIf(this) {
+      override def invalidateCache(observer: TrackedNodeInvalidationObserver): Unit = swapIf(this) {
         if (isDone) {
-          OverInvalidationDetection.checkOverInvalidationInUTrack(this, memos.values)
+          if (memo ne null) OverInvalidationDetection.checkOverInvalidationInUTrack(this, memo)
           // invalidate template
           if (template.isStable) {
             // We still need to reset _xinfo
             template.unsafeResetInfo()
           } else if (template.isDone) {
-            template.invalidateCache()
+            template.invalidateCache(observer)
           }
         } else if (Settings.schedulerAssertsExt && (scenarioStack ne ScenarioStack.constant)) {
           // It possible for the user to un-track this UTTrack (will call cleanReset)
@@ -363,13 +350,8 @@ private[graph] final class UserNodeTracker(tracker: DependencyTracker) {
 
         // add callback for new UTrackNode
         val newNode = new UTrackNode
-        tracker.queue.notifyNodeInvalidated(newNode)
+        if (memo ne null) observer.notifyNodeInvalidated(newNode)
         newNode
-      }
-
-      // TrackedNode impl - only used in Excel
-      override def evaluateAsync(callback: Try[T] => Unit, cause: EventCause): Unit = {
-        tracker.evaluateNodeKeyAsync(srcNodeTemplate, callback, cause)
       }
     }
   }
@@ -393,8 +375,6 @@ sealed trait TrackedNode[T] extends Node[T] with TweakableKey {
   import scala.util.Failure
   import scala.util.Success
   import scala.util.Try
-  def evaluateAsync(callback: Try[T] => Unit, cause: EventCause): Unit
-
   def scenarioReference: ScenarioReference = dependencyTracker.scenarioReference
 
   def key: NodeKey[T]
@@ -413,19 +393,15 @@ sealed trait TrackedNode[T] extends Node[T] with TweakableKey {
    */
   private[optimus] def dependencyTracker: DependencyTracker
   private[tracking] def underlying: PropertyNode[T]
-  private[tracking] def getMemoOption[M >: Null <: TrackingMemo](scope: TrackingScope[M]): Option[M]
+  private[tracking] def getMemo: TrackingMemo // can be null if the node has been untracked
+  private[optimus] def scope: TrackingScope[_]
+  private[optimus] def cause: EventCause
 }
 
 /**
  * Trait of memo objects attached to TrackingNodes in a TrackingScope.
  */
-private[optimus] abstract class TrackingMemo {
-  // TODO (OPTIMUS-23190): remove this default when memo and notification model changes
-  private[this] var eventCause: EventCause = NoEventCause
-  def cause: EventCause = eventCause
-  private[tracking] def hasCause: Boolean = eventCause != NoEventCause
-  private[tracking] def setCause(cause: EventCause): Unit = this.eventCause = cause
-}
+private[optimus] trait TrackingMemo
 
 private[optimus] final case class EmptyMemo(name: String = "EmptyMemo") extends TrackingMemo
 

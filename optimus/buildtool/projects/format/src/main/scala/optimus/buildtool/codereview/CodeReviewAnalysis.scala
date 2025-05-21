@@ -11,47 +11,24 @@
  */
 package optimus.buildtool.codereview
 
-import spray.json.DefaultJsonProtocol._
-import spray.json._
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.named
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
 final case class CodeReviewAnalysis(
-    prCommit: String,
-    targetCommit: String,
-    compilerInfo: Map[String, Map[String, Seq[CodeReviewMessage]]] // for each file, for each line, list its messages
+    @named("commit_hash") prCommit: String,
+    @named("target_branch_commit_hash") targetCommit: String,
+    @named("compiler_info") compilerInfo: Map[String, Map[String, Seq[
+      CodeReviewMessage
+    ]]] // for each file, for each line, list its messages
 )
 
-object CodeReviewAnalysis {
-  implicit val analysisFormat: RootJsonFormat[CodeReviewAnalysis] = jsonFormat(
-    CodeReviewAnalysis.apply,
-    fieldName1 = "commit_hash",
-    fieldName2 = "target_branch_commit_hash",
-    fieldName3 = "compiler_info")
+object CodeReviewCodecs {
+  implicit lazy val codeReviewValueCodec: JsonValueCodec[CodeReviewAnalysis] = JsonCodecMaker.make
 }
 
-final case class CodeReviewMessage(start: Int, end: Int, `type`: CodeReviewMessageType, msg: String)
+final case class CodeReviewMessage(start: Int, end: Int, `type`: CodeReviewMessageType.Value, msg: String)
 
-object CodeReviewMessage {
-  implicit val messageFormat: JsonFormat[CodeReviewMessage] = jsonFormat4(CodeReviewMessage.apply)
-}
-
-sealed trait CodeReviewMessageType
-
-object CodeReviewMessageType {
-
-  case object Info extends CodeReviewMessageType
-  case object Warn extends CodeReviewMessageType
-  case object Error extends CodeReviewMessageType
-
-  implicit val messageTypeFormat: JsonFormat[CodeReviewMessageType] = new JsonFormat[CodeReviewMessageType] {
-    override def write(obj: CodeReviewMessageType): JsValue = obj.toString.toLowerCase.toJson
-    override def read(json: JsValue): CodeReviewMessageType = json match {
-      case JsString(x) if x.equalsIgnoreCase(Info.toString)  => Info
-      case JsString(x) if x.equalsIgnoreCase(Warn.toString)  => Warn
-      case JsString(x) if x.equalsIgnoreCase(Error.toString) => Error
-      case _ =>
-        throw new IllegalArgumentException(
-          s"value ${json.compactPrint} is not one of ${Info.toString}, ${Warn.toString} or ${Error.toString}")
-    }
-  }
-
+object CodeReviewMessageType extends Enumeration {
+  val Info, Warn, Error = Value
 }

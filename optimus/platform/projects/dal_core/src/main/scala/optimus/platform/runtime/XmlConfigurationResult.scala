@@ -12,7 +12,6 @@
 package optimus.platform.runtime
 
 import java.io.StringReader
-
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.xpath.XPath
 import javax.xml.xpath.XPathConstants
@@ -22,7 +21,7 @@ import org.w3c.dom.Node
 import org.w3c.dom.NodeList
 import org.xml.sax.InputSource
 
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
 
 object XmlConfigurationResult {
   final case class ConfigurationNodeAttribute(prop: String, value: String)
@@ -79,28 +78,27 @@ abstract class XmlConfigurationResult(xml: String) {
     }
     def buildWithoutParent(expression: String, n: Node): ConfigurationNode = {
       val name: String = n.getNodeName
-      val attributes: mutable.ArrayBuffer[ConfigurationNodeAttribute] =
-        mutable.ArrayBuffer.empty[ConfigurationNodeAttribute]
+      val attributes = ArraySeq.newBuilder[ConfigurationNodeAttribute]
       var i: Int = 0
       if (n.hasAttributes) {
         while (i < n.getAttributes.getLength) {
           val attr = n.getAttributes.item(i)
-          attributes.append(ConfigurationNodeAttribute(attr.getNodeName, attr.getNodeValue))
+          attributes += ConfigurationNodeAttribute(attr.getNodeName, attr.getNodeValue)
           i += 1
         }
       }
-      val children: mutable.ArrayBuffer[ConfigurationNode] = mutable.ArrayBuffer.empty[ConfigurationNode]
+      val children = ArraySeq.newBuilder[ConfigurationNode]
       i = 0
       val nextExpression = s"$expression/node()"
       val nodeList: NodeList = getNodes(nextExpression)
       while (i < nodeList.getLength) {
         val child: Node = nodeList.item(i)
         if (child.getParentNode.equals(n) && child.getNodeName != "#text") {
-          children.append(buildWithoutParent(nextExpression, child))
+          children += buildWithoutParent(nextExpression, child)
         }
         i += 1
       }
-      apply(name, attributes, None, children, Option(n.getTextContent))
+      apply(name, attributes.result(), None, children.result(), Option(n.getTextContent))
     }
     private def setParentsRecursively(cn: ConfigurationNode): Unit = {
       cn.children.foreach { child: ConfigurationNode =>

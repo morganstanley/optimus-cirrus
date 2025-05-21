@@ -11,6 +11,10 @@
  */
 package optimus.scala212
 
+import optimus.scalacompat.collection.UnsafeImmutableBufferWrapper
+
+import scala.annotation.implicitNotFound
+import scala.collection.convert.AsScalaExtensions
 import scala.{collection => sc}
 
 object DefaultSeq extends optimus.scalacompat.collection.MapBuildFromImplicits {
@@ -24,4 +28,18 @@ object DefaultSeq extends optimus.scalacompat.collection.MapBuildFromImplicits {
   }
   def toVarargsSeq[A](s: Array[A]): scala.collection.immutable.Seq[A] =
     scala.collection.immutable.ArraySeq.unsafeWrapArray(s)
+
+  implicit class ListHasAsScalaUnsafe[A](l: java.util.List[A]) {
+    /**
+     * Extension method to convert a `java.util.List` to an [[UnsafeImmutableBufferWrapper]].
+     *
+     * This conversion is useful when an immutable collection is needed and the underlying Java list is known to be
+     * immutable / fresh / non-aliased.
+     */
+    def asScalaUnsafeImmutable(implicit
+        @implicitNotFound(
+          "import scala.jdk.CollectionConverters._ to use asScalaUnsafeImmutable") importEvidence: java.util.List[
+          A] => AsScalaExtensions#ListHasAsScala[A]): UnsafeImmutableBufferWrapper[A] =
+      new UnsafeImmutableBufferWrapper(l.asScala)
+  }
 }

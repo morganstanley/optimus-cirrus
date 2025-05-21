@@ -32,12 +32,12 @@ object MemoryThrottle {
   private def memoryBeans =
     ManagementFactory.getMemoryPoolMXBeans.asScala.toIndexedSeq.filter(_.getType == MemoryType.HEAP)
   private def getUsages: Seq[MemoryUsage] = memoryBeans.map(_.getUsage)
-  abstract private class Mem(val freeMb: Long) {
-    def >=(l: Long) = freeMb >= l
-    def <(l: Long) = freeMb < l
+  abstract class Mem(val freeMb: Long) {
+    def >=(l: Long): Boolean = freeMb >= l
+    def <(l: Long): Boolean = freeMb < l
     def toString: String
   }
-  private def getFreeHeap = {
+  def getFreeHeap: Mem = {
     val usages = getUsages
     val max = Utils.byteToMB(usages.map(_.getMax).sum)
     val used = Utils.byteToMB(usages.map(_.getUsed).sum)
@@ -48,7 +48,7 @@ object MemoryThrottle {
   }
 
   private val osBean = ManagementFactory.getOperatingSystemMXBean.asInstanceOf[com.sun.management.OperatingSystemMXBean]
-  private def getFreeRam = {
+  def getFreeRam: Mem = {
     val freeRamMb = Utils.byteToMB(osBean.getFreeMemorySize)
     new Mem(freeRamMb) {
       override def toString = s"RAM (MB): free=$freeRamMb"
@@ -99,19 +99,6 @@ class MemoryThrottle(minFreeMbDelay: Long, minFreeMbGC: Long, memDelayMillis: Lo
   private val running: AtomicInteger = new AtomicInteger(0)
   private val numDelays: AtomicInteger = new AtomicInteger(0)
   private val numGCs: AtomicInteger = new AtomicInteger(0)
-
-  override def startBuild(): Unit = {
-    val freeRam = getFreeRam.freeMb
-    val freeHeap = getFreeHeap.freeMb
-    val sufficientFreeRam = freeRam > freeHeap
-    // Free RAM on linux isn't a reliable indicator of available RAM, so only warn on Windows
-    if (!sufficientFreeRam && Utils.isWindows) {
-      val msg =
-        s"Less free system RAM (${Utils.mbToString(freeRam)}) than remaining heap (${Utils.mbToString(freeHeap)}). This can cause very poor build performance due to disk swapping - please free up more system RAM."
-      ObtTrace.warn(msg)
-      log.warn(msg)
-    }
-  }
 
   @async override def throttleIfLowMem$NF[T](id: ScopeId)(fn: NodeFunction0[T]): T = {
     var free = getFreeHeap

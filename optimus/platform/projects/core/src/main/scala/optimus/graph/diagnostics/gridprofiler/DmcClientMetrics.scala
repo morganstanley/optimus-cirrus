@@ -55,7 +55,7 @@ object DmcClientMetrics {
       .map(_ => DmcProfilingLevel.basic)
     maybeDetail orElse maybeBasic orElse defaultProfilingLevel getOrElse DmcProfilingLevel.off
   }
-  def getProfilingLevel(profilingTags: collection.Seq[PluginTagKeyValue[Level]]): DmcProfilingLevel = {
+  def getProfilingLevel(profilingTags: Seq[PluginTagKeyValue[Level]]): DmcProfilingLevel = {
     val maybeDetail = profilingTags
       .find(_.key == DmcDetailedProfiling)
       .map(_ => DmcProfilingLevel.detailed)
@@ -71,9 +71,9 @@ object DmcClientMetrics {
     case _                          => None
   }
 
-  def customMetricsForLevel(level: DmcProfilingLevel): collection.Seq[String] = level match {
+  def customMetricsForLevel(level: DmcProfilingLevel): Seq[String] = level match {
     case DmcProfilingLevel.basic =>
-      collection.Seq(
+      Seq(
         DmcCacheReuseRatio,
         DmcCacheComputeRatio,
         DmcCacheChurnRate,
@@ -86,7 +86,7 @@ object DmcClientMetrics {
         DmcCacheMaxConsumption
       )
     case DmcProfilingLevel.detailed =>
-      collection.Seq(
+      Seq(
         DmcCacheReuseRatio,
         DmcCacheComputeRatio,
         DmcCacheChurnRate,
@@ -99,7 +99,7 @@ object DmcClientMetrics {
         DmcCacheMaxConsumption,
         DmcComputedKeyHash
       )
-    case _ => collection.Seq.empty
+    case _ => Seq.empty
   }
 
   def logCacheAttempt(node: NodeTask): Unit = {
@@ -138,7 +138,7 @@ object DmcClientMetrics {
     }
   }
 
-  def logCacheDeduplication(nodes: collection.Seq[NodeTask], valueSizes: collection.Seq[Int]): Unit = {
+  def logCacheDeduplication(nodes: Seq[NodeTask], valueSizes: Seq[Int]): Unit = {
     BaseSamplers.increment(profDmcCacheDeduplicationCount, 1)
     // record count for every deduplicated node
     (nodes zip valueSizes).foreach { case (node, valueSize) =>
@@ -183,7 +183,7 @@ object DmcClientMetrics {
       deduplications: Int,
       consumptions: Long,
       maxConsumptions: Long,
-      hashes: collection.Seq[String]) {
+      hashes: Seq[String]) {
 
     private val pf = NumberFormat.getPercentInstance
     pf.setMaximumFractionDigits(1)
@@ -274,7 +274,7 @@ object DmcClientMetrics {
         deduplications = map.getOrElse(DmcCacheDeduplication, 0L).toInt,
         consumptions = map.getOrElse(DmcCacheConsumption, 0L),
         maxConsumptions = map.getOrElse(DmcCacheMaxConsumption, 0L),
-        hashes = collection.Seq.empty
+        hashes = Seq.empty
       )
     }
   }

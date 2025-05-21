@@ -23,7 +23,7 @@ final class TweakBatch {
   val _instanceTweaks = new LinkedHashMap[TweakableKey, Tweak]
   val _propertyTweaks = new LinkedHashMap[AnyRef, Tweak]
 
-  private def +=(tweaks: collection.Seq[Tweak]): Unit = {
+  private def +=(tweaks: Seq[Tweak]): Unit = {
     val it = tweaks.iterator
     while (it.hasNext) {
       val tweak = it.next()
@@ -34,13 +34,13 @@ final class TweakBatch {
     }
   }
 
-  def tweaks: collection.Seq[Tweak] = {
+  def tweaks: Seq[Tweak] = {
     (_instanceTweaks.values ++ _propertyTweaks.values).toSeq
   }
 }
 
 object TweakBatch {
-  def fromTweaks(tweaks: collection.Seq[Tweak]*) = {
+  def fromTweaks(tweaks: Seq[Tweak]*) = {
     val tb = new TweakBatch()
     val it = tweaks.iterator
     while (it.hasNext) {
@@ -49,7 +49,7 @@ object TweakBatch {
     tb
   }
 
-  def fromScenarios(scenarios: collection.Seq[Scenario]) = {
+  def fromScenarios(scenarios: Seq[Scenario]) = {
     val tb = new TweakBatch()
     val it = scenarios.iterator
     while (it.hasNext) {

@@ -66,8 +66,16 @@ public class SourceLocator {
     return new StackTraceElement(cls.getName(), "", w4l.source, w4l.lineNumber);
   }
 
-  private static ClassReader fromResource(ClassLoader cl, String name) throws IOException {
+  @SuppressWarnings("unused")
+  static byte[] bytesFromResource(Class<?> cls) throws IOException {
+    return bytesFromResource(cls.getClassLoader(), cls.getName().replace('.', '/') + ".class");
+  }
+
+  private static byte[] bytesFromResource(ClassLoader cl, String name) throws IOException {
     InputStream is = cl.getResourceAsStream(name);
+    if (is == null) {
+      throw new IOException("Cannot find class " + name);
+    }
     int INITIAL_ARRAY_BYTES = 8192;
     byte[] bytes = new byte[INITIAL_ARRAY_BYTES];
     int size = 0;
@@ -78,7 +86,11 @@ public class SourceLocator {
       if (size == bytes.length) bytes = Arrays.copyOf(bytes, bytes.length * 2);
     }
     is.close();
-    return new ClassReader(bytes, 0, size);
+    return Arrays.copyOf(bytes, size);
+  }
+
+  private static ClassReader fromResource(ClassLoader cl, String name) throws IOException {
+    return new ClassReader(bytesFromResource(cl, name));
   }
 }
 

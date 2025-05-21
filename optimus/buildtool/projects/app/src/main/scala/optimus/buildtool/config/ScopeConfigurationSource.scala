@@ -17,6 +17,8 @@ import optimus.buildtool.format.Module
 import optimus.buildtool.format.PostInstallApp
 import optimus.platform._
 
+import java.nio.file.Path
+import java.nio.file.Paths
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -33,6 +35,7 @@ import scala.collection.immutable.Set
   @node def compilationBundles: Set[MetaBundle] = compilationScopeIds.map(_.metaBundle)
   @node def scope(id: String): ScopeId
 
+  @node def changesAsScopes(changes: Set[Path]): Set[ScopeId]
   @node def metaBundle(id: String): MetaBundle
   @node def resolveScopes(partialId: String): Set[ScopeId]
   @node def tryResolveScopes(partialId: String): Option[Set[ScopeId]]
@@ -89,4 +92,32 @@ object ScopeConfigurationSourceBase {
     val compiledMetaBundles = compiledIds.map(_.metaBundle)
     compilationBundleScopeIds.filter(bundleScope => compiledMetaBundles.contains(bundleScope.metaBundle))
   }
+
+  @node override def changesAsScopes(changes: Set[Path]): Set[ScopeId] =
+    changes
+      // optimization for huge PRs, map to parent dir to get the # of entries lower
+      .apar.map(path => Option(path.getParent).getOrElse(Paths.get(""))).apar.flatMap { path =>
+        val scopes = pathToScopes(path)
+        log.debug(s"[Dynamic Scoping] Mapped $path to $scopes")
+        scopes
+      }
+
+  @node private def pathToScopes(path: Path): Set[ScopeId] = {
+    val partialId = maybeScopeId(path)
+
+    tryResolveScopes(partialId).getOrElse {
+      log.debug(s"could not resolve path=$path, partialId=$partialId to a scope. Trying parent")
+      // if we get to root we don't want 'null' here
+      pathToScopes(Option(path.getParent).getOrElse(Paths.get("")))
+    }
+  }
+
+  @node private def maybeScopeId(path: Path): String =
+    // find a sub-scope that matches
+    compilationScopeIds.find(scopeId => path.startsWith(scopeConfiguration(scopeId).paths.scopeRoot.path)) match {
+      // yay, we've found our scope
+      case Some(scopeId) => scopeId.toString
+      // not a file in any scope, just some dirs, let's found out which meta/bundle/module those are in
+      case None => path.toString.split("[\\\\/]").filterNot(_ == "projects").take(3).mkString(".")
+    }
 }

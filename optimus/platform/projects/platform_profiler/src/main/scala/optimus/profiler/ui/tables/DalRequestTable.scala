@@ -32,6 +32,7 @@ import optimus.profiler.ui.browser.GraphBrowser
 import optimus.profiler.ui.common.JPopupMenu2
 
 import java.util
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 
 final case class DalRequest(
@@ -63,7 +64,7 @@ class DalRequestsTable(val tline: NodeTimeLine)
     menu
   }
 
-  private def showDalBackTraceInBrowser(requests: ArrayBuffer[DalRequest]): Unit = {
+  private def showDalBackTraceInBrowser(requests: ArraySeq[DalRequest]): Unit = {
     val selectedTaskIds = new util.HashSet[Int]()
     for (r <- requests if r.nodeIDs ne null) {
       for (id <- r.nodeIDs) selectedTaskIds.add(id)

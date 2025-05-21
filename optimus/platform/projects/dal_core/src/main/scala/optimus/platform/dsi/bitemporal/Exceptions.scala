@@ -27,48 +27,6 @@ import org.apache.commons.codec.binary.Hex
 import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
-import scala.util.control.NonFatal
-
-object MessageContainsDALEnv {
-  private val log = getLogger[MessageContainsDALEnv]
-
-  private var detectedEnv: Option[String] = None
-  private[bitemporal] def tryDetectEnv: Option[String] =
-    try {
-      detectedEnv.orElse {
-        val env = Option(EvaluationContext.scenarioStackOrNull)
-          .flatMap(s => Option(s.env))
-          .flatMap(e => Option(e.config))
-          .flatMap(c => Option(c.runtimeConfig))
-          .flatMap(rc => Option(rc.env))
-        if (env.isDefined && env.get.nonEmpty) detectedEnv = env
-        env
-      }
-    } catch {
-      case NonFatal(ex) =>
-        log.warn(s"Exception occurred while extracting env from the runtime. Will set empty env", ex)
-        None
-    }
-}
-
-trait MessageContainsDALEnv extends Exception {
-  import MessageContainsDALEnv._
-
-  private val prefix = {
-    val detectedEnv = tryDetectEnv
-
-    val toPrefix = (txt: String) => s"[${txt}] "
-
-    detectedEnv.map(toPrefix).getOrElse {
-      log.debug(
-        s"exception ${this.getClass.getName} is initialized outside of an evaluation context, will not be able to display DAL env")
-      ""
-    }
-  }
-
-  override def getMessage = prefix + super.getMessage
-
-}
 
 /**
  * A base exception for DSI-related errors.
@@ -466,6 +424,11 @@ class TransformerNotFoundException(message: String) extends DSIException(message
  * Exception thrown when write command is executed on a read only DSI
  */
 class WriteCommandExecutedInReadOnlyDsiException(message: String) extends DSIException(message)
+
+/**
+ * Exception thrown during write when event is reused in not allowed partition
+ */
+class NotAllowedPartitionForEventReuseException(message: String) extends DSIException(message)
 
 /**
  * Exception thrown when PubSub command receives some error from PubSub broker

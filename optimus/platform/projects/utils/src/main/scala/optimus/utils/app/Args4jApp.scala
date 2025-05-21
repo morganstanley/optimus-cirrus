@@ -22,10 +22,8 @@ import java.io.StringWriter
 
 /**
  * Base trait to extend your params with.
- *
- * Extends [[Args4jOptionHandlers]] so that you do not need to import all the handlers manually.
  */
-trait Args4jAppParams extends Args4jOptionHandlers {
+trait Args4jAppParams {
   @args4j.Option(name = "--help", aliases = Array("-h"), usage = "Prints help for this command.")
   var help: Boolean = false
 }

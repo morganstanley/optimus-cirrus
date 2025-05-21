@@ -1,0 +1,10 @@
+package optimus.platform.dal
+
+/**
+ * A link resolution failure.
+ */
+class LinkResolutionException(val ref: EntityReference, val temporalContext: TemporalContext, msg: String)
+    extends DALRTException(msg) {
+  def this(r: EntityReference, temporalContext: TemporalContext) =
+    this(r, temporalContext, s"Invalid entity reference: $r@(temporalContext=$temporalContext)")
+}

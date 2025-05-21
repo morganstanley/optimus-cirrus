@@ -322,12 +322,12 @@ object JavaOptionFiltering {
           // -D11+:-blah    => include -blah for java >= 11
           // -D14-:-blah    => include blah for java <= 14
           case ddecode(vs, ss, arg) +: rest =>
-            seen += Seq(arg)
             val sign = if (ss == "+") 1 else -1
             val argVersion = vs.toInt
             // apply a hard cutoff to tolerant if in tolerance mode
             if ((tolerantOutput && sign > 0) || cond(javaVersion * sign >= argVersion * sign)) {
               log(s"$pre unmasking $arg")
+              seen += Seq(arg)
               filterPass1(rest, arg +: acc)
             } else {
               log(s"$pre excluding $arg")

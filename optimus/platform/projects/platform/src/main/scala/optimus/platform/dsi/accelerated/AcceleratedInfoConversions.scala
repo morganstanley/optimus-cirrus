@@ -197,21 +197,24 @@ object AcceleratedInfoConversions {
     val types = properties("types").asInstanceOf[Seq[String]].toList
     val fields = properties
       .get("fields")
-      .map { case fields: Seq[Map[String, _] @unchecked] =>
-        fields.map(accFieldMap => {
-          val compositeFields = accFieldMap("compositeFields").asInstanceOf[Seq[String]]
-          AcceleratedField(
-            accFieldMap("name").asInstanceOf[String],
-            convertToRegisterFieldType(accFieldMap("typeInfo")),
-            accFieldMap("indexed").asInstanceOf[Boolean],
-            collFlagMap.getOrElse(
-              accFieldMap("collFlag").asInstanceOf[String],
-              throw new IllegalArgumentException("CollFlag is not a valid value")),
-            None,
-            compositeFields
-          )
-        })
-      } get
+      .map { case fields: collection.Seq[Map[String, _] @unchecked] =>
+        fields.iterator
+          .map(accFieldMap => {
+            val compositeFields = accFieldMap("compositeFields").asInstanceOf[Seq[String]]
+            AcceleratedField(
+              accFieldMap("name").asInstanceOf[String],
+              convertToRegisterFieldType(accFieldMap("typeInfo")),
+              accFieldMap("indexed").asInstanceOf[Boolean],
+              collFlagMap.getOrElse(
+                accFieldMap("collFlag").asInstanceOf[String],
+                throw new IllegalArgumentException("CollFlag is not a valid value")),
+              None,
+              compositeFields
+            )
+          })
+          .toSeq
+      }
+      .get
     val canRead = properties("canRead").asInstanceOf[Boolean]
     val canWrite = properties("canWrite").asInstanceOf[Boolean]
     val tableHash = properties("tableHash").asInstanceOf[Seq[String]].toList

@@ -12,9 +12,10 @@
 package optimus.platform
 
 import java.time.Instant
-
 import optimus.dsi.partitioning.Partition
 import optimus.platform.dal.DALImpl
+import optimus.platform.temporalSurface.FixedTemporalSurface
+import optimus.platform.temporalSurface.TemporalSurface
 import optimus.platform.temporalSurface.impl.FlatTemporalContext
 import optimus.platform.temporalSurface.impl.TemporalContextImpl
 
@@ -22,7 +23,8 @@ sealed trait TemporalContextFactory extends Serializable {
   @node def generator: TemporalContextGenerator
 }
 case object LoadContextTemporalContextFactory extends TemporalContextFactory {
-  @node override def generator = TemporalContextGenerator.from(DALImpl.loadContext)
+  @node override def generator =
+    TemporalContextGenerator.from(DALImpl.loadContext)
 }
 case object FlatTemporalContextFactory extends TemporalContextFactory {
   @node override def generator = TemporalContextGenerator.FlatTemporalContextGenerator
@@ -31,23 +33,23 @@ case object FlatTemporalContextFactory extends TemporalContextFactory {
 private[optimus] trait ExtensibleTemporalContextFactory extends TemporalContextFactory
 
 trait TemporalContextGenerator extends Serializable {
-  def temporalContext(vt: Instant, tt: Instant, tickTts: Map[Partition, Instant] = Map.empty): TemporalContextImpl
-  def isTickable: Boolean
+  type GeneratedTC <: TemporalSurface
+  def temporalContext(vt: Instant, tt: Instant, tickTts: Map[Partition, Instant] = Map.empty): GeneratedTC
 }
 object TemporalContextGenerator {
-  def from(context: TemporalContext): TemporalContextGenerator = context match {
+  def from(context: TemporalContext): Generator = context match {
     case context: TemporalContextImpl => Generator(context)
   }
 
   object FlatTemporalContextGenerator extends TemporalContextGenerator {
+    override type GeneratedTC = FlatTemporalContext
     val tag = Some("$$FlatTemporalContextGenerator")
     def temporalContext(vt: Instant, tt: Instant, tickTts: Map[Partition, Instant]) = FlatTemporalContext(vt, tt, tag)
-    def isTickable = false
   }
 
-  private final case class Generator(context: TemporalContextImpl) extends TemporalContextGenerator {
-    override def temporalContext(vt: Instant, tt: Instant, tickTts: Map[Partition, Instant]): TemporalContextImpl =
+  final case class Generator(context: TemporalContextImpl) extends TemporalContextGenerator {
+    override type GeneratedTC = TemporalContextImpl
+    override def temporalContext(vt: Instant, tt: Instant, tickTts: Map[Partition, Instant]): GeneratedTC =
       context
-    override def isTickable: Boolean = context.canTick
   }
 }

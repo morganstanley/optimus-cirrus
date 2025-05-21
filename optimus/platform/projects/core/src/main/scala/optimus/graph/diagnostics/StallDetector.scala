@@ -212,7 +212,7 @@ private[optimus] class DefaultStallDetector(
     fullTimeoutSecs: Int,
     adaptedTimeoutSecs: Int,
     detectStallAdapted: Boolean,
-    threadNameInclusionList: collection.Seq[String],
+    threadNameInclusionList: Seq[String],
     exceptionLogger: ExceptionLogger
 ) extends StallDetector {
   import StallDetector._

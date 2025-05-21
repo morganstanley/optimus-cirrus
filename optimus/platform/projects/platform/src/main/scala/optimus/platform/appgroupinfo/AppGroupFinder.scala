@@ -39,7 +39,7 @@ object AppGroupFinder {
 
   def appGroupsFromInputStream(appGroupInputStream: InputStream): Seq[AppGroupInfo] = {
     usingQuietly(new CSVReader(new InputStreamReader(appGroupInputStream))) { reader =>
-      val lines = reader.readAll().asScala.map(_.toSeq)
+      val lines = reader.readAll().asScalaUnsafeImmutable.map(_.toSeq)
       val maybeHeader = lines.headOption
       maybeHeader match {
         case Some(header) =>

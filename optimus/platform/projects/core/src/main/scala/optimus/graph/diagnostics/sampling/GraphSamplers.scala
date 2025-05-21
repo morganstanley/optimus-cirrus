@@ -10,6 +10,7 @@
  * limitations under the License.
  */
 package optimus.graph.diagnostics.sampling
+import optimus.breadcrumbs.crumbs.Properties._
 import optimus.core.Collections
 import optimus.graph.EnumCounter
 import optimus.graph.GCMonitor
@@ -22,15 +23,13 @@ import optimus.graph.diagnostics.SchedulerProfileEntry
 import optimus.graph.diagnostics.messages.AccumulatedValue
 import optimus.graph.diagnostics.messages.Accumulating
 import optimus.graph.diagnostics.messages.AllOGCounters
-import optimus.breadcrumbs.crumbs.Properties._
 import optimus.graph.diagnostics.sampling.Cardinality.LogLogCounter
-import optimus.graph.tracking.monitoring.QueueStats
 import optimus.graph.tracking.DependencyTrackerRoot
-
-import scala.jdk.CollectionConverters._
+import optimus.graph.tracking.monitoring.QueueStats
 import optimus.scalacompat.collection._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.ArraySeq
+import scala.jdk.CollectionConverters._
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
 class GraphSamplers extends SamplerProvider {
@@ -38,9 +37,9 @@ class GraphSamplers extends SamplerProvider {
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]] = {
     val util = new Util(sp)
     import util._
-    val ss = ArrayBuffer.empty[SamplerTrait[_, _]]
+    val ss = ArraySeq.newBuilder[SamplerTrait[_, _]]
 
-    ss += Diff(_ => OGSchedulerTimes.getGraphStallTime(0) / NANOSPERMILLI, profStallTime)
+    ss += DiffNonZero(_ => OGSchedulerTimes.getGraphStallTime(0) / NANOSPERMILLI, profStallTime)
 
     // graph, cache, self-time during epoch
     ss += new Sampler(
@@ -176,41 +175,63 @@ class GraphSamplers extends SamplerProvider {
       }
     )
 
-    // State of DependencyTracker queues
-    {
-      type Cumul = Map[String, QueueStats]
-      type Snap = Map[String, QueueStats.Snap]
+    // Total state of all DependencyTrackerQueues
+    locally {
       ss += new Sampler(
         sp,
-        "dep tracker",
-        snapper = _ => DependencyTrackerRoot.snap(),
-        process = (previousSnap: Option[Cumul], newSnap: Cumul) => {
-          val prev = previousSnap.getOrElse(Map.empty)
-          val builder = Map.newBuilder[String, QueueStats.Snap]
-          val keys = newSnap.keySet ++ prev.keySet
-          for (k <- keys) {
-            (prev.get(k), newSnap.get(k)) match {
-              case (prev, Some(current)) =>
-                builder += k -> QueueStats.diff(prev, current)
-
-              case (Some(prev), None) =>
-                builder += k -> QueueStats.gced(prev)
-
-              case (None, None) =>
-            }
-          }
-
-          builder.result()
-        },
-        publish = (snap: Snap) =>
-          if (snap.isEmpty) Elems.Nil
+        "dep tracker totals",
+        snapper = _ => DependencyTrackerRoot.snapTotalQueueStats(),
+        process = (previousSnap: Option[QueueStats], newSnap: QueueStats) => QueueStats.diff(previousSnap, newSnap),
+        publish = (snap: QueueStats.Snap) =>
+          if (snap == QueueStats.Snap.zero) Elems.Nil
           else
             Elems(
-              profDepTrackerTaskAdded -> snap.mapValuesNow(_.added),
-              profDepTrackerTaskProcessed -> snap.mapValuesNow(_.removed),
-              profDepTrackerTaskQueued -> snap.mapValuesNow(_.currentSize)
+              profDepTrackerTaskTotalAdded -> snap.added,
+              profDepTrackerTaskTotalProcessed -> snap.processed,
+              profDepTrackerTaskTotalQueued -> snap.currentSize
             )
       )
+    }
+
+    // State of DependencyTracker queues, disaggregated by DependencyTrackerQueue#nameForAggregatedStats
+    locally {
+      val numDTQ = sp.propertyUtils.get("optimus.sampling.deptracker.maxqueues", 0)
+      if (numDTQ > 0) {
+        type Cumul = Map[String, QueueStats]
+        type Snap = Map[String, QueueStats.Snap]
+        ss += new Sampler(
+          sp,
+          "dep tracker per-name",
+          snapper = _ => DependencyTrackerRoot.snapQueueStats(),
+          process = (previousSnap: Option[Cumul], newSnap: Cumul) => {
+            val prev = previousSnap.getOrElse(Map.empty)
+            val builder = Map.newBuilder[String, QueueStats.Snap]
+            val keys = newSnap.keySet ++ prev.keySet
+            for (k <- keys) {
+              (prev.get(k), newSnap.get(k)) match {
+                case (prev, Some(current)) =>
+                  builder += k -> QueueStats.diff(prev, current)
+
+                case (Some(prev), None) =>
+                  builder += k -> QueueStats.gced(prev)
+
+                case (None, None) =>
+              }
+            }
+
+            builder.result()
+          },
+          publish = (snap: Snap) =>
+            if (snap.isEmpty) Elems.Nil
+            else {
+              Elems(
+                profDepTrackerTaskAdded -> snap.mapValuesNow(_.added).take(numDTQ),
+                profDepTrackerTaskProcessed -> snap.mapValuesNow(_.processed).take(numDTQ),
+                profDepTrackerTaskQueued -> snap.mapValuesNow(_.currentSize).take(numDTQ)
+              )
+            }
+        )
+      }
     }
 
     // GC costs, according to GCMonitor
@@ -253,8 +274,9 @@ class GraphSamplers extends SamplerProvider {
         publish = c => Elems(gcNativeStats -> c)
       )
 
-    ss += Diff(_ => OGSchedulerTimes.getPreOptimusStartupTime / NANOSPERMILLI, profPreOptimusStartup)
-    ss
+    ss += DiffNonZero(_ => OGSchedulerTimes.getPreOptimusStartupTime / NANOSPERMILLI, profPreOptimusStartup)
+    ss += DiffNonZero(_ => OGSchedulerTimes.getOptimusStartupTime / NANOSPERMILLI, profOptimusStartup)
+    ss.result()
   }
 
 }

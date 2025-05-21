@@ -95,11 +95,28 @@ object MonitoringBreadcrumbs {
   private[optimus] def sendAsyncStackTracesCrumb(): Unit =
     note(OnceBySourceLoc, feature -> "AsyncStackTraces" :: V.verboseProperties)
 
-  private[optimus] def sendXSFTCycleRecoveryCrumb(task: NodeTask, stack: String): Unit =
+  private[optimus] def sendCycleRecoveryCrumb(task: NodeTask, stack: String): Unit =
     warn(
       OnceBy(task.executionInfo.fullName) && OnceByAppId(task),
       task,
-      xsftCycle -> task.executionInfo.fullName :: xsftStack -> stack :: Elems.Nil)
+      recoveredCycleNode -> task.executionInfo.fullName :: recoveredCycleStack -> stack :: Elems.Nil)
+
+  private[optimus] def sendThrottleCycleBreakingCrumb(task: NodeTask): Unit = {
+    BaseSamplers.increment(P.throttleCycleBreaking, 1)
+    warn(
+      OnceBy(task.executionInfo.fullName) && OnceByAppId(task),
+      task,
+      P.event -> "ThrottleCycleBreaking" :: Option(task).map(P.nodeStack -> _.simpleChain()) :: Elems.Nil
+    )
+  }
+
+  private[optimus] def sendThrottleIgnoredCrumb(task: NodeTask): Unit = {
+    BaseSamplers.increment(P.throttleIgnored, 1)
+    warn(
+      OnceBy(task.executionInfo.fullName) && OnceByAppId(task),
+      task,
+      P.event -> "ThrottleIgnored" :: Option(task).map(P.nodeStack -> _.simpleChain()) :: Elems.Nil)
+  }
 
   private[optimus] def cacheTimeMisreported(task: NodeTask, time: Long): Unit = {
     val event = "CacheTimeMisreported"
@@ -264,8 +281,20 @@ object MonitoringBreadcrumbs {
   }
 
   /** send a breadcrumb when a batcher batches an XS node */
-  private[optimus] def sendBatchingInsideXSCallStackCrumb(node: NodeTask): Unit = synchronized {
+  private[optimus] def sendBatchingInsideXSCallStackCrumb(node: NodeTask): Unit = {
     sendWithStackAsProperties(OnceBySourceLoc, "batchingInsideXSCallStack", node)
+  }
+
+  // TODO (OPTIMUS-74952): Warns when serializing XS scenario stack, once per xs owner.
+  private[optimus] def serializingXScenarioStack(xsOwnerOrNull: NodeTask, currentNodeOrNull: NodeTask): Unit = {
+    val event = "serializingXScenarioStack"
+    val ownerName = Option(xsOwnerOrNull).map(_.executionInfo().nodeName().toString).getOrElse("")
+    val props = P.event -> event ::
+      P.node -> ownerName ::
+      P.stackTrace -> Thread.currentThread().getStackTrace.map(_.toString) ::
+      P.nodeStack -> Option(currentNodeOrNull).fold("")(_.waitersToNodeStack(false, true, false, -1)) ::
+      V.properties
+    warn(OnceBy(event, ownerName), props)
   }
 
   def sendCriticalSyncStackCrumb(nodeStackTrace: String, count: Int): Unit =

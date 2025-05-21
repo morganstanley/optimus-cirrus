@@ -191,20 +191,17 @@ import scala.collection.mutable
         .apar
         .map(_.artifactsForDownstreamRuntimes))
 
+  // contains PathingArtifacts for internal agents and ClassFileArtifacts for external agents
   @node def agentsForOurRuntime: IndexedSeq[Artifact] = {
     val externalArtifacts = runtimeDependencies.transitiveExternalArtifacts
     val resolvedArtifacts =
-      externalArtifacts
-        .collect { case c: ResolutionArtifact => c.result.resolvedArtifacts }
-        .flatten
-        .filter(_.containsAgent)
+      externalArtifacts.collect { case c: ResolutionArtifact =>
+        c.result.resolvedArtifacts.filter(_.containsAgent)
+      }.flatten
 
     internalAgentsForOurRuntime ++ resolvedArtifacts
   }
 
-  @node def agentsForOurRuntimeArtifacts: IndexedSeq[ClassFileArtifact] = agentsForOurRuntime.collect {
-    case c: ClassFileArtifact => c
-  }
 
   @node def allUpstreamArtifacts: IndexedSeq[Artifact] =
     // ask our upstreams for full compile, compileOnly and runtime artifacts

@@ -22,7 +22,6 @@ import optimus.scalacompat.collection._
 import optimus.scalacompat.collection.BuildFrom
 import optimus.utils.CollectionUtils._
 
-import scala.collection.GenTraversableOnce
 import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.Builder
@@ -350,24 +349,24 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
 
   @nodeSync
   @scenarioIndependentTransparent
-  private[optimus] def flatMapPrelifted[B, That](f: A => Node[GenTraversableOnce[B]])(implicit
+  private[optimus] def flatMapPrelifted[B, That](f: A => Node[IterableOnce[B]])(implicit
       cbf: BuildFrom[CC, B, That]): That = needsPlugin
   // noinspection ScalaUnusedSymbol
-  private[optimus] def flatMapPrelifted$queued[B, That](f: A => Node[GenTraversableOnce[B]])(implicit
+  private[optimus] def flatMapPrelifted$queued[B, That](f: A => Node[IterableOnce[B]])(implicit
       cbf: BuildFrom[CC, B, That]): Node[That] = flatMap$queued(f)
 
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
-  def flatMap[B, That](@nodeLift f: A => GenTraversableOnce[B])(implicit cbf: BuildFrom[CC, B, That]): That =
-    flatMap$withNode { toNodeFactory(f) }
-  def flatMap$queued[B, That](f: A => Node[GenTraversableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
+  def flatMap[B, That](@nodeLift f: A => IterableOnce[B])(implicit cbf: BuildFrom[CC, B, That]): That =
+    flatMap$newNode(toNodeFactory(f)).get
+  def flatMap$queued[B, That](f: A => Node[IterableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
     flatMap$newNode(toNodeFQ(f)).enqueue
-  def flatMap$queued[B, That](f: A => GenTraversableOnce[B], cbf: BuildFrom[CC, B, That]): NodeFuture[That] =
+  def flatMap$queued[B, That](f: A => IterableOnce[B], cbf: BuildFrom[CC, B, That]): NodeFuture[That] =
     flatMap$newNode(toNodeFactory(f))(cbf).enqueue
-  def flatMap$withNode[B, That](f: A => Node[GenTraversableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): That =
+  def flatMap$withNode[B, That](f: A => Node[IterableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): That =
     flatMap$newNode(f).get
-  final private[optimus] def flatMap$newNode[B, That](f: A => Node[GenTraversableOnce[B]])(implicit
+  final private[optimus] def flatMap$newNode[B, That](f: A => Node[IterableOnce[B]])(implicit
       cbf: BuildFrom[CC, B, That]) =
     if (isEmpty) emptyThat(cbf)
     else if (doSync) {
@@ -375,15 +374,10 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
       c.foreach(x => f(x).get.foreach(y => builder += y))
       new AlreadyCompletedNode(builder.result())
     } else
-      new ConverterSequenceNode[A, GenTraversableOnce[B], That](
-        c,
-        f,
-        NodeTaskInfo.FlatMap,
-        workMarker,
-        maxConcurrency) {
+      new ConverterSequenceNode[A, IterableOnce[B], That](c, f, NodeTaskInfo.FlatMap, workMarker, maxConcurrency) {
         private val builder = cbf.newBuilder(c)
         override def getFinalResult: That = builder.result()
-        override def consume(b: GenTraversableOnce[B]): Unit = builder ++= b.seq
+        override def consume(b: IterableOnce[B]): Unit = builder ++= b.seq
       }
 
   @nodeSync
@@ -397,7 +391,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     if (isEmpty) unitNode
     else if (doSync) new AlreadyCompletedNode[Unit](c.foreach(f(_)))
     else
-      new CommutativeAggregatorNode[U, Unit](workMarker, maxConcurrency, -1) {
+      new CommutativeAggregatorNode[U, Unit](workMarker, maxConcurrency, c.knownSize) {
         private[this] val i = c.iterator
         override def hasNextIteration: Boolean = i.hasNext
         override def nextIteration: Iteration = new Iteration(f(i.next()))
@@ -568,7 +562,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
-  def forall(@nodeLift f: A => Boolean): Boolean = forall$withNode(toNodeFactory(f))
+  def forall(@nodeLift f: A => Boolean): Boolean = forall$newNode(toNodeFactory(f)).get
   // noinspection ScalaUnusedSymbol
   def forall$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = forall$newNode(toNodeFQ(f)).enqueue
   def forall$withNode(f: A => Node[Boolean]): Boolean = forall$newNode(f).get
@@ -770,19 +764,21 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     @nodeSync
     @nodeSyncLift
     @scenarioIndependentTransparent
-    final def map(@nodeLift f: A => B): That = needsPlugin
+    final def map(@nodeLift f: A => B): That =
+      AsyncBase.this.map$newNode(toNodeFactory(f))(bf).get
     // noinspection ScalaUnusedSymbol
-    final def map$queued(f: A => Node[B]): NodeFuture[That] = AsyncBase.this.map$newNode(f)(bf).enqueue
+    final def map$queued(f: A => Node[B]): NodeFuture[That] = AsyncBase.this.map$newNode(toNodeFQ(f))(bf).enqueue
     final def map$withNode(f: A => Node[B]): That = AsyncBase.this.map$newNode(f)(bf).get
 
     @nodeSync
     @nodeSyncLift
     @scenarioIndependentTransparent
-    def flatMap(@nodeLift f: A => GenTraversableOnce[B]): That = needsPlugin
+    def flatMap(@nodeLift f: A => IterableOnce[B]): That =
+      AsyncBase.this.flatMap$newNode(toNodeFactory(f))(bf).get
     // noinspection ScalaUnusedSymbol
-    def flatMap$queued(@nodeLift f: A => Node[GenTraversableOnce[B]]): NodeFuture[That] =
-      AsyncBase.this.flatMap$newNode(f)(bf).enqueue
-    def flatMap$withNode(f: A => Node[GenTraversableOnce[B]]): That = AsyncBase.this.flatMap$newNode(f)(bf).get
+    def flatMap$queued(@nodeLift f: A => Node[IterableOnce[B]]): NodeFuture[That] =
+      AsyncBase.this.flatMap$newNode(toNodeFQ(f))(bf).enqueue
+    def flatMap$withNode(f: A => Node[IterableOnce[B]]): That = AsyncBase.this.flatMap$newNode(f)(bf).get
   }
   def auto[B, That](bf: BuildFrom[CC, B, That]): AutoAsync[B, That] = new AutoAsync[B, That](bf)
 }

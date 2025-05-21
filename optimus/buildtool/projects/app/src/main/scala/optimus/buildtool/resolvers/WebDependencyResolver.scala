@@ -12,6 +12,7 @@
 package optimus.buildtool.resolvers
 
 import optimus.buildtool.config.DependencyDefinition
+import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.LocalDefinition
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ScopeConfiguration
@@ -54,8 +55,9 @@ object WebDependencyResolver {
 
   @async def resolveWebInfo(
       idConfigs: Map[ScopeId, ScopeConfiguration],
-      dependencyDefinitions: Seq[DependencyDefinition]): Map[ScopeId, WebScopeInfo] =
+      dependencies: ExternalDependenciesSource): Map[ScopeId, WebScopeInfo] =
     idConfigs.apar.map { case (id, config) =>
+      val dependencyDefinitions = dependencies.externalDependencies(config.moduleSet).definitions
       // all web modules are required to provide web yaml file
       val yamlFiles: Map[FileAsset, String] =
         searchLockFile(config, WebYamlFileName).map(f => f -> loadFileAssetToString(f)).toMap

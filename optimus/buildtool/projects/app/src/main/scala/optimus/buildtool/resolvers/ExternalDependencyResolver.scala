@@ -16,10 +16,16 @@ import optimus.buildtool.artifacts.ExternalArtifactId
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
+import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.utils.Hashing
 import optimus.platform._
+
 import scala.collection.immutable.{IndexedSeq, Seq}
+
+@entity trait ExternalDependencyResolverSource {
+  @node def resolver(moduleSet: ModuleSet): ExternalDependencyResolver
+}
 
 @entity abstract class ExternalDependencyResolver(val loadedDefinitions: Seq[DependencyDefinition]) {
   val (extraLibsDefinitions, dependencyDefinitions) = loadedDefinitions.partition(_.isExtraLib)
@@ -89,8 +95,7 @@ final case class ResolutionResult(
     name: String,
     config: String,
     version: String,
-    isMaven: Boolean
-) {
+    isMaven: Boolean) {
   def module: String = s"$group:$name"
   def dotModule: String = s"$group.$name"
   def noVersionName: String = s"$module:$config"

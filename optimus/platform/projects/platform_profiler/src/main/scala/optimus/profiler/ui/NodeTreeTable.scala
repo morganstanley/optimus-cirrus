@@ -43,7 +43,7 @@ import optimus.profiler.ui.NodeTreeTable.recomputeMinMaxTime
 import optimus.profiler.ui.common.NodeGroup
 
 import java.awt.Color
-import scala.collection.mutable
+import scala.collection.compat.immutable.ArraySeq
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -300,13 +300,13 @@ object NodeTreeTable {
 }
 
 /** Browse children/parents of traced nodes */
-class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, var expandCfg: ExpandConfig)
+class NodeTreeTable(var _roots: ArraySeq[PNodeTask], val details: NodeView, var expandCfg: ExpandConfig)
     extends NPTreeTable[NodeTreeView] {
   emptyRow = new NodeTreeView(PNodeTask.fake, expandCfg, -1)
 
   private var fullRange: TimeFullRange = _
 
-  def this(details: NodeView, expandCfg: ExpandConfig) = this(ArrayBuffer.empty[PNodeTask], details, expandCfg)
+  def this(details: NodeView, expandCfg: ExpandConfig) = this(ArraySeq.empty[PNodeTask], details, expandCfg)
 
   override protected def afterUpdateList(): Unit = {
     fullRange = null
@@ -315,7 +315,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
 
   private val localColumns = ArrayBuffer(new TableColumnTimeRange[NodeTreeView]("Time Frame", 100) {
     override def valueOf(row: NodeTreeView): TimeSubRange = {
-      val firstAndLastTimes = mutable.ArrayBuffer[(Long, Long)]()
+      val firstAndLastTimes = ArraySeq.newBuilder[(Long, Long)]
       if (fullRange eq null) {
         rows.foreach { nodeTreeView =>
           if (nodeTreeView.task ne NodeTreeTable.fakePNodeTask) {
@@ -324,7 +324,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
               firstAndLastTimes += ((pntsk.firstStartTime, pntsk.completedTime))
           }
         }
-        fullRange = recomputeMinMaxTime(firstAndLastTimes)
+        fullRange = recomputeMinMaxTime(firstAndLastTimes.result())
       }
       TimeSubRange(row.task.firstStartTime, row.task.completedTime, fullRange)
     }
@@ -334,7 +334,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
   setView(NodeTreeTable.allColumns ++ localColumns)
 
   /** Returns selections ignoring groups */
-  final def getNodeTaskSelections: ArrayBuffer[PNodeTask] = {
+  final def getNodeTaskSelections: ArraySeq[PNodeTask] = {
     getSelections.map(_.task).filterNot(_ eq NodeTreeTable.fakePNodeTask)
   }
 
@@ -345,11 +345,11 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
   }
 
   final def showNode(newRootTask: PNodeTask): Unit = {
-    showNodes(if (newRootTask eq null) ArrayBuffer.empty[PNodeTask] else ArrayBuffer(newRootTask))
+    showNodes(if (newRootTask eq null) ArraySeq.empty[PNodeTask] else ArraySeq(newRootTask))
   }
 
-  final def showNodes(newTasks: ArrayBuffer[PNodeTask], expand: Boolean = true): Unit = {
-    _roots = if (newTasks eq null) ArrayBuffer.empty[PNodeTask] else newTasks
+  final def showNodes(newTasks: ArraySeq[PNodeTask], expand: Boolean = true): Unit = {
+    _roots = if (newTasks eq null) ArraySeq.empty[PNodeTask] else newTasks
     if (_roots.nonEmpty) {
       if (expandCfg.mode eq NodeTreeTable.uiInvalidation)
         expandUITracks(_roots) // Expand ui tracks and setList
@@ -364,21 +364,21 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
     } else setList(List())
   }
 
-  private def openFromRoot(roots: ArrayBuffer[PNodeTask], maxCount: Int = 50): Unit =
+  private def openFromRoot(roots: ArraySeq[PNodeTask], maxCount: Int = 50): Unit =
     openFromRoot(roots, expandCfg, maxCount)
 
-  private def openFromRoot(roots: ArrayBuffer[PNodeTask], cfg: ExpandConfig, maxCount: Int): Unit = {
+  private def openFromRoot(roots: ArraySeq[PNodeTask], cfg: ExpandConfig, maxCount: Int): Unit = {
     val list = roots.map(root => new NodeTreeView(root, cfg, 0))
     NPTreeNodeExt.openTreeBFS(list, maxCount)
     setList(list: Iterable[NodeTreeView])
   }
 
-  private def expandCommonParent(newTasks: ArrayBuffer[PNodeTask]): Unit = {
+  private def expandCommonParent(newTasks: ArraySeq[PNodeTask]): Unit = {
     if (newTasks.length >= 2) {
       val taskA = newTasks.head
       val taskB = newTasks(1)
       val parent = NodeGraphVisitor.commonParent(taskA, taskB)
-      if (parent ne null) openFromRoot(ArrayBuffer(parent))
+      if (parent ne null) openFromRoot(ArraySeq(parent))
       else {
         println(s"No common parent between ${taskA.nodeName} and ${taskB.nodeName}")
         setList(List())
@@ -387,7 +387,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
       openFromRoot(newTasks, expandCfg.withDirection(toChildren = false), maxCount = 50) // same as parents view
   }
 
-  private def expandTopParents(selectedTasks: ArrayBuffer[PNodeTask], expandTree: Boolean = true): Unit = {
+  private def expandTopParents(selectedTasks: ArraySeq[PNodeTask], expandTree: Boolean = true): Unit = {
     val topParents = NodeGraphVisitor.topParents(selectedTasks)
     if (topParents.nonEmpty) {
       if (expandTree) {
@@ -405,7 +405,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
     }
   }
 
-  private def expandUITracksGroupedByTweaks(roots: ArrayBuffer[PNodeTask]): Unit = {
+  private def expandUITracksGroupedByTweaks(roots: ArraySeq[PNodeTask]): Unit = {
     val nuis = NodeGraphVisitor.nodeToUTrackToInvalidate(roots)
 
     val views = new util.IdentityHashMap[Tweak, InvalidatingTweakTreeView]()
@@ -425,7 +425,7 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
     setList(views.values.asScala)
   }
 
-  private def expandUITracks(roots: ArrayBuffer[PNodeTask]): Unit = {
+  private def expandUITracks(roots: ArraySeq[PNodeTask]): Unit = {
     val nuis = NodeGraphVisitor.nodeToUTrackToInvalidate(roots)
     val treeNodes = ArrayBuffer[NodeTreeView]()
     val it = nuis.iterator
@@ -502,8 +502,8 @@ class NodeTreeTableForGroupedBrowsing(details: NodeView)
   override def wantSummary: Boolean = false // note, NPTreeTable disables this, so re-enable here
 
   /** to allow us to redo grouping in browser */
-  private var _browserFilterCallback: Seq[PNodeTask] => Unit = _
-  private[ui] def setBrowserFilterCallback(callback: Seq[PNodeTask] => Unit): Unit = _browserFilterCallback = callback
+  private var _browserFilterCallback: Iterable[PNodeTask] => Unit = _
+  private[ui] def setBrowserFilterCallback(callback: Iterable[PNodeTask] => Unit): Unit = _browserFilterCallback = callback
 
   /** need to setRows on the underlying data model before calling updateFilterAndRefresh, then redo browser grouping */
   private[ui] override def updateFilterAndRefresh(): Unit = {

@@ -72,6 +72,7 @@ trait PubSubCallback {
   def streamValid(streamId: String): Boolean
   def remoteStreamCleanup(streamId: String): Unit
   def handlePubSubEvent(evt: GlobalEvent): Unit
+  def checkStaleStreams(): Unit
 }
 
 class PubSubClientHandler(
@@ -80,7 +81,8 @@ class PubSubClientHandler(
     onError: (DalBrokerClient, Throwable) => Unit,
     checkStreamValid: String => Boolean,
     doRemoteStreamCleanup: String => Unit,
-    pubsubOnConnect: () => Unit
+    pubsubOnConnect: () => Unit,
+    onStaleStreams: () => Unit
 ) extends PubSubCallback {
   override def handlePubSubResult(streamIdWithResult: Seq[(String, Result)]): Unit = onSuccess(streamIdWithResult)
   override def handlePubSubException(failedClient: DalBrokerClient, th: Throwable): Unit = onError(failedClient, th)
@@ -94,6 +96,7 @@ class PubSubClientHandler(
       case _                        =>
     }
   }
+  override def checkStaleStreams(): Unit = onStaleStreams()
 }
 
 final case class PubSubContextMetadata(chainedID: ChainedID, appNameTag: Option[String])

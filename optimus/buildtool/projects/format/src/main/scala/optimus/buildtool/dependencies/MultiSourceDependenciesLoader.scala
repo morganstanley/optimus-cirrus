@@ -14,10 +14,9 @@ package optimus.buildtool.dependencies
 import com.typesafe.config._
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
-import optimus.buildtool.dependencies.JvmDependenciesLoader.loadLocalDefinitions
 import optimus.buildtool.dependencies.MultiSourceDependency.MultipleAfsError
 import optimus.buildtool.format.ConfigUtils.ConfOps
-import optimus.buildtool.format.DependenciesConfig
+import optimus.buildtool.format.DependencyConfig
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.OrderingUtils
 import optimus.buildtool.format.OrderingUtils._
@@ -27,10 +26,10 @@ import optimus.buildtool.format.Failure
 import optimus.buildtool.format.JvmDependenciesConfig
 import optimus.buildtool.format.Keys
 import optimus.buildtool.format.Keys.jvmDependencyDefinition
-import optimus.buildtool.format.MavenDependenciesConfig
 import optimus.buildtool.format.OrderingUtils.NestedDefinitions
 import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.format.Success
+import optimus.buildtool.utils.FormatUtils.distinctLast
 
 import scala.collection.immutable.Seq
 import scala.collection.compat._
@@ -43,115 +42,25 @@ object MultiSourceDependenciesLoader {
   private[buildtool] val Scala = "scala"
   private[buildtool] val Extends = "extends"
   private[buildtool] val Runtime = "runtime"
-  private[buildtool] val jvmPathStr = JvmDependenciesConfig.path.pathString
   private[buildtool] val MavenOnlyWithoutNoAfsFlagError =
     "for maven dependency without AFS equivalents, please set 'noAfs = true' flag"
 
-  private[buildtool] def duplicationMsg(d: DependencyDefinition, withFile: String, withLine: Int, suffix: String = "") =
-    s"dependency ${d.key} already be defined in $withFile line $withLine ! $suffix"
+  private[buildtool] def duplicationMsg(key: String, otherFile: DependencyConfig, otherLine: Int) =
+    s"Dependency $key is already defined in ${otherFile.path.pathString}:$otherLine"
 
-  private def infoForChecking(d: DependencyDefinition) =
-    DependencyDefinition(d.group, d.name, "", LocalDefinition, variant = d.variant)
-
-  private def getErrors(
-      obtFile: ObtFile,
-      deps: Seq[(DependencyDefinition, DependencyDefinition)],
-      withFile: String,
-      surffix: String = ""): Seq[Error] =
-    deps.map { case (from, to) =>
-      Error(duplicationMsg(from, withFile, to.line, surffix), obtFile, from.line)
-    }
-
-  private def checkDuplicatedJvmNames(obtFile: ObtFile, loaded: Seq[MultiSourceDependency]): Seq[Error] = {
-    val depNameToDef = loaded.map { d => s"${d.definition.group}.${d.definition.name}" -> d.definition }.toMap
-    loaded.flatMap { l =>
-      depNameToDef.get(l.name) match {
-        case Some(dup) => getErrors(obtFile, Seq((l.definition, dup)), jvmPathStr)
-        case None      => Seq.empty
-      }
-    }
-  }
-
-  private def checkDuplicatedAfslibs(obtFile: ObtFile, afsDefinedDeps: Seq[MultiSourceDependency]): Seq[Error] =
-    afsDefinedDeps
-      .groupBy(d => infoForChecking(d.definition))
-      .filter(_._2.size > 1) // by info for checking
-      .flatMap { case (_, deps) =>
-        val sorted = deps.sortBy(_.line)
-        val from = sorted.head
-        val to = sorted.last
-        getErrors(obtFile, Seq((from.definition, to.definition)), jvmPathStr)
-      }
-      .to(Seq)
-
-  private def checkDuplicatedMavenlibs(obtFile: ObtFile, mavenDefinedDeps: Seq[MultiSourceDependency]): Seq[Error] =
-    mavenDefinedDeps
-      .flatMap { d => d.maven.map(m => m -> infoForChecking(m)) }
-      .groupBy(_._2) // by info for checking
-      .filter(_._2.size > 1)
-      .flatMap { case (_, deps) =>
-        val sorted = deps.map(_._1).sortBy(_.line)
-        val from = sorted.head
-        val to = sorted.last
-        if (from == to) Nil // allow ivy config extends
-        else getErrors(obtFile, Seq((from, to)), jvmPathStr)
-      }
-      .to(Seq)
-
-  def checkDuplicates(
-      obtFile: ObtFile,
-      multiSourceDeps: MultiSourceDependencies,
-      singleSourceDeps: Seq[DependencyDefinition]): Result[MultiSourceDependencies] = {
-
-    def getPredefinedDep(preDefs: Seq[DependencyDefinition], target: DependencyDefinition): DependencyDefinition =
-      preDefs.find(predef => predef.name == target.name && predef.group == target.group).get
-
-    val (mavenDeps, afsDeps) = singleSourceDeps.partition(_.isMaven)
-    val (afsDepsToCheck, mavenDepsToCheck) = (afsDeps.map(infoForChecking), mavenDeps.map(infoForChecking))
-
-    val duplicatedNames = checkDuplicatedJvmNames(obtFile, multiSourceDeps.loaded)
-
-    val duplicatedAfs = checkDuplicatedAfslibs(obtFile, multiSourceDeps.afsDefinedDeps)
-
-    val afsRedefinedErrors = getErrors(
-      obtFile,
-      multiSourceDeps.afsDefinedDeps.collect {
-        case d if afsDepsToCheck.contains(infoForChecking(d.definition)) =>
-          d.definition -> getPredefinedDep(afsDeps, d.definition)
-      },
-      DependenciesConfig.path.pathString
-    )
-
-    val duplicatedMavenErrors = checkDuplicatedMavenlibs(obtFile, multiSourceDeps.mavenDefinedDeps)
-    val mavenRedefinedErrors = getErrors(
-      obtFile,
-      multiSourceDeps.mavenDefinedDeps.flatMap(_.maven).collect {
-        case d if mavenDepsToCheck.contains(infoForChecking(d)) => d -> getPredefinedDep(mavenDeps, d)
-      },
-      MavenDependenciesConfig.path.pathString
-    )
-
-    val errors = duplicatedNames ++
-      duplicatedAfs ++ duplicatedMavenErrors ++ afsRedefinedErrors ++ mavenRedefinedErrors
-
-    if (errors.nonEmpty) Failure(errors.toIndexedSeq.distinct)
-    else Success(multiSourceDeps)
-  }
-
-  def loadJvmDepsBySourceName(
+  private def loadJvmDepsBySourceName(
       depConfig: Config,
-      kind: Kind,
       obtFile: ObtFile,
       sourceName: String,
       loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]): Result[Seq[DependencyDefinition]] = {
     if (depConfig.hasPath(sourceName)) {
       val sourceConf = depConfig.getObject(sourceName).toConfig
-      JvmDependenciesLoader
+      DependencyLoader
         .loadLocalDefinitions(
           sourceConf,
           sourceName,
-          kind,
+          LocalDefinition,
           obtFile,
           isMaven = sourceName == Maven,
           loadedResolvers = loadedResolvers,
@@ -163,11 +72,11 @@ object MultiSourceDependenciesLoader {
 
   private def loadJvmDepsIvyConfigurations(
       baseAfsDepOpt: Option[DependencyDefinition],
+      afsVariants: Seq[DependencyDefinition],
       baseMavenLibs: Seq[DependencyDefinition],
       depConfig: Config,
       name: String,
-      kind: Kind,
-      obtFile: ObtFile,
+      obtFile: DependencyConfig,
       loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]): Result[(Option[MultiSourceDependency], Seq[MultiSourceDependency])] = {
 
@@ -185,10 +94,10 @@ object MultiSourceDependenciesLoader {
       val afsConfigLib = getAfsConfigDep(name, baseAfsDep, config.origin().lineNumber())
       val mavenConfigEquivalents = if (config.hasPath(Maven)) {
         val mavenConfig = config.getObject(Maven).toConfig
-        loadLocalDefinitions(
+        DependencyLoader.loadLocalDefinitions(
           mavenConfig,
           Maven,
-          kind,
+          LocalDefinition,
           obtFile,
           isMaven = true,
           loadedResolvers,
@@ -217,14 +126,13 @@ object MultiSourceDependenciesLoader {
         val (extended, failure) = configNameToExtends.get(cfgName) match {
           case Some(res) => (res, Seq.empty)
           case None =>
-            val msg =
-              s"ivy config '$cfgName' not exists! at ${JvmDependenciesConfig.path.name}:${config.origin().lineNumber()} $IvyConfigurations '$name'"
+            val msg = s"Ivy config '$cfgName' doesn't exist"
             (Nil, Set(obtFile.errorAt(config.getValue(Extends), msg)))
         }
         if (checked.contains(cfgName)) (Seq.empty, errors ++ failure)
         else {
           val result = extended.map(expandDepsFromCfg(_, checked + cfgName, errors ++ failure, configNameToExtends))
-          (result.flatMap(_._1) :+ cfgName, result.flatMap(_._2) ++ failure)
+          (cfgName +: result.flatMap(_._1), result.flatMap(_._2) ++ failure)
         }
       }
 
@@ -233,10 +141,10 @@ object MultiSourceDependenciesLoader {
           configNameToExtends: Map[String, Seq[String]]): Result[Seq[DependencyDefinition]] = {
 
         if (config.hasPath(Extends)) {
-          val extendsList = (config.getStringList(Extends).asScala.to(Seq) :+ name).distinct
-          val (allExtended, extendErrors): (Set[String], Set[Error]) = {
+          val extendsList = distinctLast(name +: config.getStringList(Extends).asScala.to(Seq))
+          val (allExtended, extendErrors): (Seq[String], Set[Error]) = {
             val result = extendsList.map(expandDepsFromCfg(_, Set.empty, Seq.empty, configNameToExtends))
-            (result.flatMap(_._1).toSet, result.flatMap(_._2).toSet)
+            (distinctLast(result.flatMap(_._1)), result.flatMap(_._2).toSet)
           }
           if (extendErrors.isEmpty) Success(allExtended.flatMap(configNameToMavenLibs).to(Seq))
           else Failure(extendErrors.to(Seq))
@@ -260,6 +168,8 @@ object MultiSourceDependenciesLoader {
       if (name == Runtime) Keys.KeySet(Extends)
       else Keys.ivyConfiguration
 
+    def isVariant(dd: DependencyDefinition) = dd.variant.exists(!_.configurationOnly)
+
     baseAfsDepOpt match {
       case Some(baseAfsDep) if depConfig.hasPath(IvyConfigurations) =>
         val ivyConfig = depConfig.getObject(IvyConfigurations).toConfig
@@ -272,20 +182,38 @@ object MultiSourceDependenciesLoader {
           extendedConfigs <- Result.traverse(ivyConfig.nested(obtFile)) { case (name, config) =>
             loadExtendsConfig(config, name, baseAfsDep, loadedIvyConfigs)
           }
-          res = extendedConfigs.map { case (ivy, equivalents) =>
-            MultiSourceDependency(s"$name.${ivy.configuration}", Some(ivy), equivalents, ivy.line, ivyConfig = true)
-          }
+          res <- Result
+            .sequence(extendedConfigs.map { case (ivy, equivalents) =>
+              MultiSourceDependency.expandDependencyDefinitions(
+                obtFile,
+                depConfig.getValue(IvyConfigurations),
+                s"$name.${ivy.configuration}",
+                Some(ivy),
+                afsVariants.map(v => getAfsConfigDep(ivy.configuration, v, ivy.line)),
+                equivalents,
+                None,
+                ivy.line
+              )
+            })
+            .map(_.flatten)
         } yield res
         ivyMultiSourceDependencies
-          .withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
+          .withProblems { ds =>
+            // don't check ordering for variants, since "foo.variant" lexically comes after "foo-bar.variant"
+            val nonVariants = ds.filter(!_.definitions.all.exists(isVariant))
+            OrderingUtils.checkOrderingIn(obtFile, nonVariants)
+          }
           .map { ivyMultiSourceDependencies =>
             val runtimeOverrideIndex = ivyMultiSourceDependencies.indexWhere(_.afs.exists(_.configuration == Runtime))
-            if (runtimeOverrideIndex > 0) {
+            if (runtimeOverrideIndex >= 0) {
               val runtimeDefinitionOverride = ivyMultiSourceDependencies(runtimeOverrideIndex)
-              val newAfs = runtimeDefinitionOverride.afs.map(_.copy(variant = None))
-              val adjustedRuntimeDefinitionOverride = runtimeDefinitionOverride.copy(afs = newAfs)
-              val rest = ivyMultiSourceDependencies
-                .take(runtimeOverrideIndex) ++ ivyMultiSourceDependencies.drop(runtimeOverrideIndex).tail
+              val adjustedRuntimeDefinitionOverride = runtimeDefinitionOverride.definitions match {
+                case Mapped(afs, maven) =>
+                  runtimeDefinitionOverride.copy(definitions = Mapped(afs.copy(variant = None), maven))
+                case _ =>
+                  runtimeDefinitionOverride
+              }
+              val rest = ivyMultiSourceDependencies.patch(runtimeOverrideIndex, Nil, 1)
               Some(adjustedRuntimeDefinitionOverride) -> rest
             } else None -> ivyMultiSourceDependencies
           }
@@ -295,8 +223,7 @@ object MultiSourceDependenciesLoader {
 
   def load(
       dependenciesConfig: Config,
-      kind: Kind,
-      obtFile: ObtFile,
+      obtFile: DependencyConfig,
       loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]): Result[MultiSourceDependencies] = {
     Result.tryWith(obtFile, dependenciesConfig) {
@@ -311,7 +238,7 @@ object MultiSourceDependenciesLoader {
             for {
               afsDeps <-
                 if (noAfs) Success(Nil)
-                else loadJvmDepsBySourceName(depConfig, kind, obtFile, Afs, loadedResolvers, scalaMajorVer)
+                else loadJvmDepsBySourceName(depConfig, obtFile, Afs, loadedResolvers, scalaMajorVer)
               coreAfsDep <- afsDeps.filter(_.variant.isEmpty) match {
                 case Seq(unique) =>
                   Success(Some(unique))
@@ -319,13 +246,13 @@ object MultiSourceDependenciesLoader {
                   Failure(Seq(obtFile.errorAt(depConfig.getValue(Afs), MultipleAfsError)))
                 case _ => Success(None)
               }
-              mavenDeps <- loadJvmDepsBySourceName(depConfig, kind, obtFile, Maven, loadedResolvers, scalaMajorVer)
+              mavenDeps <- loadJvmDepsBySourceName(depConfig, obtFile, Maven, loadedResolvers, scalaMajorVer)
               (maybeOverridenRuntime, ivyMultiSourceDeps) <- loadJvmDepsIvyConfigurations(
                 coreAfsDep,
+                afsDeps.filter(_.variant.nonEmpty),
                 mavenDeps,
                 depConfig,
                 strName,
-                kind,
                 obtFile,
                 loadedResolvers,
                 scalaMajorVersion)

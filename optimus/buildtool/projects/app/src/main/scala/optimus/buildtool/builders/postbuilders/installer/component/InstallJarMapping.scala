@@ -23,7 +23,9 @@ object InstallJarMapping {
   final def apply(allArtifacts: Seq[ScopeArtifacts]): Map[JarAsset, (ScopeId, JarAsset)] = {
     allArtifacts.flatMap { scopeArtifacts: ScopeArtifacts =>
       import scopeArtifacts._
-      classJars.map(c => (c, (scopeId, installJar.jar)))
+      val classJarMapping = classJars.map(c => (c, (scopeId, installJar.jar)))
+      val pathingJarMapping = pathingJar.flatMap(p => installedPathingJar.map(i => (p, (scopeId, i.asJar))))
+      classJarMapping ++ pathingJarMapping
     }.toMap
   }
 

@@ -39,7 +39,7 @@ import optimus.scalacompat.collection._
 object EmbeddablePicklers extends StorableSerializer {
 
   /** _tag field contains the simple classname for pickled @embedable case classes */
-  val Tag = "_tag"
+  val Tag = PicklingConstants.embeddableTag
 
   private val EmbeddableType = typeOf[Embeddable]
   def picklerForType(tpe: Type): Pickler[_] = {
@@ -139,6 +139,7 @@ object EmbeddablePicklers extends StorableSerializer {
   def extractSimpleClassname(pickled: Any): String = {
     val clsName = pickled match {
       // @embeddable case classes get pickled as a map with _tag containing the simple classname
+      case m: SlottedBufferAsMap             => m.tag
       case m: Map[String, String] @unchecked => m(Tag)
       // @embeddable case object is pickled as a bare String of the simple classname (see EmbeddableObjectPickler)
       case objName: String => objName
@@ -214,7 +215,16 @@ object EmbeddablePicklers extends StorableSerializer {
               case m: Map[String, Any] @unchecked =>
                 initAsRunning(EvaluationContext.scenarioStack)
                 arr = new Array[AnyRef](unpicklers.length)
-                propMap = m - Tag
+                propMap = m match {
+                  case sb: SlottedBufferAsMap =>
+                    // We need to remove the tag from the map so that we can use it to resolve the fields
+                    // in the constructor. The tag is already in the shape.
+                    sb.untagged
+                  case m: Map[String, Any] @unchecked =>
+                    // We need to remove the tag from the map so that we can use it to resolve the fields
+                    // in the constructor. The tag is already in the shape.
+                    m - Tag
+                }
                 versionResolver = NodeAPI.queuedNodeOf(
                   version(ecb.shapeName, propMap, is.temporalContext, applyForceTransformation = false))
                 versionResolver.continueWith(this, OGSchedulerContext.current())

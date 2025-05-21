@@ -40,9 +40,15 @@ private[tracking] sealed abstract class TweakContainer(root: DependencyTrackerRo
       tweaks: Iterable[Tweak],
       throwOnDuplicate: Boolean,
       cause: EventCause,
-      cancelScope: Option[CancellationScope] = None): Unit
+      cancelScope: Option[CancellationScope] = None,
+      observer: TrackedNodeInvalidationObserver): Unit
 
-  def doRemoveTweaksFromGivenEntity(entity: Entity, keys: Seq[NodeKey[_]], cause: EventCause): Unit
+  def doRemoveTweaksFromGivenEntity(
+      entity: Entity,
+      keys: Seq[NodeKey[_]],
+      excludes: Seq[NodeKey[_]],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit
 
   /**
    * Remove a set of tweaks from this DependencyTracker. This will invalidate any snapshots and will start an
@@ -51,13 +57,13 @@ private[tracking] sealed abstract class TweakContainer(root: DependencyTrackerRo
    * @param nks
    *   NodeKeys from which to remove tweaks.
    */
-  def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause): Unit
+  def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit
 
   /**
    * Remove all tweaks from this DependencyTracker. This will invalidate any snapshots and will start an invalidation
    * trace for each tweak that was removed.
    */
-  def doRemoveAllTweaks(cause: EventCause): Unit
+  def doRemoveAllTweaks(cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit
 
   protected[this] val permanentTweaks: List[Tweak] = List( // see TweakContainer.PermanentlyTweaked
     SimpleValueTweak(ScenarioReference.current$newNode)(scenarioRef),
@@ -104,7 +110,8 @@ private[tracking] final class MutableTweakContainer(
       tweaks: Iterable[Tweak],
       throwOnDuplicate: Boolean,
       cause: EventCause,
-      cancelScope: Option[CancellationScope]): Unit =
+      cancelScope: Option[CancellationScope],
+      observer: TrackedNodeInvalidationObserver): Unit =
     if (tweaks.nonEmpty) {
       if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.logDoAddTweaks(scenarioRef.name, tweaks)
 
@@ -118,40 +125,51 @@ private[tracking] final class MutableTweakContainer(
       if (changedTweaks.nonEmpty) {
         cacheId.putAll(changedTweaks)
         snapshotter.invalidateSnapshot()
-        OverInvalidationDetection.set(tweakableTracker.owner.queue.currentBatcher.cause)
-        tweakableTracker.invalidateByTweaks(changedTweaks, cause)
+        OverInvalidationDetection.set(cause)
+        tweakableTracker.invalidateByTweaks(changedTweaks, cause, observer)
         OverInvalidationDetection.set(null)
       }
     }
 
   // if keys is empty, we clear all tweaks on that entity
-  override def doRemoveTweaksFromGivenEntity(entity: Entity, keys: Seq[NodeKey[_]], cause: EventCause): Unit = {
+  override def doRemoveTweaksFromGivenEntity(
+      entity: Entity,
+      keys: Seq[NodeKey[_]],
+      excludes: Seq[NodeKey[_]],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     // Note: This means that we *will* remove tweaks with instead-sets if keys is empty, i.e. if we are removing all
     // tweaks from this entity! This is rather difficult to fix.
     throwOnAlsoSetNodeKeyRemovals(keys)
     val keySet = keys.toSet
-    doRemoveTweaksBasedOnPredicate(nk => nk.entity == entity && (keySet.isEmpty || keySet(nk)), cause)
+    val excludesSet = excludes.toSet
+    doRemoveTweaksBasedOnPredicate(
+      nk => nk.entity == entity && (keySet.isEmpty || keySet(nk)) && !excludesSet(nk),
+      cause, observer)
   }
 
-  def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause): Unit = {
+  def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit = {
     throwOnAlsoSetNodeKeyRemovals(nks)
     val keySet = nks.toSet
-    doRemoveTweaksBasedOnPredicate(keySet, cause)
+    doRemoveTweaksBasedOnPredicate(keySet, cause, observer)
   }
 
-  def doRemoveAllTweaks(cause: EventCause): Unit = {
+  def doRemoveAllTweaks(cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit = {
     // scenarioStack may change so invalidate the snapshot
     snapshotter.invalidateSnapshot()
 
     val allTweaks = cacheId.allTweaksAsIterable
     val toInvalidate = allTweaks.filterNot(n => TweakContainer.PermanentlyTweaked(n.target.propertyInfo))
-    tweakableTracker.invalidateByTweaks(toInvalidate, cause)
+    tweakableTracker.invalidateByTweaks(toInvalidate, cause, observer)
 
     cacheId.clearTweaks()
     cacheId.putAll(permanentTweaks)
   }
 
-  private def doRemoveTweaksBasedOnPredicate(predicate: NodeKey[_] => Boolean, cause: EventCause): Unit = {
+  private def doRemoveTweaksBasedOnPredicate(
+      predicate: NodeKey[_] => Boolean,
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     val removed = {
       val removed = Seq.newBuilder[Tweak]
       cacheId.removeTweaks { tweak =>
@@ -167,7 +185,7 @@ private[tracking] final class MutableTweakContainer(
 
     if (removed.nonEmpty) {
       snapshotter.invalidateSnapshot()
-      tweakableTracker.invalidateByTweaks(removed, cause)
+      tweakableTracker.invalidateByTweaks(removed, cause, observer)
     }
   }
 
@@ -192,34 +210,19 @@ private[tracking] final class ImmutableTweakContainer(
       tweaks: Iterable[Tweak],
       throwOnDuplicate: Boolean,
       cause: EventCause,
-      cancelScope: Option[CancellationScope]) =
+      cancelScope: Option[CancellationScope],
+      observer: TrackedNodeInvalidationObserver) =
     throw new IllegalScenarioReferenceTweak(scenarioRef, tweaks.toSeq)
 
-  override def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause): Unit = {}
-  override def doRemoveAllTweaks(cause: EventCause): Unit = {}
-  override def doRemoveTweaksFromGivenEntity(entity: Entity, keys: Seq[NodeKey[_]], cause: EventCause): Unit = {}
-}
-
-private[tracking] trait TweakMutationActions {
-  self: DependencyTracker =>
-
-  class TSA_AddTweaks(tweaks: Iterable[Tweak], throwOnDuplicate: Boolean) extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = {
-      if (Settings.timeTrackingScenarioCommandSummary) DependencyTrackerRoot.recordSize(this, tweaks.size)
-      tweakContainer.doAddTweaks(tweaks, throwOnDuplicate, cause)
-    }
-    override def applyInScenarioStack = nc_scenarioStack.withCancellationScope(queue.currentCancellationScope)
-  }
-
-  class TSA_RemoveTweak(tweakKeys: Iterable[NodeKey[_]]) extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = tweakContainer.doRemoveTweaks(tweakKeys, cause)
-  }
-
-  class TSA_RemoveTweakByEntity(entity: Entity, nodeKeys: Seq[NodeKey[_]]) extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = tweakContainer.doRemoveTweaksFromGivenEntity(entity, nodeKeys, cause)
-  }
-
-  class TSA_RemoveAllTweaks() extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = tweakContainer.doRemoveAllTweaks(cause)
-  }
+  override def doRemoveTweaks(
+      nks: Iterable[NodeKey[_]],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {}
+  override def doRemoveAllTweaks(cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit = {}
+  override def doRemoveTweaksFromGivenEntity(
+      entity: Entity,
+      keys: Seq[NodeKey[_]],
+      excludes: Seq[NodeKey[_]],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {}
 }

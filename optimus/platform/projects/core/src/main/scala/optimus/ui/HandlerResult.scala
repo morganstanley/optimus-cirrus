@@ -41,10 +41,10 @@ import optimus.utils.PropertyUtils.get
  *   \- widgets to render
  */
 final case class HandlerResult(
-    gestures: collection.Seq[Gesture] = collection.Seq.empty,
-    tweaks: Map[ScenarioReference, collection.Seq[Tweak]] = Map.empty,
-    widgets: collection.Seq[BaseWidget] = collection.Seq.empty,
-    scenarioToTweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]] = Map.empty,
+    gestures: Seq[Gesture] = Seq.empty,
+    tweaks: Map[ScenarioReference, Seq[Tweak]] = Map.empty,
+    widgets: Seq[BaseWidget] = Seq.empty,
+    scenarioToTweakLambdas: Map[ScenarioReference, Seq[TweakLambda]] = Map.empty,
     private val reevaluationPostponed: Boolean = false,
     private val noLazyEvaluation: Boolean = false,
     private val nextStepsBuilder: List[HandlerStep] = Nil,
@@ -58,8 +58,8 @@ final case class HandlerResult(
   // This is the utility function to make sure the map of tweaks
   // can be merged properly
   private def mergeMap[T](
-      tweaksA: Map[ScenarioReference, collection.Seq[T]],
-      tweaksB: Map[ScenarioReference, collection.Seq[T]]): Map[ScenarioReference, collection.Seq[T]] = {
+      tweaksA: Map[ScenarioReference, Seq[T]],
+      tweaksB: Map[ScenarioReference, Seq[T]]): Map[ScenarioReference, Seq[T]] = {
     val jointKeys = tweaksA.keySet ++ tweaksB.keySet
     jointKeys.iterator.map { scenarioReference =>
       val combined = tweaksA.getOrElse(scenarioReference, Nil) ++ tweaksB.getOrElse(scenarioReference, Nil)
@@ -83,7 +83,7 @@ final case class HandlerResult(
   @deprecating("Temporary method during HandlerResultMigration")
   def mergeWithNewTweakLambdas(
       otherHr: HandlerResult,
-      newTweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]]): HandlerResult = {
+      newTweakLambdas: Map[ScenarioReference, Seq[TweakLambda]]): HandlerResult = {
     new HandlerResult(
       gestures = gestures ++ otherHr.gestures,
       tweaks = mergeMap(tweaks, otherHr.tweaks),
@@ -96,7 +96,7 @@ final case class HandlerResult(
   @deprecating("Temporary method during HandlerResultMigration")
   def mergeWithReplacementTweakLambdas(
       otherHr: HandlerResult,
-      onlyTweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]]): HandlerResult = {
+      onlyTweakLambdas: Map[ScenarioReference, Seq[TweakLambda]]): HandlerResult = {
     new HandlerResult(
       gestures = gestures ++ otherHr.gestures,
       tweaks = mergeMap(tweaks, otherHr.tweaks),
@@ -110,20 +110,20 @@ final case class HandlerResult(
    * Creates a new HandlerResult comprising of the current one plus the given tweak lambda evaluated in Root scenario
    */
   @alwaysAutoAsyncArgs
-  def withTweaksToRootScenario(newTweakLambda: () => collection.Seq[Tweak]): HandlerResult = needsPlugin
-  def withTweaksToRootScenario$NF(newTweakLambda: AsyncFunction0[collection.Seq[Tweak]]): HandlerResult =
+  def withTweaksToRootScenario(newTweakLambda: () => Seq[Tweak]): HandlerResult = needsPlugin
+  def withTweaksToRootScenario$NF(newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(ScenarioReference.Root, newTweakLambda)
 
   /**
    * Returns the tweak lambdas in this HandlerResult targeted at the given scenario
    */
-  def tweakLambdasForScenarioReference(sr: ScenarioReference): collection.Seq[TweakLambda] =
+  def tweakLambdasForScenarioReference(sr: ScenarioReference): Seq[TweakLambda] =
     scenarioToTweakLambdas.getOrElse(sr, Nil)
 
   /**
    * Return the tweaks (including evaluated tweak lambdas) in this HandlerResult targeted at the given scenario
    */
-  def tweaksForScenarioReference(scen: ScenarioReference): collection.Seq[Tweak] =
+  def tweaksForScenarioReference(scen: ScenarioReference): Seq[Tweak] =
     tweakLambdasForScenarioReference(scen).flatMap(_.apply()) ++ tweaks.getOrElse(scen, Nil)
 
   /**
@@ -134,19 +134,19 @@ final case class HandlerResult(
   /**
    * Creates new HandlerResult comprising of the current one plus given tweaks targeted at the current scenario
    */
-  def withTweaks(newTweaks: collection.Seq[Tweak]): HandlerResult =
+  def withTweaks(newTweaks: Seq[Tweak]): HandlerResult =
     withTweaks(ScenarioReference.current, newTweaks)
 
   /**
    * Creates new HandlerResult comprising of the current one plus given tweaks targeted at the given scenario
    */
-  def withTweaks(scenario: ScenarioReference, newTweaks: collection.Seq[Tweak]): HandlerResult =
+  def withTweaks(scenario: ScenarioReference, newTweaks: Seq[Tweak]): HandlerResult =
     withTweaks(Map(scenario -> newTweaks))
 
   /**
    * Creates new HandlerResult comprising of the current one plus given map of scenario references to tweaks
    */
-  def withTweaks(newTweaks: Map[ScenarioReference, collection.Seq[Tweak]]): HandlerResult =
+  def withTweaks(newTweaks: Map[ScenarioReference, Seq[Tweak]]): HandlerResult =
     copy(tweaks = mergeMap(tweaks, newTweaks))
 
   /**
@@ -158,19 +158,19 @@ final case class HandlerResult(
   /**
    * Creates new HandlerResult comprising of the current one plus given gestures
    */
-  def withGestures(gsts: collection.Seq[Gesture]): HandlerResult =
+  def withGestures(gsts: Seq[Gesture]): HandlerResult =
     copy(gestures = gestures ++ gsts)
 
   /**
    * Creates new HandlerResult comprising of the current one plus given gui widgets
    */
-  def withGui(newGui: collection.Seq[BaseWidget]): HandlerResult =
+  def withGui(newGui: Seq[BaseWidget]): HandlerResult =
     copy(widgets = widgets ++ newGui)
 
   /**
    * Creates new HandlerResult comprising of the current one plus given tweak lambdas
    */
-  def withTweakLambdaMap(newTweaks: Map[ScenarioReference, collection.Seq[TweakLambda]]): HandlerResult =
+  def withTweakLambdaMap(newTweaks: Map[ScenarioReference, Seq[TweakLambda]]): HandlerResult =
     copy(scenarioToTweakLambdas = mergeMap(scenarioToTweakLambdas, newTweaks))
 
   /**
@@ -183,11 +183,9 @@ final case class HandlerResult(
    * Creates new HandlerResult comprising of the current one plus given tweak lambdas
    */
   @alwaysAutoAsyncArgs
-  def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => collection.Seq[Tweak]): HandlerResult =
+  def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => Seq[Tweak]): HandlerResult =
     needsPlugin
-  def withTweaksEvaluatedIn$NF(
-      sr: ScenarioReference,
-      newTweakLambda: AsyncFunction0[collection.Seq[Tweak]]): HandlerResult =
+  def withTweaksEvaluatedIn$NF(sr: ScenarioReference, newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(sr, newTweakLambda)
 
   /**
@@ -272,7 +270,7 @@ final case class HandlerResult(
 
 object HandlerResult {
   private val log = getLogger(getClass)
-  type TweakLambda = AsyncFunction0[collection.Seq[Tweak]]
+  type TweakLambda = AsyncFunction0[Seq[Tweak]]
   val eventTagKey = "eventTag"
 
   /** Merging two HandlerResult with follow-on steps can lead to unexpected behaviors. */
@@ -303,25 +301,25 @@ object HandlerResult {
   /**
    * Creates a new HandlerResult containing the given collection of tweaks targeted at the current scenario
    */
-  implicit def withTweaks(tweaks: collection.Seq[Tweak]): HandlerResult =
+  implicit def withTweaks(tweaks: Seq[Tweak]): HandlerResult =
     withTweaks(ScenarioReference.current, tweaks)
 
   /**
    * Creates a new HandlerResult containing the given collection of tweaks targeted at the given scenario
    */
-  def withTweaks(scenarioReference: ScenarioReference, tweaks: collection.Seq[Tweak]): HandlerResult =
+  def withTweaks(scenarioReference: ScenarioReference, tweaks: Seq[Tweak]): HandlerResult =
     withTweaks(Map(scenarioReference -> tweaks))
 
   /**
    * Creates a new HandlerResult containing the given map of scenarios to tweaks
    */
-  def withTweaks(tweaks: Map[ScenarioReference, collection.Seq[Tweak]]): HandlerResult =
+  def withTweaks(tweaks: Map[ScenarioReference, Seq[Tweak]]): HandlerResult =
     HandlerResult(tweaks = tweaks)
 
   /**
    * Creates new HandlerResult comprising of the current one plus given tweak lambdas
    */
-  def withTweakLambdaMap(newTweaks: Map[ScenarioReference, collection.Seq[TweakLambda]]): HandlerResult =
+  def withTweakLambdaMap(newTweaks: Map[ScenarioReference, Seq[TweakLambda]]): HandlerResult =
     HandlerResult(scenarioToTweakLambdas = newTweaks)
 
   /**
@@ -334,27 +332,25 @@ object HandlerResult {
    * Creates new HandlerResult comprising of the current one plus given tweak lambdas
    */
   @alwaysAutoAsyncArgs
-  def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => collection.Seq[Tweak]): HandlerResult =
+  def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => Seq[Tweak]): HandlerResult =
     needsPlugin
-  def withTweaksEvaluatedIn$NF(
-      sr: ScenarioReference,
-      newTweakLambda: AsyncFunction0[collection.Seq[Tweak]]): HandlerResult =
+  def withTweaksEvaluatedIn$NF(sr: ScenarioReference, newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(sr, newTweakLambda)
 
   /**
    * Creates a new HandlerResult containing the given Gesture
    */
-  implicit def withGesture(gesture: Gesture): HandlerResult = withGestures(collection.Seq(gesture))
+  implicit def withGesture(gesture: Gesture): HandlerResult = withGestures(Seq(gesture))
 
   /**
    * Creates a new HandlerResult containing the given Gestures
    */
-  implicit def withGestures(gestures: collection.Seq[Gesture]): HandlerResult = HandlerResult(gestures = gestures)
+  implicit def withGestures(gestures: Seq[Gesture]): HandlerResult = HandlerResult(gestures = gestures)
 
   /**
    * Creates a new HandlerResult containing a given GUI widgets
    */
-  implicit def withGui(widgets: collection.Seq[BaseWidget]): HandlerResult = HandlerResult(widgets = widgets)
+  implicit def withGui(widgets: Seq[BaseWidget]): HandlerResult = HandlerResult(widgets = widgets)
 
   /**
    * DANGEROUS If used with HandlerResults that depends on each other, the last HandlerResult will be applied, because
@@ -365,7 +361,7 @@ object HandlerResult {
   }
 
   /** Creates a new [[HandlerResult]] which will execute the provided [[HandlerStep]]s. */
-  def withSteps(steps: collection.Seq[HandlerStep]): HandlerResult =
+  def withSteps(steps: Seq[HandlerStep]): HandlerResult =
     HandlerResult(nextStepsBuilder = steps.toList.reverse)
 
   /**

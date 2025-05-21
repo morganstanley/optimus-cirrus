@@ -52,7 +52,7 @@ object ScopeArgs {
     dockerDir: Directory
 ) {
 
-  @node private[buildtool] def scopesToInclude = {
+  @node private[buildtool] def scopesToInclude: Set[ScopeId] = {
     if (args.scopesToBuild == Set(NoneArg))
       Set.empty[ScopeId]
     else if (args.scopesToBuild == Set(AllArg))
@@ -65,22 +65,14 @@ object ScopeArgs {
       args.scopesToBuild.apar.flatMap(scopeConfigSource.resolveScopes) ++ scopesFromImages ++ warScopes
   }
 
-  @node private def scopesToExclude = args.scopesToExclude.apar.flatMap(scopeConfigSource.resolveScopes)
+  @node private def scopesToExclude: Set[ScopeId] = args.scopesToExclude.apar.flatMap(scopeConfigSource.resolveScopes)
 
   @node private def modifiedScopes(fileDiff: Option[FileDiff]): Set[ScopeId] = fileDiff match {
     case Some(fd) if args.buildModifiedScopes =>
-      val files = fd.modifiedFiles.map(workspaceSourceRoot.resolveFile)
-      val allScopes = scopeConfigSource.compilationScopeIds
-      val configs = allScopes.apar.map(id => id -> scopeConfigSource.scopeConfiguration(id))
-
-      files.flatMap { f =>
-        // a scope contains a file if the file is within the scope root or if it's in the same directory as the
-        // module.obt file
-        val containingScopes = configs.collect {
-          case (id, cfg) if cfg.paths.absScopeRoot.contains(f) || f.parent == cfg.paths.absScopeConfigDir => id
-        }
-        if (containingScopes.nonEmpty) containingScopes else allScopes
-      }
+      val additionalScopes = scopeConfigSource.changesAsScopes(fd.modifiedFiles.map(_.path))
+      log.info(s"""Running with '--buildModifiedScopes', adding ${additionalScopes.size} scope(s) to build:
+                  |  ${additionalScopes.mkString(", ")}""".stripMargin)
+      additionalScopes
     case _ => Set.empty
   }
 
@@ -94,9 +86,12 @@ object ScopeArgs {
 
   @node private def downstreamScopes(requestedScopes: Set[ScopeId]): Set[ScopeId] =
     if (args.buildDownstreamScopes) {
-      scopeConfigSource.compilationScopeIds.apar.filter { id =>
+      val additionalScopes = scopeConfigSource.compilationScopeIds.apar.filter { id =>
         transitiveDeps(id).exists(requestedScopes.contains)
       }
+      log.info(s"""Running with '--buildDownstreamScopes', adding ${additionalScopes.size} scope(s) to build:
+                  |  ${additionalScopes.mkString(", ")}""".stripMargin)
+      additionalScopes
     } else Set.empty
 
   // Note: We remove scopesToExclude both here and in `requestedScopes`. That ensures we don't get any of their

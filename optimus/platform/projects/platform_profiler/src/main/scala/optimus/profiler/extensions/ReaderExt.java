@@ -26,7 +26,7 @@ public class ReaderExt {
   /** Flat grouping of nodes between start, end */
   public static Collection<PNodeTaskInfoGrp> selectNodes(
       OGTraceReader reader, long start, long end, boolean runningOnly) {
-    Collection<PNodeTask> tasks = reader.getRawTasks(false);
+    Collection<PNodeTask> tasks = reader.getRawTasks(false, false, true, true, true);
     PNodeTaskInfo[] allInfos = reader.getAllTaskInfosCombined(); // Index based PNTI
 
     HashMap<Integer, PNodeTaskInfoGrp> r = new HashMap<>();

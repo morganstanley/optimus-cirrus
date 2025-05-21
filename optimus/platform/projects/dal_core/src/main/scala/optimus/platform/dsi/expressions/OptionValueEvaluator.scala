@@ -16,10 +16,10 @@ object OptionValueEvaluator extends ExpressionVisitor {
     super.visitFunction(f) match {
       case Function(OptionOps.Value.Name, c :: Nil) =>
         c match {
-          case Constant(Seq(), _)            => Constant(null, TypeCode.None)
-          case Constant(Seq(v), typeCode)    => Constant(v, typeCode)
-          case Constant(null, TypeCode.None) => c
-          case _                             => throw new IllegalArgumentException(s"Expected Option, but got $c")
+          case Constant(collection.Seq(), _)         => Constant(null, TypeCode.None)
+          case Constant(collection.Seq(v), typeCode) => Constant(v, typeCode)
+          case Constant(null, TypeCode.None)         => c
+          case _ => throw new IllegalArgumentException(s"Expected Option, but got $c")
         }
       case f => f
     }

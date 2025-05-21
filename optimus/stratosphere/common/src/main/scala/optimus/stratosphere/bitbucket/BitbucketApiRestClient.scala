@@ -13,7 +13,7 @@ package optimus.stratosphere.bitbucket
 
 import akka.http.scaladsl.model.Uri
 import com.typesafe.config.Config
-import com.typesafe.config.ConfigRenderOptions
+import optimus.stratosphere.bitbucket.RepoPermission.RepoPermission
 import optimus.stratosphere.bitbucket.PulRequestJsonProtocol._
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.http.client.HttpClientFactory
@@ -66,9 +66,16 @@ trait BitbucketApiRestClientProtocol extends DefaultJsonProtocol {
   implicit val synchronizeForkFormat: JsonFormat[SynchronizeFork] = jsonFormat2(SynchronizeFork.apply)
 }
 
+object RepoPermission extends Enumeration {
+  type RepoPermission = Value
+  val REPO_READ: Value = Value("REPO_READ")
+  val REPO_WRITE: Value = Value("REPO_WRITE")
+  val REPO_ADMIN: Value = Value("REPO_ADMIN")
+}
+
 final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     val timeout: JDuration,
-    val bitbucketHost: String = workspace.internal.bitbucketHostname)
+    val bitbucketHost: String = workspace.internal.bitbucket.hostname)
     extends BitbucketApiRestClientProtocol {
 
   private val version = "1.0"
@@ -175,8 +182,10 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
   ): Repository = {
     val requestUrl = prepareUrl(s"projects/~${userName.toUpperCase()}/repos/$repository", defaultApiName)
     val repoConfig = httpClient.get(requestUrl).getConfig("origin")
-    val repoJson = repoConfig.root().render(ConfigRenderOptions.concise)
-    repoJson.parseJson.convertTo[Repository]
+    Repository(
+      Project(repoConfig.getString("project.key")),
+      repoConfig.getString("slug")
+    )
   }
 
   def createPullRequest(
@@ -281,17 +290,22 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     httpClient.post(enableForkSyncingUrl, SetForkSyncing(enabled))
   }
 
-  def setAccess(userName: String, repository: String, makePublic: Boolean): Unit = {
-    val setPublicAccessUrl = prepareUrl(s"projects/~$userName/repos/$repository", defaultApiName)
-    httpClient.put(setPublicAccessUrl, SetAccess(makePublic))
-  }
-
   def grantWriteAccessToSelf(userName: String, repository: String): Unit = {
     val grantWriteAccessUrl = prepareUrl(
       s"projects/~$userName/repos/$repository/permissions/users",
       defaultApiName,
-      "permission" -> "REPO_WRITE",
+      "permission" -> RepoPermission.REPO_WRITE.toString,
       "name" -> userName)
+    httpClient.put(grantWriteAccessUrl)
+  }
+
+  // Reference to API: https://docs.atlassian.com/bitbucket-server/rest/7.0.1/bitbucket-rest.html#idp268
+  def grantAccessToGroup(userName: String, repository: String, group: String, permission: RepoPermission): Unit = {
+    val grantWriteAccessUrl = prepareUrl(
+      s"projects/~$userName/repos/$repository/permissions/groups",
+      defaultApiName,
+      "permission" -> permission.toString,
+      "name" -> group)
     httpClient.put(grantWriteAccessUrl)
   }
 
@@ -319,6 +333,11 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
   def enableRepoHook(userName: String, repository: String, hookKey: String): Unit = {
     val url = prepareUrl(s"projects/~$userName/repos/$repository/settings/hooks/$hookKey/enabled", defaultApiName)
     httpClient.put(url)
+  }
+
+  def getSortedTagsUntil(project: String, repository: String, predicate: Config => Boolean): Seq[Config] = {
+    val command = s"projects/$project/repos/$repository/tags"
+    pagedGetUntil(command, predicate, "orderby" -> "MODIFICATION")
   }
 
   private[bitbucket] def getRelativeLinkUrl(pullRequest: Config): String = {
@@ -350,6 +369,23 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     }
 
     pagedGet(0, command, predicate, shouldReturnFirstFound, Seq())
+  }
+
+  private def pagedGetUntil(
+      command: String,
+      predicate: Config => Boolean,
+      urlParameters: (String, Any)*): Seq[Config] = {
+    @tailrec
+    def pagedGet(start: Int, acc: Seq[Config]): Seq[Config] = {
+      val url = prepareUrl(command, defaultApiName, urlParameters ++ Seq("limit" -> defaultLimit, "start" -> start): _*)
+      val result = httpClient.get(url)
+      val values = result.getObjectList("values").asScala.to(Seq).map(_.toConfig)
+
+      if (result.getBoolean("isLastPage") || values.exists(predicate)) values ++ acc
+      else pagedGet(result.getInt("nextPageStart"), values ++ acc)
+    }
+
+    pagedGet(0, Seq())
   }
 
   private def convertRepoUrlToProxy(url: String) = {

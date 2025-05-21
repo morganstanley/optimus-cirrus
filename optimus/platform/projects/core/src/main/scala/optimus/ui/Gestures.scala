@@ -36,21 +36,19 @@ trait DependencyTrackerUpdatingGesture extends Gesture {
 final case class ClearEntityInstanceTweaksGesture private (
     scenario: ScenarioReference,
     entityInstance: Entity,
-    nodes: Option[Traversable[NodeKey[_]]] = None)
+    nodes: Option[Traversable[NodeKey[_]]] = None,
+    excludes: Option[Traversable[NodeKey[_]]] = None)
     extends DependencyTrackerUpdatingGesture {
   override private[optimus] def allTargetedScenarioReferences(current: ScenarioReference) = Set(scenario)
 
   override private[optimus] def doGesture(updater: DependencyTrackerBatchUpdater): Unit =
-    nodes match {
-      case Some(nodeKeys) =>
-        updater
-          .updaterFor(scenario)
-          .removeTweaksForEntityInstanceWithKeysImmediate(entityInstance, nodeKeys.toSeq)
-      case None =>
-        updater
-          .updaterFor(scenario)
-          .removeTweaksForEntityInstanceWithKeysImmediate(entityInstance, Seq.empty[NodeKey[_]])
-    }
+    updater
+      .updaterFor(scenario)
+      .removeTweaksForEntityInstanceWithKeysImmediate(
+        entityInstance,
+        nodes.getOrElse(Seq.empty[NodeKey[_]]).toSeq,
+        excludes.getOrElse(Seq.empty[NodeKey[_]]).toSeq)
+
 }
 object ClearEntityInstanceTweaksGesture {
   @handle def apply(entityInstance: Entity): ClearEntityInstanceTweaksGesture =
@@ -62,11 +60,23 @@ object ClearEntityInstanceTweaksGesture {
 
   @handle def apply(scenario: ScenarioReference, entityInstance: Entity): ClearEntityInstanceTweaksGesture =
     new ClearEntityInstanceTweaksGesture(scenario, entityInstance)
+
   @handle def apply(
       scenario: ScenarioReference,
       entityInstance: Entity,
       nodeKeys: Traversable[NodeKey[_]]): ClearEntityInstanceTweaksGesture =
     new ClearEntityInstanceTweaksGesture(scenario, entityInstance, Some(nodeKeys))
+
+  @handle def withExcludes(
+      entityInstance: Entity,
+      excludes: Traversable[NodeKey[_]]): ClearEntityInstanceTweaksGesture =
+    new ClearEntityInstanceTweaksGesture(ScenarioReference.current, entityInstance, None, Some(excludes))
+
+  @handle def withExcludes(
+      scenario: ScenarioReference,
+      entityInstance: Entity,
+      excludes: Traversable[NodeKey[_]]): ClearEntityInstanceTweaksGesture =
+    new ClearEntityInstanceTweaksGesture(scenario, entityInstance, None, Some(excludes))
 }
 
 // if nodes is None, all tweaks in scenario will be removed, including instance tweaks and property tweaks
@@ -77,7 +87,7 @@ final case class ClearTweaksGesture private (scenario: ScenarioReference, nodes:
   override private[optimus] def doGesture(updater: DependencyTrackerBatchUpdater): Unit =
     nodes match {
       case Some(nodesToClear) => updater.updaterFor(scenario).removeTweaksImmediate(nodesToClear.toIterable)
-      case None               => updater.multiUpdater.removeAllTweaksImmediate(scenario)
+      case None               => updater.updaterFor(scenario).removeAllTweaksImmediate()
     }
 }
 object ClearTweaksGesture {
@@ -127,7 +137,7 @@ final case class ApplySnapshotTweakGesture private (
     // target and of the current scenario need to be the same
     if (currScen.rootOfConsistentSubtree != targetRef.rootOfConsistentSubtree)
       throw new UnsupportedOperationException("Can only copy tweaks to scenarios in the same consistent subtree!")
-    else updater.updaterFor(targetRef).addTweaksImmediate(targetRef, sealedTweakContainer.tweaks)
+    else updater.updaterFor(targetRef).addTweaksImmediate(sealedTweakContainer.tweaks)
   }
 }
 

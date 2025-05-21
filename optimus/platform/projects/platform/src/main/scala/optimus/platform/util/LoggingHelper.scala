@@ -23,7 +23,7 @@ private[optimus] /*[platform]*/ object LoggingHelper {
 
   def allLoggers: Seq[LogbackLogger] = {
     LoggerFactory.getILoggerFactory match {
-      case lc: ch.qos.logback.classic.LoggerContext => lc.getLoggerList.asScala
+      case lc: ch.qos.logback.classic.LoggerContext => lc.getLoggerList.asScalaUnsafeImmutable
       case _                                        => Nil // Non-logback logging frameworks are ignored
     }
   }

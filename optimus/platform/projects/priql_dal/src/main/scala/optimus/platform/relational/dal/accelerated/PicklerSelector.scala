@@ -234,17 +234,18 @@ object PicklerSelector {
   }
 
   def getSeqPickler(pickler: Pickler[_], value: Any) = value match {
-    case _: immutable.SortedSet[_] => isortedSetPickler(pickler)
-    case _: SortedSet[_]           => sortedSetPickler(pickler)
-    case _: Set[_]                 => setPickler(pickler)
-    case _: CovariantSet[_]        => covariantSetPickler(pickler)
-    case _: List[_]                => listPickler(pickler)
-    case _: ImmutableArray[_]      => iarrayPickler(pickler)
-    case _: Vector[_]              => vectorPickler(pickler)
-    case _: IndexedSeq[_]          => indexedSeqPickler(pickler)
-    case _: immutable.Seq[_]       => iseqPickler(pickler)
-    case _: Seq[_]                 => seqPickler(pickler)
-    case _                         => iterablePickler(pickler)
+    case _: immutable.SortedSet[_]   => isortedSetPickler(pickler)
+    case _: SortedSet[_]             => sortedSetPickler(pickler)
+    case _: Set[_]                   => setPickler(pickler)
+    case _: CovariantSet[_]          => covariantSetPickler(pickler)
+    case _: List[_]                  => listPickler(pickler)
+    case _: ImmutableArray[_]        => iarrayPickler(pickler)
+    case _: Vector[_]                => vectorPickler(pickler)
+    case _: immutable.IndexedSeq[_]  => iindexedSeqPickler(pickler)
+    case _: collection.IndexedSeq[_] => indexedSeqPickler(pickler)
+    case _: immutable.Seq[_]         => iseqPickler(pickler)
+    case _: collection.Seq[_]        => seqPickler(pickler)
+    case _                           => iterablePickler(pickler)
   }
 
   def getMapPickler(under1: Pickler[_], under2: Pickler[_], value: Any) = value match {
@@ -255,9 +256,10 @@ object PicklerSelector {
   }
 
   def getSeqUnpickler[T](unpickler: Unpickler[T], target: Class[_]) = target match {
-    case _ if target == classOf[Set[_]]          => new CollectionUnpickler[T, Set[T]](unpickler)
-    case _ if target == classOf[List[_]]         => new CollectionUnpickler[T, List[T]](unpickler)
-    case _ if target == classOf[Seq[_]]          => new CollectionUnpickler[T, Seq[T]](unpickler)(IndexedSeq)
+    case _ if target == classOf[Set[_]]  => new CollectionUnpickler[T, Set[T]](unpickler)
+    case _ if target == classOf[List[_]] => new CollectionUnpickler[T, List[T]](unpickler)
+    case _ if target == classOf[collection.Seq[_]] =>
+      new CollectionUnpickler[T, collection.Seq[T]](unpickler)(IndexedSeq)
     case _ if target == classOf[CovariantSet[_]] => new CollectionUnpickler[T, CovariantSet[T]](unpickler)
     case _                                       => new CollectionUnpickler[T, Iterable[T]](unpickler)(IndexedSeq)
   }

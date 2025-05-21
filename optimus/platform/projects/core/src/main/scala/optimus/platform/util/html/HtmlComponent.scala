@@ -13,10 +13,10 @@ package optimus.platform.util.html
 
 import optimus.platform.util.PrettyStringBuilder
 
-final case class HtmlComponent(interpreter: HtmlInterpreters.Type, htmlNodes: collection.Seq[HtmlNode]) {
+final case class HtmlComponent(interpreter: HtmlInterpreters.Type, htmlNodes: Seq[HtmlNode]) {
   override def toString: String = interpreter(htmlNodes)
 
-  def withHtmlNodes(newHtmlNodes: collection.Seq[HtmlNode]) = HtmlComponent(interpreter, newHtmlNodes)
+  def withHtmlNodes(newHtmlNodes: Seq[HtmlNode]) = HtmlComponent(interpreter, newHtmlNodes)
   def withInterpreter(interpreter: HtmlInterpreters.Type) = HtmlComponent(interpreter, htmlNodes)
   def withDefaultContents = HtmlComponent(interpreter, htmlNodes.map(_.withDefaultContents))
 
@@ -52,7 +52,7 @@ final case class HtmlComponent(interpreter: HtmlInterpreters.Type, htmlNodes: co
 }
 
 object HtmlComponent {
-  def apply(htmlNodes: collection.Seq[HtmlNode]): HtmlComponent = new HtmlComponent(HtmlInterpreters.prod, htmlNodes)
+  def apply(htmlNodes: Seq[HtmlNode]): HtmlComponent = new HtmlComponent(HtmlInterpreters.prod, htmlNodes)
 
   def printStructure(htmlNodes: HtmlNode*): String = {
     val sb = new PrettyStringBuilder
@@ -67,17 +67,17 @@ object HtmlComponent {
 }
 
 object HtmlInterpreters {
-  type Type = collection.Seq[HtmlNode] => String
+  type Type = Seq[HtmlNode] => String
 
-  def prod(attributes: collection.Seq[HtmlNode]): String =
+  def prod(attributes: Seq[HtmlNode]): String =
     html("&nbsp;", attributes, 0, null, prettyHtmlForTests = false)
-  def test(attributes: collection.Seq[HtmlNode]): String =
+  def test(attributes: Seq[HtmlNode]): String =
     html("&nbsp;", attributes, 0, null, prettyHtmlForTests = true)
 
   /**
    * flatten and extract all Link elements
    */
-  def links(attributes: collection.Seq[HtmlNode]): collection.Seq[Link] = attributes.flatMap {
+  def links(attributes: Seq[HtmlNode]): Seq[Link] = attributes.flatMap {
     _.flatten.collect { case l: Link => l }
   }
 
@@ -121,7 +121,7 @@ object HtmlInterpreters {
 
   private def html(
       sep: String,
-      attributes: collection.Seq[HtmlNode],
+      attributes: Seq[HtmlNode],
       groupLevel: Int,
       groupName: String,
       prettyHtmlForTests: Boolean): String = {
@@ -140,8 +140,8 @@ object HtmlInterpreters {
       result
   }
 
-  def plaintext(attributes: collection.Seq[HtmlNode]): String = plaintext(" ", attributes).mkString
-  def plaintextSeq(attributes: collection.Seq[HtmlNode]): collection.Seq[String] =
+  def plaintext(attributes: Seq[HtmlNode]): String = plaintext(" ", attributes).mkString
+  def plaintextSeq(attributes: Seq[HtmlNode]): Seq[String] =
     plaintext(" ", attributes).filterNot(_ == "\n")
 
   private def nodeToPlaintext(sep: String, node: LeafHtmlNode): String = node match {
@@ -158,7 +158,7 @@ object HtmlInterpreters {
     case Indent(level) => "  " * level
   }
 
-  private def plaintext(sep: String, attributes: collection.Seq[HtmlNode]): collection.Seq[String] = attributes
+  private def plaintext(sep: String, attributes: Seq[HtmlNode]): Seq[String] = attributes
     .flatMap(p =>
       p match {
         case g: GroupHtmlNode => plaintext(sep, g.contents.attrs)

@@ -34,6 +34,7 @@ import optimus.graph.tracking.DependencyTracker
 import optimus.graph.tracking.DependencyTrackerQueue
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.graph.tracking.EventCause
+import optimus.graph.tracking.TrackedNodeInvalidationObserver
 import optimus.graph.tracking.TrackingGraphCleanupTrigger
 import optimus.graph.tracking.TraversalIdSource
 import optimus.platform.NodeHash
@@ -61,7 +62,7 @@ private[optimus] final class TweakableTracker(
      */
     children: TweakableKey => Iterable[TweakableTracker],
     parent: TweakableListener,
-    onInvalidateAll: () => Unit)
+    onInvalidateAll: TrackedNodeInvalidationObserver => Unit)
     extends TweakableListener {
   import DependencyTracker.log
   import TweakableTracker._
@@ -156,25 +157,25 @@ private[optimus] final class TweakableTracker(
     }
   }
 
-  def invalidateByTweaks(expanded: Iterable[Tweak], cause: EventCause, preview: Boolean = false): Unit = {
+  def invalidateByTweaks(
+      expanded: Iterable[Tweak],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     var propertyTweaks: List[Tweak] = Nil
     var untrackedTweaks: List[Tweak] = Nil
     expanded.foreach { twk =>
       if (twk.target.propertyInfo.trackForInvalidation()) {
         val key = twk.target.hashKey
-        if (key ne null) invalidateByKey(key, twk, cause, preview = preview)
+        if (key ne null) invalidateByKey(key, twk, cause, observer)
         else propertyTweaks ::= twk
       } else untrackedTweaks ::= twk
     }
 
     if (untrackedTweaks.nonEmpty) {
       log.error(s"There were tweaks to non-tracked tweakables - we will clear the cache! $untrackedTweaks")
-      invalidateAllCachedNodes(untrackedTweaks, cause)
+      invalidateAllCachedNodes(untrackedTweaks, cause, observer)
     } else if (propertyTweaks.nonEmpty) {
-      invalidateByPropertyMap(
-        propertyTweaks.iterator.map(t => (t.target.propertyInfo, t)).toMap,
-        cause,
-        preview = preview)
+      invalidateByPropertyMap(propertyTweaks.iterator.map(t => (t.target.propertyInfo, t)).toMap, cause, observer)
     }
   }
 
@@ -191,10 +192,14 @@ private[optimus] final class TweakableTracker(
    * @param preview
    *   Whether or not to do invalidation previews.
    */
-  def invalidateByKey(pkey: TweakableKey, tweak: Tweak, cause: EventCause, preview: Boolean = false): Unit = {
+  def invalidateByKey(
+      pkey: TweakableKey,
+      tweak: Tweak,
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     // invalidateByKey could have derived the key2use inside and the only reason to do it here it to avoid extra allocation
     pkey.propertyInfo.markInstanceTweakedInTracker()
-    invalidateByKey(pkey, pkey.trackKey, tweak, cause, preview)
+    invalidateByKey(pkey, pkey.trackKey, tweak, cause, observer)
   }
 
   /**
@@ -215,19 +220,16 @@ private[optimus] final class TweakableTracker(
       key2use: TweakableKey,
       tweak: Tweak,
       cause: EventCause,
-      preview: Boolean): Unit = {
+      observer: TrackedNodeInvalidationObserver): Unit = {
     val ttrack = ttracks.get(key2use)
     if (ttrack ne null) {
-      if (preview) Invalidators.invalidatePreview(ttrack, queue, idSource)
-      else {
-        ttracks.remove(key2use)
-        // The null case is for TrackingTemporalContexts. We should probably find a way to deal with them.
-        val trace = if (tweak != null) PNodeInvalidate(tweak, cause, owner.scenarioReference) else null
-        if (trace ne null) NodeTrace.invalidate(Invalidators.invalidate(ttrack, trace, idSource))
-        else Invalidators.invalidate(ttrack, idSource)
-      }
+      ttracks.remove(key2use)
+      // The null case is for TrackingTemporalContexts. We should probably find a way to deal with them.
+      val trace = if (tweak != null) PNodeInvalidate(tweak, cause, owner.scenarioReference) else null
+      if (trace ne null) NodeTrace.invalidate(Invalidators.invalidate(ttrack, trace, idSource, observer))
+      else Invalidators.invalidate(ttrack, idSource, observer)
     }
-    children(pkey).foreach { _.invalidateByKey(pkey, key2use, tweak, cause, preview) }
+    children(pkey).foreach { _.invalidateByKey(pkey, key2use, tweak, cause, observer) }
   }
 
   // returns matching parent NTI or null
@@ -260,7 +262,7 @@ private[optimus] final class TweakableTracker(
   private def invalidateByPropertyMap(
       tweakedProperties: Map[NodeTaskInfo, Tweak],
       cause: EventCause,
-      preview: Boolean): Unit = {
+      observer: TrackedNodeInvalidationObserver): Unit = {
     tweakedProperties.keysIterator.foreach(_.markPropertyTweakedInTracker())
     val it = ttracks.entrySet().iterator()
     while (it.hasNext) {
@@ -270,23 +272,23 @@ private[optimus] final class TweakableTracker(
         if (tweakedProperties.contains(trackedProperty)) trackedProperty
         else findPropertyTweakInParents(tweakedProperties, trackedProperty)
       if (foundProperty != null) {
-        if (preview) Invalidators.invalidatePreview(entry.getValue, queue, idSource)
-        else {
-          it.remove()
-          val value = entry.getValue
-          val trace = PNodeInvalidate(tweakedProperties(foundProperty), cause, owner.scenarioReference)
-          if (trace ne null) NodeTrace.invalidate(Invalidators.invalidate(value, trace, idSource))
-          else Invalidators.invalidate(value, idSource)
-        }
+        it.remove()
+        val value = entry.getValue
+        val trace = PNodeInvalidate(tweakedProperties(foundProperty), cause, owner.scenarioReference)
+        if (trace ne null) NodeTrace.invalidate(Invalidators.invalidate(value, trace, idSource, observer))
+        else Invalidators.invalidate(value, idSource, observer)
       }
     }
-    children(null).foreach { _.invalidateByPropertyMap(tweakedProperties, cause, preview) }
+    children(null).foreach { _.invalidateByPropertyMap(tweakedProperties, cause, observer) }
   }
 
   /**
    * Invalidates all cached nodes (including untracked nodes) for this dependency tracker and its descendants
    */
-  private def invalidateAllCachedNodes(tweaks: List[Tweak], cause: EventCause): Unit = {
+  private def invalidateAllCachedNodes(
+      tweaks: List[Tweak],
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
     val trace = PNodeInvalidate(null, cause, owner.scenarioReference)
 
     // invalidate all nodes within our consistent subtree (because of overlays it's not sufficient to only invalidate
@@ -300,7 +302,7 @@ private[optimus] final class TweakableTracker(
         val invalidate =
           node.scenarioStack().tweakableListener.respondsToInvalidationsFrom.contains(consistentSubtreeRoot)
         if (invalidate) {
-          node.invalidateCache()
+          node.invalidateCache(observer)
           if (trace ne null) trace.add(node.propertyInfo)
         }
         invalidate
@@ -311,7 +313,7 @@ private[optimus] final class TweakableTracker(
     if (trace ne null) tweaks.foreach { twk =>
       NodeTrace.invalidate(trace.copyForTweak(twk))
     }
-    onInvalidateAll()
+    onInvalidateAll(observer)
   }
 
   private def ttracksWasDisposed = ttracks eq null

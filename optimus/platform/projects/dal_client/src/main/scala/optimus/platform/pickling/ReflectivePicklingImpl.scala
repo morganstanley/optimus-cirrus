@@ -29,6 +29,7 @@ import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType.methodType
 import java.lang.reflect.Field
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 object ReflectivePicklingImpl {
@@ -46,8 +47,20 @@ object ReflectivePicklingImpl {
           // needing to actually run it (so potentially avoiding an unpickle and associated DAL fetch), unless it
           // had already been unpickled (in which case write it normally)
           val p = lpr.pickled
-          if (p != null) out.writeRawObject(p.asInstanceOf[AnyRef])
-          else out.write(lpr.await, pickler)
+          if (p != null) {
+            // During unpickling an entity, we would have wrapped any StorageKind.Node field that is of a collection
+            // type in an UnresolvedItemWrapper for PluginHelpers.resolveEntity* methods to handle their
+            // lazy unpickling. If the actual unpickling did not yet happen, we need to unwrap here to get back
+            // the original, raw pickled-form. The need to use this UnresolvedItemWrapper is explained
+            // in def unpickleFill below
+            val raw = p match {
+              case v: UnresolvedItemWrapper[_] => v.unresolved
+              case _                           => p
+            }
+            out.writeRawObject(raw.asInstanceOf[AnyRef])
+          } else {
+            out.write(lpr.await, pickler)
+          }
         case node =>
           out.write(node.await, pickler)
       }
@@ -55,7 +68,8 @@ object ReflectivePicklingImpl {
 
     val fValue = fieldInfo.fieldReader.invokeExact(inst: Storable): AnyRef
     fieldInfo.storageKind match {
-      case UnsafeFieldInfo.StorageKind.Node | UnsafeFieldInfo.StorageKind.Tweakable =>
+      case UnsafeFieldInfo.StorageKind.Node | UnsafeFieldInfo.StorageKind.LazyPickled |
+          UnsafeFieldInfo.StorageKind.Tweakable =>
         writeNode(fValue.asInstanceOf[PropertyNode[AnyRef]])
       case UnsafeFieldInfo.StorageKind.Val =>
         out.write(fValue, pickler)
@@ -145,7 +159,9 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       // TODO (OPTIMUS-22294): Asyncing the closure triggers sync stack detection.  Apparently sync stacks are ok.
       .asyncOff
       .foreach { case UnsafeFieldInfo(pinfo, storageKind, initMethod, fieldReader, fieldSetter) =>
-        if (storageKind == UnsafeFieldInfo.StorageKind.Node) { // handle Entity/Option[Entity]/Collection[Entity] cases
+        if (storageKind == UnsafeFieldInfo.StorageKind.Node) {
+          // handle Entity/Option[Entity]/Collection[Entity] cases for traits. For now, we're still
+          // using the old-style LPR approach for traits
           val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
           if (hasValue || !incomplete) {
             val value: PropertyNode[_] = {
@@ -156,7 +172,8 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
                     is.value,
                     pinfo.unpickler.asInstanceOf[Unpickler[AnyRef]],
                     inst.asInstanceOf[Entity],
-                    pinfo)
+                    pinfo,
+                    null)
               } else {
                 if (initMethod.isDefined)
                   new AlreadyCompletedPropertyNode(initMethod.get.invoke(inst), inst.asInstanceOf[Entity], pinfo)
@@ -164,7 +181,46 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
               }
             }
 
-            fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascriptions are not optional
+            fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascription is not optional
+          }
+        } else if (storageKind == UnsafeFieldInfo.StorageKind.LazyPickled) { // handle Entity/Option[Entity]/Collection[Entity] cases
+          val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
+          if (hasValue || !incomplete) {
+            val value = {
+              if (hasValue) {
+                if (forceUnpickle) {
+                  is.value
+                } else {
+                  // Field is a complex type that contains an @entity. This could be a collection, tuple, embeddable
+                  // or some other type that has a custom pickler for.
+                  // While we should not need LazyPickled for vals that reference case objects, if the case object is
+                  // nested inside of an @entity object, the plugin marks it as Lazy. This logic in the plugin can be
+                  // improved by not considering the containing class when looking for reachable entities.
+                  //
+                  // The actual lazy unpickling will be done by the PluginHelpers.resolve* methods as long as
+                  // the type we set into the field extends ContainsUnresolvedReference.
+                  is.value match {
+                    case knownUnresolved: ContainsUnresolvedReference =>
+                      // In this case, the pickled representation implements ContainsUnresolvedReference so it is
+                      // suitable to just return.
+                      knownUnresolved
+                    case toWrap: AnyRef =>
+                      // Needs to be wrapped in an UnresolvedItemWrapper as we need something that
+                      // implements ContainsUnresolvedReference
+                      new UnresolvedItemWrapper(toWrap)
+                    case _ =>
+                      // We don't expect is.value to be scala.AnyVal and still be marked as LazyPickled!
+                      throw new UnpickleException(is.value, "AnyRef")
+                  }
+                }
+              } else {
+                if (initMethod.isDefined)
+                  initMethod.get.invoke(inst)
+                else missingProperty(pinfo.name)
+              }
+            }
+
+            fieldSetter.invokeExact(inst, value: Any): Unit // Type ascriptions are not optional
           }
         } else { // handle non-entity types - primary types, embeddable, Option/Collection of such types
           val hasValue = is.seek(pinfo.name, pinfo.unpickler)
@@ -291,8 +347,13 @@ object ReflectiveEntityPicklingImpl // used in [core]o.p.pickling.ReflectiveEnti
           p.setAccessible(true)
 
           val nodeKind =
-            if (classOf[Node[_]] isAssignableFrom p.getType) StorageKind.Node
-            else if (pinfo.isTweakable) StorageKind.Tweakable
+            if ((classOf[Node[_]] isAssignableFrom p.getType))
+              StorageKind.Node
+            else if (java.lang.reflect.Modifier.isVolatile(p.getModifiers)) {
+              // implying that this $impl field is for an lazypickled value from the volatile attribute
+              // We will improve this by using a PropertyInfo flag instead.
+              StorageKind.LazyPickled
+            } else if (pinfo.isTweakable) StorageKind.Tweakable
             else StorageKind.Val
 
           UnsafeFieldInfo(

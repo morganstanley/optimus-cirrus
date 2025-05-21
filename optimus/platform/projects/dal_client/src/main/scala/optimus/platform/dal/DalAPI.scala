@@ -424,8 +424,8 @@ abstract class DALModuleAPI {
       transaction: T
   ): Unit = resolver.publishTransaction(transaction)
 
-  @async private[platform] def checkEntitlementAndSetACLs(appId: String, acls: Seq[StreamsACLs]) =
-    resolver.checkEntitlementAndSetACLs(appId, acls)
+  @async private[platform] def checkEntitlementAndSetACLs(streamAppId: String, acls: Seq[StreamsACLs]) =
+    resolver.checkEntitlementAndSetACLs(streamAppId, acls)
 
   @parallelizable
   def getTemporalCoordinates(e: Entity): TemporalCoordinates = {

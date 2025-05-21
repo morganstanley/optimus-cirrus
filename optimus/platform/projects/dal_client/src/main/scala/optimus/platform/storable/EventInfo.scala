@@ -44,7 +44,7 @@ class EventInfo(
     parents.foldLeft(Set.empty[EventInfo])(_ union _.baseTypes) + this
   }
 
-  val keys: collection.Seq[IndexInfo[_, _]] = indexes filter { _.unique }
+  val keys: Seq[IndexInfo[_, _]] = indexes filter { _.unique }
 
   def createUnpickled(
       is: PickledInputStream,

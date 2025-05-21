@@ -529,6 +529,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
     class PersistVisitor(vt: A, upsert: Boolean, cmid: Option[MSUuid]) extends AbstractPickledOutputStream {
       private[this] var currentPropertyInfo: PropertyInfo[_] = _
+      private[this] var outerMonoTemporal: Boolean = _
 
       private def tryPersist(entity: Entity): Boolean = {
         checkTransient(entity)
@@ -537,13 +538,21 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
       def apply(entity: Entity): Unit = {
         tryPersist(entity)
+        outerMonoTemporal = entity.$info.monoTemporal
         // Pickle call here is used to build assert operations through writePropertyInfo and writeEntity
         entity.pickle(this)
       }
 
       override def writeEntity(entity: Entity): Unit = {
         if (entity.$isModule) checkTransient(entity)
-        else if (!entity.$inline) assertOps += AssertEntry(entity, vt, currentPropertyInfo)
+        else if (!entity.$inline) {
+          if (outerMonoTemporal)
+            require(
+              entity.$info.monoTemporal,
+              s"DAL doesn't support monotemporal entities referencing bitemporal entities such as ${entity.$info.runtimeClass}")
+          assertOps += AssertEntry(entity, vt, currentPropertyInfo)
+        }
+
       }
 
       override def writePropertyInfo(info: PropertyInfo[_]): Unit = {
@@ -759,7 +768,7 @@ class BasicPersistBlock(resolver: EntityResolverWriteImpl) extends AbstractPersi
     if (cmds.nonEmpty)
       resolver.commitPersistBlock(cmds, entityMutationAllowed)
     else
-      PersistResult(TimeInterval.NegInfinity)
+      PersistResult(TimeInterval.NegInfinity, isEmptyTransaction = true)
   }
 
   /**

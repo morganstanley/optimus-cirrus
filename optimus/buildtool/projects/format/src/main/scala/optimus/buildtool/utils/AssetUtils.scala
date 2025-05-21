@@ -11,6 +11,10 @@
  */
 package optimus.buildtool.utils
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.readFromStream
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
+
 import java.io.BufferedInputStream
 import java.io.BufferedWriter
 import java.io.IOException
@@ -308,9 +312,9 @@ object AssetUtils {
       zOut = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(out), UTF_8))
       zOut.append(s)
     } catch {
-      case t: Throwable =>
-        log.error(s"Failed to write to ${file.path}", t)
-        if (t.isInstanceOf[FileSystemException]) {
+      case NonFatal(e) =>
+        log.error(s"Failed to write to ${file.path}", e)
+        if (e.isInstanceOf[FileSystemException]) {
           ManagementFactory.getOperatingSystemMXBean match {
             case b: UnixOperatingSystemMXBean =>
               val open = b.getOpenFileDescriptorCount
@@ -319,7 +323,7 @@ object AssetUtils {
             case _ => // do nothing
           }
         }
-        throw t
+        throw e
     } finally {
       if (zOut ne null) zOut.close()
     }
@@ -334,8 +338,8 @@ object AssetUtils {
         oos = new ObjectOutputStream(fos)
         oos.writeObject(value)
       } catch {
-        case t: Throwable =>
-          log.error(s"Failed to serialize to $tmp", t)
+        case NonFatal(e) =>
+          log.error(s"Failed to serialize to $tmp", e)
       } finally {
         if (oos ne null)
           oos.close()
@@ -355,8 +359,8 @@ object AssetUtils {
         val obj = ois.readObject().asInstanceOf[T]
         Some(obj)
       } catch {
-        case t: Throwable =>
-          log.error(s"Failed to deserialize ${file.path}", t)
+        case NonFatal(e) =>
+          log.error(s"Failed to deserialize ${file.path}", e)
           None
       } finally {
         if (ois ne null)
@@ -413,60 +417,55 @@ object AssetUtils {
     } finally channel.close()
   }
 
-  import spray.json._
-
-  def readJson[T: JsonFormat](file: JsonAsset, unzip: Boolean = true): T = {
-    var zIn: GZIPInputStream = null
-    try {
-      val bytes = if (unzip) {
-        val in = Files.newInputStream(file.path, StandardOpenOption.READ)
-        zIn = new GZIPInputStream(new BufferedInputStream(in))
-        toByteArray(zIn)
-      } else {
-        Files.readAllBytes(file.path)
+  def readJson[T: JsonValueCodec](file: JsonAsset, unzip: Boolean = true): T = {
+    val in = Files.newInputStream(file.path, StandardOpenOption.READ)
+    val in0 = if (unzip) {
+      new GZIPInputStream(new BufferedInputStream(in))
+    } else in
+    Using.resource(in0) { in =>
+      try { readFromStream[T](in) }
+      catch {
+        case NonFatal(e) =>
+          log.error(s"Fatal error while reading json from $file", e)
+          throw e
       }
-      val js: JsValue = JsonParser(bytes)
-      js.convertTo[T]
-    } catch {
-      case t: Throwable =>
-        throw new IllegalStateException(s"Failed to read json from ${file.path}", t)
-    } finally {
-      if (zIn ne null) zIn.close()
     }
   }
 
-  def storeJsonAtomically[T: JsonFormat](
+  private def trackingWrite[A](outputStream: OutputStream, path: Path)(body: OutputStream => A): A = {
+    Using.resource(outputStream) { out =>
+      try { body(out) }
+      catch {
+        case NonFatal(e) =>
+          log.error(s"Failed to write to ${path}", e)
+          if (e.isInstanceOf[FileSystemException]) {
+            ManagementFactory.getOperatingSystemMXBean match {
+              case b: UnixOperatingSystemMXBean =>
+                val open = b.getOpenFileDescriptorCount
+                val max = b.getMaxFileDescriptorCount
+                log.info(s"$open/$max open file descriptors")
+              case _ => // do nothing
+            }
+          }
+          throw e
+      }
+    }
+  }
+
+  def storeJsonAtomically[T: JsonValueCodec](
       file: JsonAsset,
       value: T,
       replaceIfExists: Boolean,
       zip: Boolean = true): Unit = {
     def store(tmp: Path): Unit = {
-      withTempJson(value) { sb =>
-        if (zip)
-          writeZip(FileAsset(tmp), sb)
-        else {
-          val writer = Files.newBufferedWriter(tmp, UTF_8)
-          try writer.append(sb)
-          finally writer.close()
-        }
-      }
+      val outputStream = Files.newOutputStream(tmp, StandardOpenOption.CREATE_NEW)
+      val out0 = if (zip) new GZIPOutputStream(outputStream) else outputStream
+      trackingWrite(out0, tmp) { writeToStream(value, _) }
     }
+
     // If we're not replacing, then call atomicallyWriteIfMissing to save unnecessary writes to the temp file
     if (replaceIfExists) atomicallyWrite(file, replaceIfExists = true)(store)
     else atomicallyWriteIfMissing(file)(store)
-  }
-
-  private val jsonStringBuilderCache = new ThreadLocal[java.lang.StringBuilder] {
-    override def initialValue(): java.lang.StringBuilder = new java.lang.StringBuilder
-  }
-
-  /** @param jsonIn a consumer of a temporary [[CharSequence]] containing the JSON. Don't hold on to it. */
-  def withTempJson[T: JsonFormat, U](value: T)(jsonIn: CharSequence => U): U = {
-    val sb = jsonStringBuilderCache.get()
-    sb.setLength(0)
-    PrettyPrinter.print(value.toJson, sb)
-    sb.append("\n")
-    jsonIn(sb)
   }
 
   private def assetIsValid(asset: FileAsset)(f: FileAsset => Boolean): Boolean =

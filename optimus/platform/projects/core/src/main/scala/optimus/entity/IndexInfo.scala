@@ -22,7 +22,7 @@ import scala.collection.mutable
 abstract class IndexInfo[A <: Storable, K](
     val name: String,
     // NB: These may be synthetic/fake property names when the index constituent is a member of an embeddable.
-    val propertyNames: collection.Seq[String],
+    val propertyNames: Seq[String],
     val unique: Boolean,
     val indexed: Boolean,
     val default: Boolean,
@@ -36,7 +36,7 @@ abstract class IndexInfo[A <: Storable, K](
 
   private[optimus] def entityToSerializedKey(
       entity: A,
-      referenceMap: collection.Map[Entity, EntityReference]): collection.Seq[SerializedKey]
+      referenceMap: collection.Map[Entity, EntityReference]): Seq[SerializedKey]
   def entityToKeyImpl(entity: A): Key[A]
   // get key value from entity
   def getRaw(a: A): Any

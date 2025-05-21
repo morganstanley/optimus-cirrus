@@ -135,7 +135,7 @@ trait AbstractTypeTransformerOps[T] {
     o match {
       case x: ImmutableByteArray        => serialize(x.data)
       case x: Option[_]                 => x.map(serialize(_)).getOrElse(null)
-      case x: Seq[_]                    => mapToArrayList(serialize _, x)
+      case x: collection.Seq[_]         => mapToArrayList(serialize _, x)
       case x: immutable.SortedMap[_, _] => toJavaOrderedMap(x.asInstanceOf[immutable.SortedMap[String, Any]])
       case x: Map[_, _]                 => toJavaMap(x.asInstanceOf[Map[String, Any]])
       case x: Set[_]                    => toJavaSet(x)

@@ -162,7 +162,7 @@ object SourceGenerator {
       jar: JarAsset,
       tempDir: Directory = null
   )(f: ConsistentlyHashedJarOutputStream => Unit = _ => ()): Seq[CompilationMessage] = {
-    import optimus.buildtool.artifacts.JsonImplicits._
+    import optimus.buildtool.artifacts.JsonImplicits.generatedSourceMetadataValueCodec
     Jars.createJar(jar, GeneratedSourceMetadata(generatorName, sourcePath, messages, hasErrors), Option(tempDir))(f)
     messages
   }

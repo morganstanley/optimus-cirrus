@@ -88,7 +88,7 @@ trait GraphMBean {
   def showGraphConsole(): Unit
   def setTraceMode(mode: String): Unit
   def getTraceMode: String
-  def getTrace: collection.Seq[PNodeTask]
+  def getTrace: Seq[PNodeTask]
   def getSummaryTable: SummaryTable
   def gc(): Unit
   def clearCacheAndTracking(): Unit
@@ -115,7 +115,7 @@ class GraphMBeanImpl extends GraphMBean {
   @nowarn("msg=10500 optimus.graph.tracking.DependencyTrackerRoot.clearCacheAndTracking")
   override def clearCacheAndTracking(): Unit = DependencyTrackerRoot.clearCacheAndTracking(CauseProfiler)
   override def resetSStackRoots(): Unit = ProfilerUIControl.resetSStackUsage()
-  override def getTrace: collection.Seq[PNodeTask] = NodeTrace.getTrace.asScala
+  override def getTrace: Seq[PNodeTask] = NodeTrace.getTrace.asScalaUnsafeImmutable
   override def profilerResetAll(): Unit = Profiler.resetAll()
   override def getSummaryTable: SummaryTable = GridProfiler.getSummaryTable
   override def gc(): Unit = Runtime.getRuntime.gc()
