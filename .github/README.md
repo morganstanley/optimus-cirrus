@@ -4,6 +4,8 @@ Please note the LICENSE file.
 
 We hope that you find the project interesting and useful. If you want to ask questions or make comments then please feel free to contact us at `optimus_cirrus (at) morganstanley (dot) com`. If you would like to make a contribution, please also contact us there so that we can discuss the proposed changes and outline the process. [Contributing guidelines are available here](CONTRIBUTING.md).
 
+[Documentation](https://deepwiki.com/morganstanley/optimus-cirrus/1-overview)
+
 [Contributors](contributors.md)
 
 Here are some links to talks we have done about the principles behind Optimus Cirrus:
