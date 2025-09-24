@@ -12,7 +12,6 @@
 package optimus.graph.diagnostics.gridprofiler
 
 import com.opencsv.CSVWriter
-import optimus.core.needsPlugin
 import optimus.dist.DistPluginTags.JobTaskIdTag
 import optimus.dist.gsfclient.JobClientMetrics
 import optimus.graph.DiagnosticSettings.initialProfileAggregation
@@ -33,8 +32,8 @@ import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils._
 import optimus.graph.diagnostics.gridprofiler.Level._
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.platform.EvaluationContext
-import optimus.platform.PluginHelpers.toNode
 import optimus.platform.ForwardingPluginTagKey
+import optimus.platform.PluginHelpers.toNode
 import optimus.platform.PluginTagKeyValue
 import optimus.platform.ScenarioStack
 import optimus.platform.annotations._
@@ -208,11 +207,13 @@ object GridProfiler {
   @nodeSync
   @nodeSyncLift
   def profiled[T](scope: ProfilerScope)(@nodeLiftByName @nodeLift action: => T): ProfilerResult[T] =
-    needsPlugin
+    profiled$withNode(toNode(action _))
   def profiled$withNode[T](scope: ProfilerScope)(action: Node[T]): ProfilerResult[T] =
     profiled$newNode(scope, Some(ProcessMetricsEntry.start()))(action).get
   def profiled$queued[T](scope: ProfilerScope)(action: Node[T]): Node[ProfilerResult[T]] =
     profiled$newNode(scope, None)(action).enqueueAttached
+  def profiled$queued[T](scope: ProfilerScope, action: => T): NodeFuture[ProfilerResult[T]] =
+    profiled$newNode(scope, None)(toNode(action _)).enqueueAttached
   private[this] def profiled$newNode[T](scope: ProfilerScope, envMetrics: Option[ProcessMetricsBeginSnapshot])(
       action: Node[T]): Node[ProfilerResult[T]] = {
     profiled$newNode[T](scope, parentOrDefaultCustomMetrics, parentOrDefaultAggregation, envMetrics)(action)
@@ -223,13 +224,19 @@ object GridProfiler {
   @nodeSyncLift
   def profiled[T](scope: ProfilerScope, customFilter: Array[String], aggregation: AggregationType.Value)(
       @nodeLiftByName @nodeLift action: => T): ProfilerResult[T] =
-    needsPlugin
+    profiled$withNode(scope, customFilter, aggregation)(toNode(action _))
   def profiled$withNode[T](scope: ProfilerScope, customFilter: Array[String], aggregation: AggregationType.Value)(
       action: Node[T]): ProfilerResult[T] =
     profiled$newNode(scope, customFilter, aggregation, Some(ProcessMetricsEntry.start()))(action).get
   def profiled$queued[T](scope: ProfilerScope, customFilter: Array[String], aggregation: AggregationType.Value)(
       action: Node[T]): Node[ProfilerResult[T]] =
     profiled$newNode(scope, customFilter, aggregation, None)(action).enqueueAttached
+  def profiled$queued[T](
+      scope: ProfilerScope,
+      customFilter: Array[String],
+      aggregation: AggregationType.Value,
+      action: => T): NodeFuture[ProfilerResult[T]] =
+    profiled$newNode(scope, customFilter, aggregation, None)(toNode(action _)).enqueueAttached
   private[this] def profiled$newNode[T](
       scope: ProfilerScope,
       customFilter: Array[String],
@@ -246,7 +253,7 @@ object GridProfiler {
       customFilter: Option[Array[String]] = None,
       aggregation: Option[AggregationType.Value] = None)(@nodeLiftByName @nodeLift action: => T)(implicit
       loc: SourceLocation): ProfilerResult[T] =
-    needsPlugin
+    profiled$withNode(scope, customFilter, aggregation)(toNode(action _))(loc)
   def profiled$withNode[T](
       scope: Option[ProfilerScope] = None,
       customFilter: Option[Array[String]] = None,
@@ -269,6 +276,18 @@ object GridProfiler {
       (aggregation.toSeq :+ parentOrDefaultAggregation).minBy(_.id),
       Some(ProcessMetricsEntry.start())
     )(action).enqueueAttached
+  def profiled$queued[T](
+      scope: Option[ProfilerScope],
+      customFilter: Option[Array[String]],
+      aggregation: Option[AggregationType.Value],
+      action: => T,
+      loc: SourceLocation): NodeFuture[ProfilerResult[T]] =
+    profiled$newNode(
+      scope.getOrElse(scopeFromLocation(loc)),
+      parentOrDefaultCustomMetrics ++ customFilter.getOrElse(Array.empty[String]),
+      (aggregation.toSeq :+ parentOrDefaultAggregation).minBy(_.id),
+      Some(ProcessMetricsEntry.start())
+    )(toNode(action _)).enqueueAttached
   // noinspection ScalaUnusedSymbol
   @nodeSync
   @nodeSyncLift
@@ -289,6 +308,8 @@ object GridProfiler {
     profiled$newNode(scopeFromLocation(loc), Some(ProcessMetricsEntry.start()))(action).get
   def profiled$queued[T](action: Node[T])(implicit loc: SourceLocation): Node[ProfilerResult[T]] =
     profiled$newNode(scopeFromLocation(loc), None)(action).enqueueAttached
+  def profiled$queued[T](action: => T, loc: SourceLocation): NodeFuture[ProfilerResult[T]] =
+    profiled$newNode(scopeFromLocation(loc), None)(toNode(action _)).enqueueAttached
   // noinspection ScalaUnusedSymbol
   @nodeSync
   @nodeSyncLift
@@ -300,6 +321,8 @@ object GridProfiler {
   // noinspection ScalaUnusedSymbol
   def profiled$queued[T](unused: Int*)(action: Node[T])(implicit loc: SourceLocation): Node[ProfilerResult[T]] =
     profiled$newNode(scopeFromLocation(loc), None)(action).enqueueAttached
+  def profiled$queued[T](unused: immutable.Seq[Int], action: => T, loc: SourceLocation): NodeFuture[ProfilerResult[T]] =
+    profiled$newNode(scopeFromLocation(loc), None)(toNode(action _)).enqueueAttached
 
   // scope is Seq[String] to represent nesting of profiled blocks:
   // profiled("A") { profiled("B") { node } } will execute node under scope (A,B)
@@ -388,9 +411,14 @@ object GridProfiler {
 
   // convenience accessors:
   // true if any profiling is on (used by Distribution to reset/save/restore profiling mode)
-  final def profilingOn: Boolean = Settings.profileTemporalContext || getDefaultLevel != Level.NONE
+  @volatile final var profilingOn: Boolean = Settings.profileTemporalContext
   // DAL recording takes place at "Light" or higher
-  final def DALProfilingOn: Boolean = getDefaultLevel >= LIGHT
+  @volatile final var DALProfilingOn: Boolean = false
+
+  private[optimus] final def updateAccessors(newLevel: Level): Unit = {
+    profilingOn = Settings.profileTemporalContext || newLevel != Level.NONE
+    DALProfilingOn = newLevel >= LIGHT
+  }
 
   // If the node has no profiler tag, imbues the node with a synthetized profiler tag to represent commandline-selected options
   // Called before distributing a node to another JVM, where defaultLevel will not be visible

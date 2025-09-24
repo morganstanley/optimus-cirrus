@@ -13,12 +13,15 @@ package optimus.platform.pickling
 
 import optimus.exceptions.RTExceptionTrait
 import optimus.graph.PropertyInfo
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.storable.Entity
 
 import scala.collection.mutable
 import optimus.platform.storable.ModuleEntityToken
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.Storable
+
+import scala.reflect.ClassTag
 
 class TemporaryEntityException(val entity: Entity, val propertyName: String)
     extends IllegalArgumentException(
@@ -97,22 +100,62 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
   }
 
   final class ArrayWriteContext(val parent: WriteContextStack) extends WriteContextStack {
-    import scala.collection.mutable.ArrayBuffer
+    // If all written values are of the same primitive type, the resulting PickleSeq (which is an immutable.ArraySeq)
+    // built in `flush` wraps a primitive array.
 
-    private[this] val buf = ArrayBuffer[Any]()
+    private[this] var b: mutable.ArrayBuilder[_] = null
+    private[this] var tp: Class[_] = null
 
-    def flush(): Unit = parent.writeRawObject(buf.result())
+    private def builder[T](implicit ct: ClassTag[T]): mutable.ArrayBuilder[T] = {
+      if (b == null) {
+        tp = ct.runtimeClass
+        b = mutable.ArrayBuilder.make(ct)
+      } else if (tp != classOf[Any] && tp != ct.runtimeClass) {
+        tp = classOf[Any]
+        val newB = mutable.ArrayBuilder.make[Any]
+        newB.addAll(b.result())
+        b = newB
+      }
+      b.asInstanceOf[mutable.ArrayBuilder[T]]
+    }
+
+    def flush(): Unit = {
+      val res =
+        if (b == null) PickleSeq.empty[Any]
+        else PickleSeq.unsafeWrapArray(b.result())
+      b = null
+      tp = null
+      parent.writeRawObject(res)
+    }
 
     def writeFieldName(k: String): Unit =
       throw new UnsupportedOperationException("Sequences do not support named fields")
 
-    override def writeBoolean(data: Boolean): Unit = buf.append(data)
-    override def writeChar(data: Char): Unit = buf.append(data)
-    override def writeDouble(data: Double): Unit = buf.append(data)
-    override def writeFloat(data: Float): Unit = buf.append(data)
-    override def writeInt(data: Int): Unit = buf.append(data)
-    override def writeLong(data: Long): Unit = buf.append(data)
-    override def writeRawObject(data: AnyRef): Unit = buf.append(data)
+    def writeBoolean(data: Boolean): Unit = builder[Boolean] match {
+      case b: mutable.ArrayBuilder.ofBoolean => b.addOne(data) // no boxing
+      case b                                 => b.addOne(data)
+    }
+    def writeChar(data: Char): Unit = builder[Char] match {
+      case b: mutable.ArrayBuilder.ofChar => b.addOne(data) // no boxing
+      case b                              => b.addOne(data)
+    }
+    def writeDouble(data: Double): Unit = builder[Double] match {
+      case b: mutable.ArrayBuilder.ofDouble => b.addOne(data) // no boxing
+      case b                                => b.addOne(data)
+    }
+    def writeFloat(data: Float): Unit = builder[Float] match {
+      case b: mutable.ArrayBuilder.ofFloat => b.addOne(data) // no boxing
+      case b                               => b.addOne(data)
+    }
+    def writeInt(data: Int): Unit = builder[Int] match {
+      case b: mutable.ArrayBuilder.ofInt => b.addOne(data) // no boxing
+      case b                             => b.addOne(data)
+    }
+    def writeLong(data: Long): Unit = builder[Long] match {
+      case b: mutable.ArrayBuilder.ofLong => b.addOne(data) // no boxing
+      case b                              => b.addOne(data)
+    }
+    def writeRawObject(data: AnyRef): Unit = builder[Any].addOne(data)
 
     def currentField: Option[String] = parent.currentField
   }
@@ -151,6 +194,20 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
 }
 
 object PropertyMapOutputStream {
+  // Using these aliases helps understanding / identifying code that deals with pickled entities.
+  // The static types don't help there because `entity.toMap` has type `Map[String, Any]`.
+  type PickleSeq[+T] = scala.collection.immutable.IndexedSeq[T]
+  object PickleSeq
+      extends scala.collection.SeqFactory.Delegate[scala.collection.immutable.IndexedSeq](
+        scala.collection.immutable.ArraySeq.untagged) {
+    override def from[E](it: IterableOnce[E]): scala.collection.immutable.IndexedSeq[E] = it match {
+      case ps: PickleSeq[E] => ps
+      case _                => super.from(it)
+    }
+
+    def unsafeWrapArray[T](x: Array[T]): PickleSeq[T] = scala.collection.immutable.ArraySeq.unsafeWrapArray(x)
+  }
+
   def pickledValue[T](value: T, pickler: Pickler[T]): Any = {
     val os = new PropertyMapOutputStream(Map.empty)
     pickler.pickle(value, os)

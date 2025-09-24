@@ -13,13 +13,13 @@ package optimus.stratosphere.common
 
 import com.typesafe.config.Config
 import optimus.stratosphere.bootstrap.OsSpecific.isLinux
+import optimus.stratosphere.common.IntellijConfigStore.IntellijConfigStore
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.scheddel.impl.FileRenamer
 
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 
 final class RemoteIntellijLocation(
     config: Config,
@@ -149,9 +149,13 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   def intellijIdeGeneral: Path = intellijConfigOptionsDir.resolve("ide.general.xml")
 
+  def githubCopilotSettings: Path = intellijConfigOptionsDir.resolve("github-copilot.xml")
+
   val intellijScalaConfig: Path = intellijConfigOptionsDir.resolve("scala.xml")
 
   val intellijGitConfig: Path = intellijConfigOptionsDir.resolve("git.xml")
+
+  def profilerSettings: Path = intellijConfigOptionsDir.resolve("profiler.xml")
 
   val stratosphereCompilationSettings: Path = intellijConfigOptionsDir.resolve("compilation.settings.xml")
 
@@ -178,8 +182,8 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
   val commonIntellijConfigStore: Path =
     stratosphereHiddenDir.resolve("intellijConfigStore").resolve(versionWithName()).resolve("config")
 
-  def intellijConfigStoreSection(name: String, version: String = versionWithName()): Option[Path] =
-    ideConfigStoreDir.resolve(version).resolve("config").resolve(name).existsOption()
+  def intellijConfigStoreSection(name: IntellijConfigStore, version: String = versionWithName()): Option[Path] =
+    ideConfigStoreDir.resolve(version).resolve("config").resolve(name.toString).existsOption()
 
   val ideaKey: Path = intellijInstanceConfigDir.resolve("idea.key")
 
@@ -196,4 +200,9 @@ object IntellijDirectoryStructure {
   def apply(config: StratoWorkspaceCommon): IntellijDirectoryStructure = {
     IntellijDirectoryStructure(config, config.intellij.version)
   }
+}
+
+object IntellijConfigStore extends Enumeration {
+  type IntellijConfigStore = Value
+  val workspace, scratches = Value
 }

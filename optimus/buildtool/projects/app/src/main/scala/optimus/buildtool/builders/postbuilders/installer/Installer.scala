@@ -20,6 +20,7 @@ import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postbuilders.installer.component._
 import optimus.buildtool.builders.postinstallers.PostInstaller
 import optimus.buildtool.config.ExternalDependenciesSource
+import optimus.buildtool.config.FingerprintsDiffConfiguration
 import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ObtConfig
@@ -39,8 +40,6 @@ import optimus.buildtool.trace._
 import optimus.buildtool.utils.GitLog
 import optimus.platform._
 import optimus.platform.util.Log
-
-import scala.collection.immutable.Seq
 
 /**
  * A post-build step which copies all installable artifacts to install paths and generates location-independent pathing
@@ -75,7 +74,8 @@ class Installer(
     useMavenLibs: Boolean = false,
     protected val bundleClassJars: Boolean = false,
     pythonConfiguration: PythonInstallerConfiguration,
-    externalDependencies: ExternalDependenciesSource
+    externalDependencies: ExternalDependenciesSource,
+    private[installer] val fingerprintsConfiguration: FingerprintsDiffConfiguration
 ) extends BaseInstaller
     with PostBuilder
     with Log {
@@ -102,7 +102,7 @@ class Installer(
     } else None
 
   private val components = {
-    val manifestResolver: ManifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder)
+    val manifestResolver: ManifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
     val classJarInstaller = new ClassJarInstaller(this, manifestResolver, sparseOnly)
     if (sparseOnly)
       Seq(
@@ -155,7 +155,7 @@ class Installer(
     if (generatePoms) Seq.empty
     else {
       val bundleJarInstaller = if (bundleClassJars) {
-        val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder)
+        val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
         Some(new BundleJarInstaller(this, manifestResolver))
       } else None
       Seq(

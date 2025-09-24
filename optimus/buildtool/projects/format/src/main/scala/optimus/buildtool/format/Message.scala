@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.format
 
-import scala.collection.immutable.Seq
-
 trait Message {
   def msg: String
   def file: ObtFile

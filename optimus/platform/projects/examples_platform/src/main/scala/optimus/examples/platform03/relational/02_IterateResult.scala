@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object IterateResult extends LegacyOptimusApp {
+object IterateResult extends LegacyOptimusApp with PrintlnInterceptor {
 
   //// This example use of query result.
   val portfolios = List("James", "Kostya", "David")

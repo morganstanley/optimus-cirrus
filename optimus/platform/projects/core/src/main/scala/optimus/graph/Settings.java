@@ -11,20 +11,19 @@
  */
 package optimus.graph;
 
+import static optimus.graph.DiagnosticSettings.debugAssist;
 import static optimus.graph.DiagnosticSettings.getBoolProperty;
 import static optimus.graph.DiagnosticSettings.getDoubleProperty;
 import static optimus.graph.DiagnosticSettings.getIntProperty;
 import static optimus.graph.DiagnosticSettings.getLongProperty;
 import static optimus.graph.DiagnosticSettings.getStringProperty;
-import static optimus.graph.DiagnosticSettings.debugAssist;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.ExportException;
-
+import java.util.Set;
 import javax.management.MBeanServer;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
@@ -32,7 +31,6 @@ import javax.management.StandardMBean;
 import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
-
 import optimus.platform.dal.EntityResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +48,11 @@ public class Settings {
   // TODO (OPTIMUS-15699): flip it for everyone in main
   public static boolean throwOnDuplicateInstanceTweaks =
       getBoolProperty("optimus.compat.throwOnDuplicate", false);
+
+  // TODO (OPTIMUS-77836): Enable this flag once legacy persist and hybrid entities have been
+  // removed
+  public static boolean compatAllowCrossRuntimeCacheHits =
+      getBoolProperty("optimus.compat.allowCrossRuntimeCacheHits", false);
 
   public static boolean scopeXSCache = getBoolProperty("optimus.cache.scopeXS", true);
   public static boolean scopedCachesReducesGlobalSize =
@@ -75,6 +78,13 @@ public class Settings {
   public static final boolean removeRedundantTweaks =
       getBoolProperty("optimus.graph.removeRedundantTweaks", true);
 
+  /**
+   * Cache Scenario.equals call to reduce expensive equality calculations for big scenarios used
+   * over and over again.
+   */
+  public static final boolean cacheScenarioEqualities =
+      getBoolProperty("optimus.graph.cacheScenarioEqualities", false);
+
   /** Will try hard to re-use SI scenario stacks */
   public static final boolean reuseSIStacks = getBoolProperty("optimus.cache.reuseSIStacks", false);
 
@@ -96,8 +106,15 @@ public class Settings {
   public static boolean keepTaskSchedulerAffinity =
       getBoolProperty("optimus.graph.keepTaskSchedulerAffinity", false);
 
-  public static final boolean useVirtualThreads =
-      getBoolProperty("optimus.graph.useVirtualThreads", LoomDefaults.enabled);
+  /**
+   * if this flag is true, we will collect minimal PGO stats and APPLY the learned cache settings at
+   * runtime (see additional settings in OGAutoPGOObserver)
+   */
+  public static boolean livePGO = getBoolProperty("optimus.graph.livePGO", false);
+
+  public static boolean livePGO_GivenNodes = getBoolProperty("optimus.graph.livePGO.given", false);
+
+  public static final boolean useVirtualThreads = DiagnosticSettings.useVirtualThreads;
   public static final boolean limitThreads =
       getBoolProperty("optimus.graph.limitThreads", !useVirtualThreads);
 
@@ -142,8 +159,8 @@ public class Settings {
   public static final String graphConfigOutputDir = System.getProperty("optimus.config.output.dir");
 
   // If enabled does a number of checks, some are not that cheap though
-  public static final boolean schedulerAsserts =
-      getBoolProperty("optimus.scheduler.asserts", false);
+  public static final boolean schedulerAsserts = DiagnosticSettings.schedulerAsserts;
+
   // Currently used for scheduler asserts to support tracking scenarios
   public static boolean schedulerAssertsExt =
       getBoolProperty("optimus.scheduler.asserts_ext", false);
@@ -192,8 +209,7 @@ public class Settings {
   public static final String threadsMinName = "optimus.gthread.min";
   public static final String threadsMaxName = "optimus.gthread.max";
 
-  // TODO (OPTIMUS-27147): This should be a more sensible value like -1
-  public static final int threadsIdeal = getIntProperty(threadsIdealName, 0);
+  public static final int threadsIdeal = getIntProperty(threadsIdealName, -1);
 
   // Min/Max number of threads if ideal is negative
   public static final int threadsMin = getIntProperty(threadsMinName, 4);
@@ -201,6 +217,15 @@ public class Settings {
 
   private static final String threadPriorityName = "optimus.gthread.priority";
   static final int threadPriority = getIntProperty(threadPriorityName, Thread.NORM_PRIORITY);
+
+  // since Treadmill allows burst capacity, we may want to use more threads than the stated limit
+  static final double treadmillCpuFactor =
+      getDoubleProperty("optimus.gthread.treadmillCpuFactor", 2.0);
+
+  // must be placed before any calls to idealThreadCountToCount to avoid initialization ordering
+  // isues
+  private static final ThreadLimits defaultThreadLimits = new ThreadLimits(treadmillCpuFactor);
+
   public static final int threadsAuxIdeal = auxSchedulerThreads("optimus.gthread.aux.ideal");
 
   private static int auxSchedulerThreads(String propName) {
@@ -312,8 +337,11 @@ public class Settings {
       getIntProperty("optimus.scheduler.exceptionThrowerCacheSize", 1000);
   public static final int maxTracedExceptionsPerClass =
       getIntProperty("optimus.scheduler.maxTracedExceptionsPerClass", 1000);
-  static final boolean fullNodeTraceOnException =
-      getBoolProperty("optimus.scheduler.fullNodeTraceOnException", false);
+
+  /** Full trace on Limit/Second exceptions. < 0 means do NOT limit and 0 means Never */
+  public static int fullTraceOnExceptionLimit =
+      getIntProperty("optimus.scheduler.fullTraceOnExceptionLimit", 10);
+
   static final boolean fullNodeTraceOnCriticalSyncStack =
       getBoolProperty("optimus.scheduler.fullNodeTraceOnCriticalSyncStack", false);
   static final int criticalSyncStackAlertThreshold =
@@ -518,6 +546,8 @@ public class Settings {
   static final boolean defaultCacheByNameTweaks =
       getBoolProperty("optimus.scheduler.cacheByNameTweaks", true);
 
+  static final int maxCustomFrames = getIntProperty("optimus.graph.max.custom.frames", 1000);
+
   public static final boolean warnOnDemandCompiles =
       getBoolProperty("optimus.priql.warnOnDemandCompiles", false);
 
@@ -674,6 +704,45 @@ public class Settings {
   /** Turn on additional runtime check for optimus channels. */
   public static final boolean channelAsserts = getBoolProperty("optimus.channels.asserts", false);
   /**
+   * System property to allow disabling strict-equality. Disabling this will turn off the unpickled
+   * interning that relies on it. (see optimus.pickling.interningEnabledFor system property)
+   */
+  public static final boolean strictEqualityEnabled =
+      getBoolProperty("optimus.core.strictEqualityEnabled", true);
+
+  public enum InterningScope {
+    PICKLED,
+    UNPICKLED,
+  }
+  /**
+   * Allows control of interning behavior during unpickling
+   * <li>"pickled": Enables interning of only the pickled forms of data as they are retained in
+   *     memory as part of any lazy unpickling -
+   * <li>"unpickled": Enables interning of only the instances obtained from unpickling
+   * <li>"all": Enables interning of both the above
+   * <li>"none": Disables interning of both the above This property defaults to "all" unless
+   *     optimus.core.strictEqualityEnabled is set to false in which case it defaults to "pickled"
+   *     since interning of unpickled instances relies on strict-equality
+   */
+  public static final Set<InterningScope> interningEnabledFor = parseFromProperty();
+
+  private static Set<InterningScope> parseFromProperty() {
+    var setting =
+        getStringProperty(
+            "optimus.pickling.interningEnabledFor", strictEqualityEnabled ? "all" : "pickled");
+    return switch (setting) {
+      case "all" -> Set.of(InterningScope.values());
+      case "none" -> Set.of();
+      case "pickled" -> Set.of(InterningScope.PICKLED);
+      case "unpickled" -> Set.of(InterningScope.UNPICKLED);
+      default -> throw new IllegalArgumentException(
+          "The string "
+              + setting
+              + " is not a valid value for the "
+              + "optimus.pickling.interningEnabledFor system property.");
+    };
+  }
+  /*
    * Controls whether values in the pickled representation of instances are interned. The interning
    * is based on statistics per shape, per field (of the pickled format). To turn off interning
    * completely, set it to a negative value
@@ -734,15 +803,11 @@ public class Settings {
 
   public static int idealThreadCountToCount(
       int count, int minimumIfNegative, int maximumIfNegative) {
-    return (count < 0)
-        ? Math.min(
-            maximumIfNegative,
-            Math.max(minimumIfNegative, Runtime.getRuntime().availableProcessors() / -count))
-        : count;
+    return defaultThreadLimits.idealThreadCountToCount(count, minimumIfNegative, maximumIfNegative);
   }
 
   public static int idealThreadCountToCount(int count) {
-    return idealThreadCountToCount(count, 4, Integer.MAX_VALUE);
+    return defaultThreadLimits.idealThreadCountToCount(count);
   }
 
   /**

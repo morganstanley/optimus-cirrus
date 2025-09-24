@@ -11,6 +11,8 @@
  */
 package optimus.stratosphere.utils
 
+import optimus.stratosphere.bitbucket.Project
+import optimus.stratosphere.bitbucket.Repository
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
@@ -18,26 +20,38 @@ import java.net.URI
 import java.nio.file.Path
 import java.nio.file.Paths
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.io.Source
 import scala.util._
 import scala.util.control.NonFatal
 
 final case class LocalBranch(trackedRemoteName: Option[String])
 
+object RemoteUrl {
+  // Regex to extract instance URL, project key, and repo name in one go
+  private val UrlPartsRegex = """https?://(?:.+@)?(stash[^.]+\.ms\.com)/.*?/([^/]+)/([^/]+?)(?:\.git)?$""".r
+
+  def apply(url: String): RemoteUrl = new RemoteUrl(url)
+}
+
 final case class RemoteUrl(url: String) {
-  def instanceUrl: Option[String] =
-    "https?://(?:.+@)?(stash[^.]+\\.ms\\.com)/.*$".r.findFirstMatchIn(url).map(_.group(1))
-  def repoName: String = url.split('/').last.trim.stripSuffix(".git")
+  // Extract parts using the regex
+  private val urlParts = RemoteUrl.UrlPartsRegex.findFirstMatchIn(url)
+
+  def instanceUrl: Option[String] = urlParts.map(_.group(1))
+
+  def projectKey: String = urlParts.map(_.group(2)).getOrElse(url.split("/").takeRight(2).head)
+
+  def repoName: String = urlParts.map(_.group(3)).getOrElse(url.split('/').last.trim.stripSuffix(".git"))
+
+  def repository: Repository = Repository(Project(projectKey), repoName)
+
   def isFork: Boolean = url.contains("~") // [...]/scm/upstream_repo/repo.git versus [...]/scm/~user_id/repo.git
-  def projectKey: String = url.split("/").takeRight(2).head
 
   def isSameRepo(other: RemoteUrl): Boolean = {
     val uri = new URI(url)
     val otherUri = new URI(other.url)
     uri.getHost == otherUri.getHost && uri.getPath == otherUri.getPath
   }
-
 }
 
 final case class RemoteSpec(name: String, remoteUrl: RemoteUrl, originUrl: Option[RemoteUrl] = None) {

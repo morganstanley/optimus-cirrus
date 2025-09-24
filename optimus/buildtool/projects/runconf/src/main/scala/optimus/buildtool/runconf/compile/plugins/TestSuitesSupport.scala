@@ -24,7 +24,6 @@ import optimus.buildtool.runconf.plugins.EnvInternal
 import optimus.buildtool.runconf.plugins.SuiteConfig
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
 object TestSuitesSupport {

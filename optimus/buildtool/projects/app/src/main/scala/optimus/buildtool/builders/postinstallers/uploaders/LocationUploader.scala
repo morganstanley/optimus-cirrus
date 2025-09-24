@@ -27,7 +27,6 @@ import optimus.platform.util.Log
 
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import scala.collection.immutable.Seq
 
 class LocationUploader(
     id: BackgroundId,
@@ -94,8 +93,8 @@ class LocationUploader(
 
   private val defaultProps: Seq[Properties.Elem[_]] = {
     val host = location match {
-      case UploadLocation.Remote(h, _, _) => Some(h)
-      case _: UploadLocation.Local        => None
+      case UploadLocation.Remote(h, _, _, _) => Some(h)
+      case _: UploadLocation.Local           => None
     }
 
     Seq(Properties.obtUploadTargetDir -> location.target.pathString) ++ host.map(Properties.obtUploadHost -> _)

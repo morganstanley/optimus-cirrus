@@ -34,7 +34,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.platform._
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 class IvyInstaller(
     scopeConfigSource: ScopeConfigurationSource,

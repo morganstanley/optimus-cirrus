@@ -99,7 +99,7 @@ private object ZincUtils {
     def okDir(j: JarAsset) = buildDir.contains(j)
     file match {
       case p: RelativePath => Left(p) // eg. foo/bar/Baz.scala
-      case d: Directory    => Left(d) // eg. //afs/path/to/msjava/PROJ/azulzulu-openjdk/11.0.7/exec
+      case d: Directory    => Left(d) // eg. //afs/path/to/msjava/PROJ/azulzulu-openjdk/11.0.27.0.101_11.81.14/exec
       case m: JdkPlatformAsset =>
         Left(m) // eg. //modules/java.base/java/lang/Object.class or //87/java.base/java/lang/Object.sig
       case j: JarAsset       => Either.cond(okDir(j), dissectPathInternal(j), j)

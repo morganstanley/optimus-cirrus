@@ -14,11 +14,12 @@ package optimus.examples.platform01.data
 import optimus.examples.platform.entities.SimpleEntity
 import optimus.platform._
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 
 // It is advisable to consult the optimus user manual for an explanation of bi-temporal
 // if you are unfamiliar with bi-temporal a picture model tends to be best to begin with
 // http://optimusdoc/
-object BiTemporalBehaviour extends LegacyOptimusApp[SupplyEntityNameArgs] {
+object BiTemporalBehaviour extends LegacyOptimusApp[SupplyEntityNameArgs] with PrintlnInterceptor {
   override def setup(): Unit = {
     if (cmdLine.uri == null)
       cmdLine.uri = "broker://dev?context=named&context.name=" + System.getProperty("user.name")

@@ -36,7 +36,7 @@ final case class HashedResources(
     override protected val scope: CompilationScope,
     override protected val sources: ResourceCompilationSources,
     resourcePackager: JarPackager
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import ResourcePackaging._
   import scope._
 
@@ -77,7 +77,7 @@ private[scope] object ResourcePackaging {
     override protected val scope: CompilationScope,
     override protected val sources: ArchivePackageSources,
     packager: JarPackager
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import scope._
 
   @node override protected def containsRelevantSources: Boolean = !sources.isEmpty

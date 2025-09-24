@@ -23,6 +23,7 @@ import optimus.breadcrumbs._
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.filter.CrumbFilter
 import optimus.breadcrumbs.routing.CrumbRoutingRule
+import optimus.platform.util.Log
 import optimus.utils.PropertyUtils
 import org.slf4j.LoggerFactory
 
@@ -32,9 +33,8 @@ import scala.util.Try
 import scala.util.control.NonFatal
 import optimus.scalacompat.collection._
 
-object BreadcrumbsPropertyConfigurer {
+object BreadcrumbsPropertyConfigurer extends Log {
 
-  private val log = LoggerFactory.getLogger("BreadcrumbsPropertyConfigurer")
   private val closeablePropertySources, closeableContexts = mutable.Set.empty[Closeable]
   private val closeables = List(closeablePropertySources, closeableContexts).view
 

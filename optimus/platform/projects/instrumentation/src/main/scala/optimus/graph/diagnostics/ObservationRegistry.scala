@@ -44,6 +44,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 
 object ObservationRegistry {
+  lazy val active = true
   val instance = new ObservationRegistry()
 }
 
@@ -56,9 +57,20 @@ class ObservationRegistry extends Log {
    *
    * additional CounterGroups can be registered at any point
    * They are usually registered as part of class loading on the specific *Counters object
+   *
+   * returns true if the registration was successful
+   * false if rejected (due to duplicate name)
+   *
+   * This follows philosophy of minimal disruption
+   * A log warning is generated
    */
-  def registerCounterGroup(group: CounterGroup): Unit = {
-    counterGroups.put(group.groupName, group)
+  def registerCounterGroup(group: CounterGroup): Boolean = {
+    val duplicate = counterGroups.containsKey(group.groupName)
+    if (duplicate)
+      log.warn(s"duplicate counterGroup name: ${group.groupName}")
+    else
+      counterGroups.put(group.groupName, group)
+    !duplicate
   }
 
   def snapshotAll(timestampMs: Long = System.currentTimeMillis()): FullObservationSnapshot = {

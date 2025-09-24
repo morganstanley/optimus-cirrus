@@ -15,7 +15,6 @@ import optimus.utils.datetime.ZoneIds
 
 import scala.jdk.CollectionConverters._
 import scala.collection.Map
-import scala.collection.Seq
 import com.google.protobuf.ByteString
 
 import java.time.LocalDate
@@ -36,6 +35,7 @@ import net.iharder.base64.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.Settings
 import optimus.platform.pickling.PicklingConstants
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.pickling.Shape
 import optimus.platform.pickling.SlottedBufferAsEmptySeq
 
@@ -73,7 +73,7 @@ object ProtoPickleSerializer {
       case x: Byte               => builder.setType(FieldProto.Type.BYTE).setIntValue(x)
       case x: Array[Byte]        => builder.setType(FieldProto.Type.BLOB).setBlobValue(ByteString.copyFrom(x))
       case x: ImmutableByteArray => builder.setType(FieldProto.Type.BLOB).setBlobValue(ByteString.copyFrom(x.data))
-      case x: Seq[_] =>
+      case x: collection.Seq[_] =>
         val seq = (x map (propertiesToProto(_, None))).asJava
         builder.setType(FieldProto.Type.SEQ).addAllChildren(seq)
       case x: Map[_, _] =>
@@ -291,7 +291,7 @@ object ProtoPickleSerializer {
   // repetitive because we want to use the ArraySeq.of* classes to avoid boxing
   // of primitive types and uses while loops to avoid closure allocations in hot code
   // like this.
-  private def protoToArraySeq(proto: FieldProto, watcher: InterningWatcher): ArraySeq[_] = {
+  private def protoToArraySeq(proto: FieldProto, watcher: InterningWatcher): PickleSeq[_] = {
     // We'll walk the values once to see if they are homogenous primitive types...
     var fType: FieldProto.Type = null
     var i = 0

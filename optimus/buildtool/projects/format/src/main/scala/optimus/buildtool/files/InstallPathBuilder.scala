@@ -24,7 +24,6 @@ import org.slf4j.LoggerFactory.getLogger
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.util.Properties
 import scala.util.control.NonFatal
 

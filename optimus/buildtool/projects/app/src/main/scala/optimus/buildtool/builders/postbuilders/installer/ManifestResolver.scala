@@ -17,14 +17,19 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
+import optimus.buildtool.utils.GitLog
+import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
+import optimus.buildtool.utils.OsUtils
 import optimus.platform._
+import optimus.platform.utils.JarManifests.nme._
 
 @entity class ManifestResolver(
     scopeConfigSource: ScopeConfigurationSource,
     val versionConfig: VersionConfiguration,
-    pathBuilder: InstallPathBuilder
+    pathBuilder: InstallPathBuilder,
+    gitLog: Option[GitLog],
 ) {
 
   @node final def manifestFromConfig(scopeId: ScopeId): jar.Manifest =
@@ -56,6 +61,28 @@ import optimus.platform._
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedPreloadDebugLibs)
     manifest.getMainAttributes.put(JarUtils.nme.AgentsPath, installedAgents.mkString(";"))
     manifest
+  }
+
+  @async def addBuildMetadataAndFingerprint(manifest: jar.Manifest): String = {
+    // Attributes#put takes (Object, Object), assuming they are (Name, String)
+    // Attributes#putValue takes (String, String), constructing a fresh Name from the first String
+    // so we create our own (Name, String) put...
+    def put(name: jar.Attributes.Name, value: String): Unit = manifest.getMainAttributes.put(name, value)
+
+    put(PrId, sys.env.getOrElse("PULL_REQUEST_ID", ""))
+    put(CiBuildNr, sys.env.getOrElse("BUILD_NUMBER", ""))
+    put(BuildUser, sys.props("user.name"))
+    put(BuildOSVersion, OsUtils.osVersion)
+
+    put(BuildBranch, gitLog.map(_.branch()).getOrElse(""))
+    put(CommitHash, gitLog.flatMap(_.HEAD.map(_.hash)).getOrElse(""))
+    put(BaselineCommit, gitLog.flatMap(_.baselineCached().map(_.hash)).getOrElse(""))
+    put(BaselineDistance, gitLog.flatMap(_.baselineDistance().map(_.toString)).getOrElse(""))
+    put(UncommittedChanges, gitLog.flatMap(_.uncommittedChanges()).map(_ > 0).map(_.toString).getOrElse(""))
+
+    val hash = Hashing.hashStrings(Jars.fingerprint(manifest))
+    put(CodeFingerprint, hash)
+    hash
   }
 
 }

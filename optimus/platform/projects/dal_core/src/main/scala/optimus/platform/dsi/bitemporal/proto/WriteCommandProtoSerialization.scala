@@ -52,6 +52,10 @@ private[proto] trait WriteCommandProtoSerialization extends BasicProtoSerializat
   implicit val accTableCreateCommandSerializer: AccMetadataCommandSerializer.type = AccMetadataCommandSerializer
   implicit val accTableResultSerializer: AccTableResultSerializer.type = AccTableResultSerializer
 
+  implicit val prepareMonoTemporalSerializer: PrepareMonoTemporalSerializer.type = PrepareMonoTemporalSerializer
+  implicit val prepareMonoTemporalResultSerializer: PrepareMonoTemporalResultSerializer.type =
+    PrepareMonoTemporalResultSerializer
+
   final def toProto(flag: EventStateFlag): String = {
     flag.char.toString
   }
@@ -108,6 +112,7 @@ object PutSerializer extends WriteCommandProtoSerialization with ProtoSerializer
       .setValidTime(toProto(put.validTime))
       .setSerializedEntity(toProto(put.value))
       .setMonoTemporal(put.monoTemporal)
+      .setWithoutTempRefs(put.ignoreRefResolve)
 
     if (put.lockToken.isDefined)
       builder.setLockToken(put.lockToken.get)
@@ -124,7 +129,9 @@ object PutSerializer extends WriteCommandProtoSerialization with ProtoSerializer
       fromProto(proto.getSerializedEntity),
       lockToken,
       fromProto(proto.getValidTime),
-      monoTemporal = proto.getMonoTemporal)
+      monoTemporal = proto.getMonoTemporal,
+      ignoreRefResolve = proto.getWithoutTempRefs
+    )
   }
 }
 
@@ -448,6 +455,7 @@ object PutApplicationEventSerializer
       .addAllBusinessEvents(in.bes.map(toProto(_)).asJava)
       .setApplication(in.application)
       .setContentOwner(in.contentOwner)
+      .addAllSkipListForRefWalk(in.ignoreListForReferenceResolution.map(toProto(_)).asJava)
 
     in.clientTxTime.foreach(clientTxTime => builder.setClientTxTime(toProto(clientTxTime)))
     in.elevatedForUser.foreach(onBehalfOf => builder.setElevatedForUser(onBehalfOf))
@@ -475,7 +483,8 @@ object PutApplicationEventSerializer
       clientTxTime = clientTx,
       elevatedForUser = elevatedForUser,
       appEvtId = appEvtId,
-      retry = retry
+      retry = retry,
+      ignoreListForReferenceResolution = proto.getSkipListForRefWalkList().asScala.iterator.map(fromProto(_)).toSet
     )
   }
 }
@@ -587,6 +596,41 @@ object InvalidateAllCurrentByRefsSerializer
       .addAllEntityReferences(command.entityReferences.map(EntityReferenceSerializer.serialize(_)).asJava)
       .setClassName(command.clazzName)
       .build
+  }
+}
+
+object PrepareMonoTemporalSerializer
+    extends WriteCommandProtoSerialization
+    with ProtoSerializer[PrepareMonoTemporal, PrepareMonoTemporalProto] {
+
+  override def deserialize(proto: PrepareMonoTemporalProto): PrepareMonoTemporal = {
+    PrepareMonoTemporal(
+      proto.getEntityReferencesList.asScalaUnsafeImmutable.map(EntityReferenceSerializer.deserialize(_)),
+      proto.getClassName)
+  }
+
+  override def serialize(command: PrepareMonoTemporal): PrepareMonoTemporalProto = {
+    PrepareMonoTemporalProto.newBuilder
+      .addAllEntityReferences(command.entityReferences.map(EntityReferenceSerializer.serialize(_)).asJava)
+      .setClassName(command.clazzName)
+      .build
+  }
+}
+
+object PrepareMonoTemporalResultSerializer
+    extends WriteCommandProtoSerialization
+    with ProtoSerializer[PrepareMonoTemporalResult, PrepareMonoTemporalResultProto] {
+
+  override def deserialize(proto: PrepareMonoTemporalResultProto): PrepareMonoTemporalResult = {
+    val txTime = if (proto.hasTxTime) Some(InstantSerializer.deserialize(proto.getTxTime)) else None
+    new PrepareMonoTemporalResult(proto.getCount, txTime)
+  }
+
+  override def serialize(result: PrepareMonoTemporalResult): PrepareMonoTemporalResultProto = {
+    val builder = PrepareMonoTemporalResultProto.newBuilder
+      .setCount(result.count)
+    result.txTime.foreach(tx => builder.setTxTime(InstantSerializer.serialize(tx)))
+    builder.build
   }
 }
 

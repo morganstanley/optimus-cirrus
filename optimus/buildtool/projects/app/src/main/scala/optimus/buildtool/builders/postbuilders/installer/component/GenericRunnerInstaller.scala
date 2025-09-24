@@ -28,7 +28,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
-import scala.collection.immutable.Seq
 import scala.util.Properties.{isWin => isWindows}
 import scala.util.Try
 

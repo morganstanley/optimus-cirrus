@@ -21,6 +21,7 @@ import org.apache.kafka.clients.producer.ProducerConfig.MAX_IN_FLIGHT_REQUESTS_P
 import org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG
 import org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG
 import org.apache.kafka.clients.producer.ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG
+import org.apache.kafka.clients.producer.ProducerConfig.TRANSACTION_TIMEOUT_CONFIG
 import org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG
 import org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG
 import org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG
@@ -73,7 +74,15 @@ class DalUowKafkaConfig(env: DalEnv) extends DalKafkaConfig(DalFeatureKafkaLooku
 
   def producerProperties(withKey: Boolean, transactionId: Option[String]): Properties = {
     val prop = connectionProperties(includeServiceName = true)
+    // ACKS_CONFIG controls the number of kafka brokers that needs to respond to a producer request
+    // before the producer acks the request as completed. When the ack_config is set
+    // to 'all' then the number of kafka brokers that needs to be in sync with the lead kafka broker
+    // is equal to the min.insync.replica or min isr
     prop.put(ACKS_CONFIG, getProperty(ACKS_CONFIG, "all"))
+    // In the event of a retryable exception idempotence ensures that no duplicate gets created for
+    // the same producer request all retriable exceptions extend the RetriableException class. However this does not affect exceptions thrown due to number of replica
+    // being less than min isr as the producer request will get rejected by the the lead kafka
+    // broker with an exception meaning no data is actually written by the kafka brokers.
     prop.put(ENABLE_IDEMPOTENCE_CONFIG, getProperty(ENABLE_IDEMPOTENCE_CONFIG, "true"))
     prop.put(MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, getProperty(MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1"))
     if (withKey) {
@@ -85,6 +94,11 @@ class DalUowKafkaConfig(env: DalEnv) extends DalKafkaConfig(DalFeatureKafkaLooku
         TRANSACTIONAL_ID_CONFIG,
         transactionId.get
       )
+      // Sets the transaction timeout for the producer in milliseconds. This value determines the maximum amount of time
+      // a transaction can remain active before timing out. If the transaction is not completed within this time frame,
+      // it will be aborted. The default value is set to 60000 ms (60 seconds). This property is critical for ensuring
+      // that long-running transactions do not block resources indefinitely.
+      prop.put(TRANSACTION_TIMEOUT_CONFIG, getProperty(TRANSACTION_TIMEOUT_CONFIG, "600000"))
     } else {
       require(transactionId.isEmpty, "if key is not present transaction id must not be set")
       prop.put(
@@ -92,6 +106,12 @@ class DalUowKafkaConfig(env: DalEnv) extends DalKafkaConfig(DalFeatureKafkaLooku
         getProperty(KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.VoidSerializer"))
     }
     prop.put(VALUE_SERIALIZER_CLASS_CONFIG, getProperty(VALUE_SERIALIZER_CLASS_CONFIG, valueSerializer))
+    // If for what ever reason the producer request to kafka fails with a retryable exception
+    // delivery.timeout.ms controls how long the retry can take before the internal kafka retries stop.
+    // This in conjunction with number of retries control kafka internal retry behaviour. For example, if
+    // the delivery timeout is 60 seconds and the number of retries is 1000, the cut of point will will be
+    // whichever happens first if only 500 attempts have occurred before hitting the 60s mark then the remaining
+    // 500 retry attempts will not occur and vice versa.
     prop.put(DELIVERY_TIMEOUT_MS_CONFIG, getProperty(DELIVERY_TIMEOUT_MS_CONFIG, "2147483647"))
     prop
   }

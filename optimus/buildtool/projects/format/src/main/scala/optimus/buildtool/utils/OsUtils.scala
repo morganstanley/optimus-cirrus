@@ -18,7 +18,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.math.Ordering.Implicits._
 import scala.sys.process.Process
@@ -41,13 +40,13 @@ object OsUtils {
   val WindowsVersion = "windows-10.0"
 
   val Linux6SysName: String =
-    sys.props.get("optimus.buildtool.sysName.linux6").getOrElse("x86_64.linux.2.6.glibc.2.12")
+    OptimusBuildToolProperties.getOrElse("sysName.linux6", "x86_64.linux.2.6.glibc.2.12")
   val Linux7SysName: String =
-    sys.props.get("optimus.buildtool.sysName.linux7").getOrElse("x86_64.linux.2.6.glibc.2.17")
+    OptimusBuildToolProperties.getOrElse("sysName.linux7", "x86_64.linux.2.6.glibc.2.17")
   val Linux8SysName: String =
-    sys.props.get("optimus.buildtool.sysName.linux8").getOrElse("x86_64.linux.2.6.glibc.2.28")
+    OptimusBuildToolProperties.getOrElse("sysName.linux8", "x86_64.linux.2.6.glibc.2.28")
   val WindowsSysName: String =
-    sys.props.get("optimus.buildtool.sysName.windows").getOrElse("x86_64.nt.win10")
+    OptimusBuildToolProperties.getOrElse("sysName.windows", "x86_64.nt.win10")
 
   private val osVersionMapping = Map(
     Linux6Version -> Linux6SysName,

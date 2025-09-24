@@ -50,11 +50,11 @@ import optimus.buildtool.trace.ReadObtFiles
 import optimus.buildtool.trace.RegexCodeFlagging
 import optimus.buildtool.utils.GitUtils
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.platform._
 
 import java.io.InputStreamReader
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
@@ -68,7 +68,6 @@ import scala.jdk.CollectionConverters._
     val jvmDependencies: ExternalDependenciesSource,
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val globalExcludes: Seq[Exclude],
-    val globalSubstitutions: Seq[Substitution],
     val depMetadataResolvers: DependencyMetadataResolvers,
     val scopeDefinitions: Map[ScopeId, ScopeDefinition],
     val messages: Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]],
@@ -76,7 +75,8 @@ import scala.jdk.CollectionConverters._
     val runConfSubstitutionsValidator: RunConfSubstitutionsValidator,
     val dockerStructure: DockerStructure,
     val workspaceStructure: WorkspaceStructure,
-    val regexConfig: RegexConfiguration
+    val regexConfig: RegexConfiguration,
+    val fingerprintsDiffConfig: FingerprintsDiffConfiguration
 ) extends ScopeConfigurationSourceBase
     with DockerConfigurationSupport {
 
@@ -124,7 +124,7 @@ import scala.jdk.CollectionConverters._
       case WarningOverride(_, _, WarningOverride.OptimusMessage(id)) => id.toString
     }
 
-  @node def owner(id: ScopeId): String = scopeDefinitions(id).module.owner
+  @node def owner(id: ScopeId): Option[String] = scopeDefinitions(id).module.owner
 
   @node def postInstallApps(id: ScopeId): Seq[Set[PostInstallApp]] =
     if (id == ScopeId.RootScopeId) Nil else scopeDefinitions(id).postInstallApps
@@ -209,7 +209,6 @@ import scala.jdk.CollectionConverters._
             properties = Some(ws.config),
             jvmDependencies = ws.dependencies,
             nativeDependencies = ws.dependencies.jvmDependencies.nativeDependencies,
-            globalSubstitutions = ws.dependencies.jvmDependencies.globalSubstitutions.toIndexedSeq,
             globalExcludes = ws.dependencies.jvmDependencies.globalExcludes.toIndexedSeq,
             depMetadataResolvers =
               DependencyMetadataResolver.loadResolverConfig(directoryFactory, workspaceSrcRoot, ws.resolvers),
@@ -219,7 +218,8 @@ import scala.jdk.CollectionConverters._
             runConfSubstitutionsValidator = ws.runConfSubstitutionsValidator,
             dockerStructure = ws.dockerStructure,
             workspaceStructure = ws.structure,
-            regexConfig = ws.globalRules.rules.getOrElse(RegexConfiguration.Empty)
+            regexConfig = ws.globalRules.rules.getOrElse(RegexConfiguration.Empty),
+            fingerprintsDiffConfig = ws.fingerprintsDiffConfig
           )
         case Failure(problems) =>
           val e = new IllegalArgumentException(s"Failed to load obt configuration:\n\t${problems.mkString("\n\t")}")
@@ -245,9 +245,14 @@ import scala.jdk.CollectionConverters._
   ): Boolean = {
     workspaceSrcRoot.declareVersionDependence()
     val fileAsset = workspaceSrcRoot.resolveFile(file.path)
-    // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
-    // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
-    fileAsset.existsUnsafe || git.exists(_.file(fileAsset).exists)
+    git match {
+      case Some(g) if !g.local(fileAsset.parent) =>
+        git.exists(_.file(fileAsset).exists)
+      case _ =>
+        // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
+        // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
+        fileAsset.existsUnsafe
+    }
   }
 
   @node private def loadFileNode(
@@ -258,9 +263,7 @@ import scala.jdk.CollectionConverters._
     workspaceSrcRoot.declareVersionDependence()
     val fileAsset = workspaceSrcRoot.resolveFile(file.path)
     git match {
-      // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
-      // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
-      case Some(g) if !fileAsset.existsUnsafe =>
+      case Some(g) if !g.local(fileAsset.parent) =>
         val f = g.file(fileAsset)
         if (f.exists) {
           Result.tryWith(file, line = 0) {
@@ -268,7 +271,12 @@ import scala.jdk.CollectionConverters._
           }
         } else Success(ConfigFactory.empty())
       case _ =>
-        Result.tryWith(file, line = 0)(Success(ConfigFactory.parseFile(fileAsset.path.toFile)))
+        // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
+        // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
+        if (fileAsset.existsUnsafe)
+          Result.tryWith(file, line = 0)(Success(ConfigFactory.parseFile(fileAsset.path.toFile)))
+        else
+          Success(ConfigFactory.empty())
     }
   }
 
@@ -287,10 +295,15 @@ import scala.jdk.CollectionConverters._
   ): Seq[RelativePath] = {
     workspaceSrcRoot.declareVersionDependence()
     val absDir = workspaceSrcRoot.resolveDir(dir)
-    // Note: We're safe to use existsUnsafe/findFilesUnsafe within a node here since we're already watching dir
-    // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
-    if (absDir.existsUnsafe) Directory.findFilesUnsafe(absDir).map(workspaceSrcRoot.relativize)
-    else git.map(_.findFiles(absDir)).getOrElse(Nil).map(f => RelativePath(f.path))
+    git match {
+      case Some(g) if !g.local(absDir) =>
+        git.map(_.findFiles(absDir)).getOrElse(Nil).map(f => RelativePath(f.path))
+      case _ =>
+        // Note: We're safe to use existsUnsafe/findFilesUnsafe within a node here since we're already watching dir
+        // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
+        if (absDir.existsUnsafe) Directory.findFilesUnsafe(absDir).map(workspaceSrcRoot.relativize)
+        else Nil
+    }
   }
 
   private object Converter {
@@ -306,8 +319,7 @@ import scala.jdk.CollectionConverters._
      *
      * We want to avoid this by enabling it only for OBT, while retaining current behaviour in other dependencies.
      */
-    private def fatalConfigWarningsEnabled =
-      sys.props.get("optimus.buildtool.fatalConfigWarnings").exists(_.toBoolean)
+    private def fatalConfigWarningsEnabled = OptimusBuildToolProperties.getOrFalse("fatalConfigWarnings")
 
     def toObt(msgs: Seq[Message]): Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]] =
       Map((ArtifactType.ConfigMessages, LoadConfig) -> msgs.map(toObt))

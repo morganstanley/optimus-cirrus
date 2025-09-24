@@ -20,6 +20,7 @@ import scala.reflect.internal.Flags.MIXEDIN
 import scala.tools.nsc.transform.Transform
 import scala.tools.nsc.symtab.Flags
 import scala.tools.nsc.transform._
+import scala.tools.asm.{Type => ASMType}
 
 /**
  * Strategy:
@@ -248,26 +249,43 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
   private def getOrComputeLoomNodes(tree: Tree, loomAnno: AnnotationInfo): Array[ClassfileAnnotArg] =
     // manually written annotation arg, usually for debugging purposes
     getLoomNodesArg(loomAnno).getOrElse {
-      val nodeCalls = {
+      val (nodeCalls, nonNodeCalls) = {
 
         /**
          * Figuring out receiver might require duping some logic from
          * [[scala.tools.nsc.backend.jvm.BCodeBodyBuilder.PlainBodyBuilder#genApply]] and
          * [[scala.tools.nsc.backend.jvm.BCodeBodyBuilder.PlainBodyBuilder.genCallMethod]]
          */
-        val calls = new mutable.HashSet[(Symbol, Symbol)]() // method, receiver
+        val nodes = new mutable.HashSet[(Symbol, String)]() // method, receiver
+        val nonNodes = new mutable.HashSet[(String, String)]() // method, receiver
 
         for {
           sel @ Select(_, _) <- tree
-          if isTrueNode(sel)
-        } { calls.add(sel.symbol, sel.qualifier.tpe.typeSymbol) }
-        calls.toSeq
+        } {
+          if (isTrueNode(sel)) nodes.add((sel.symbol, sel.qualifier.tpe.typeSymbol.javaBinaryNameString))
+          else nonNodes.add((sel.symbol.rawname.toString, sel.qualifier.tpe.typeSymbol.javaBinaryNameString))
+        }
+        (nodes.toSeq, nonNodes.toSet)
       }
 
       val nodeCallsArgs: Array[ClassfileAnnotArg] = {
         val sortedCallsByReceiver = nodeCalls
-          .groupBy { case (_, receiver) => receiver.javaBinaryNameString }
-          .map { case (o, ss) => o -> ss.map { case (method, _) => method.rawname.toString }.sorted }
+          .groupBy { case (_, receiver) => receiver }
+          .map { case (receiver, ss) =>
+            receiver -> {
+              val byMethodName = ss.groupBy { case (method, _) => method.rawname.toString }
+              byMethodName.toSeq
+                .sortBy { case (methodName, _) => methodName }
+                .flatMap { case (methodName, overloads) =>
+                  if (nonNodeCalls((methodName, receiver))) {
+                    // some overloads of this method are not nodes, we need to track which are which
+                    Seq(methodName) :++ overloads.map { case (method, _) => methodSignature(method) }.sorted
+                  } else {
+                    Seq(methodName)
+                  }
+                }
+            }
+          }
           .toSeq
           .sortBy { case (receiver, _) => receiver }
         sortedCallsByReceiver.flatMap { case (owner, calls) =>
@@ -277,6 +295,43 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
 
       nodeCallsArgs
     }
+
+  private val primitiveClassToASM: Map[Symbol, String] = {
+    import definitions._
+
+    Map(
+      UnitClass -> ASMType.VOID_TYPE.getDescriptor,
+      BooleanClass -> ASMType.BOOLEAN_TYPE.getDescriptor,
+      CharClass -> ASMType.CHAR_TYPE.getDescriptor,
+      ByteClass -> ASMType.BYTE_TYPE.getDescriptor,
+      ShortClass -> ASMType.SHORT_TYPE.getDescriptor,
+      IntClass -> ASMType.INT_TYPE.getDescriptor,
+      LongClass -> ASMType.LONG_TYPE.getDescriptor,
+      FloatClass -> ASMType.FLOAT_TYPE.getDescriptor,
+      DoubleClass -> ASMType.DOUBLE_TYPE.getDescriptor,
+    )
+  }
+
+  private def methodSignature(sym: Symbol): String = {
+    val sig = sym.typeSignature
+    val resultSig = argSignature(sig.resultType)
+    val argSig = sig.paramTypes.map(argSignature).mkString
+    s"($argSig)$resultSig"
+  }
+
+  private def argSignature(tpe: Type): String = {
+    // based on a simplified scala.tools.nsc.backend.jvm.BTypesFromSymbols
+    import definitions._
+
+    def primitiveOrClassToASMType(sym: Symbol): String =
+      primitiveClassToASM.getOrElse(sym, s"L${sym.javaBinaryNameString};")
+
+    tpe.dealiasWiden match {
+      case TypeRef(_, ArrayClass, List(arg)) => s"[${argSignature(arg)}"
+      case TypeRef(_, sym, _)                => primitiveOrClassToASMType(sym)
+      case ClassInfoType(_, _, sym)          => primitiveOrClassToASMType(sym)
+    }
+  }
 
   private def getOrComputeLoomLambdasWithCN(
       tree: Tree,

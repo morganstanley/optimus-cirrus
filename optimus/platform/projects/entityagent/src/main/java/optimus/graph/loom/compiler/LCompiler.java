@@ -61,7 +61,7 @@ public class LCompiler implements Opcodes {
   static {
     searchMode = DiagnosticSettings.getStringProperty("lcompiler.search", "");
     try {
-      if (searchMode.length() > 0) {
+      if (!searchMode.isEmpty()) {
         Runtime.getRuntime()
             .addShutdownHook(
                 new Thread(
@@ -110,6 +110,7 @@ public class LCompiler implements Opcodes {
         }
       }
     } catch (IOException e) {
+      //noinspection CallToPrintStackTrace
       e.printStackTrace();
     }
   }
@@ -143,9 +144,6 @@ public class LCompiler implements Opcodes {
   }
 
   public static void transform(TransformableMethod method, LoomAdapter adapter, boolean suffix) {
-    // make this true to skip reduce (only for debugging reasons)!
-    method.compilerArgs.skipFoldingBlocks = false;
-
     /*
     // example on how to debug a method by name (without re-compiling):
     if (adapter.cls.name.endsWith("MapLikeDSI")) {
@@ -171,7 +169,7 @@ public class LCompiler implements Opcodes {
     if (configFlag.equals("D") || configFlag.equals("C")) return;
     else {
       // LMessage.info("Enabled: ", method, adapter.cls);
-      if (searchMode.length() > 0) config.putIfAbsent(fullMethodName, "E");
+      if (!searchMode.isEmpty()) config.putIfAbsent(fullMethodName, "E");
     }
 
     var lc = new LCompiler(method, adapter);

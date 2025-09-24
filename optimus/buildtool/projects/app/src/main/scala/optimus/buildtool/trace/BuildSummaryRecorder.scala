@@ -20,9 +20,10 @@ import optimus.buildtool.compilers.zinc.CompilerThrottle
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.resolvers.DependencyDownloadTracker
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils
 import optimus.graph.GCMonitor
-import optimus.graph.GCMonitor.CumulativeGCStats
+import optimus.graph.gcmonitor.CumulativeGCStats
 import optimus.graph.cache.Caches
 import optimus.graph.diagnostics.EvictionReason
 
@@ -103,15 +104,22 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
       stat,
       (_, current) => if (current == null) value.to(mutable.Set).asInstanceOf[mutable.Set[Any]] else current ++= value)
 
-  override def endBuild(success: Boolean): Boolean = {
+  override def finalizeBuild(success: Boolean): Unit = {
     timerTask.foreach(_.cancel())
     storeStats()
-    DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty)(s =>
-      log.debug(s))
+    if (DependencyDownloadTracker.hasProblems)
+      DependencyDownloadTracker.summaryThenClean(condition = true) { s =>
+        log.warn(s)
+        ObtTrace.warn(s)
+      }
+    else
+      DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty) { s =>
+        log.debug(s)
+      }
+
     RemoteArtifactCacheTracker.summaryThenClean(RemoteArtifactCacheTracker.corruptedFiles.nonEmpty)(s => log.warn(s))
     logCacheDetails()
     logStats(buildComplete = true)
-    true
   }
 
   private def logCacheDetails(): Unit = {
@@ -304,7 +312,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
       gcSummary
     ).filter(!_.isBlank).mkString("\n")
 
-    if (buildComplete) {
+    if (buildComplete && !OptimusBuildToolProperties.minimalLogging) {
       log.info(msg)
       ObtTrace.info(msg)
     } else {

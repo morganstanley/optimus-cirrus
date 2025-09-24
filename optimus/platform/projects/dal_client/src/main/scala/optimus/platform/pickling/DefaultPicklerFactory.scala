@@ -135,8 +135,6 @@ class DefaultPicklerFactory extends PicklerFactory with DefaultFactory[Pickler] 
     classKeyOf[BusinessEvent] -> (_ => Some(BusinessEvent.eventpickler)),
     classKeyOf[MSUnique] -> (_ => Some(MSUnique.MSUniquePickler)),
     classKeyOf[storable.Embeddable] -> (tpe => Some(EmbeddablePicklers.picklerForType(tpe))),
-    classKeyOf[PIIElement[_]] -> (tpe => Some(piiElementPickler))
+    classKeyOf[PIIElement[_]] -> (_ => Some(piiElementPickler))
   )
-
-  def pickleableClasses: Set[String] = values.keySet ++ superclassValues.keySet
 }

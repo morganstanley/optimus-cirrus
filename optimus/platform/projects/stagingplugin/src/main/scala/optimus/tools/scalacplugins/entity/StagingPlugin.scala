@@ -37,7 +37,6 @@ object StagingSettings {
     val slowCompilationWarningThresholdMsName = "slowCompilationWarningThresholdMs:"
     val unsortedName = "unsorted:"
     val forceLoadName = "forceLoad:"
-    val varargs213CompatName = "varargs213Compat:"
   }
 }
 object StagingPlugin {
@@ -96,8 +95,6 @@ object StagingPlugin {
       pluginData.rewriteConfig.unsorted = parseOption(option, unsortedName, false)
     else if (option.startsWith(forceLoadName))
       pluginData.forceLoad = pluginData.forceLoad ::: parseStringList(option, forceLoadName)
-    else if (option.startsWith(varargs213CompatName))
-      pluginData.varargs213Compat = parseOption(option, varargs213CompatName, true)
     else error(s"unknown option '$option'")
   }
 

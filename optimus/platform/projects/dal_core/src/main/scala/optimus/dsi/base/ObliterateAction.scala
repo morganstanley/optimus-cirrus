@@ -12,11 +12,13 @@
 package optimus.dsi.base
 
 import optimus.platform.ImmutableArray
+import optimus.platform.dsi.bitemporal.Obliterate
 import optimus.platform.storable.StorableReference
 import optimus.platform.storable.SerializedKey
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.BusinessEventReference
 import optimus.platform.storable.AppEventReference
+import optimus.platform.storable.SerializedEntity
 import optimus.platform.storable.VersionedReference
 
 object ObliterateAction {
@@ -56,8 +58,10 @@ final case class ObliterateEntities(
     journaledOps: Seq[ObliterateAction.JournaledOp],
     tombstone: Boolean,
     appIdOpt: Option[AppEventReference],
-    vrefsOpt: Option[Set[(VersionedReference, EntityReference)]] = None)
-    extends ObliterateAction
+    mode: Obliterate.Mode,
+    typesForClassInfoRemoval: Seq[SerializedEntity.TypeRef],
+    vrefsOpt: Option[Set[(VersionedReference, EntityReference)]] = None
+) extends ObliterateAction
 /*
  * Events cannot have unique indexes currently, so the key operations will always be remove operations.
  * Also, note that with the current event implementation, there is no need to have the keys in there ObliterateEventBatch as

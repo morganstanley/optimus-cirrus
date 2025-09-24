@@ -474,7 +474,13 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   public static void logUriResourceUsage(URI resource, String className) {
-    logNetworkResourceUsage(resource.toString(), className);
+    String scheme = resource.getScheme();
+    // We exempt tracking from JarLocations since it is used for the classpath, and only that
+    if (!className.startsWith("optimus/platform/utils/JarLocations")) {
+      if (scheme != null && (scheme.equals("file") || scheme.equals("jar")))
+        logFileResourceUsage(resource.toString(), "r", className);
+      else logNetworkResourceUsage(resource.toString(), className);
+    }
   }
 
   private static boolean isClassOrJarResource(URL resource) {

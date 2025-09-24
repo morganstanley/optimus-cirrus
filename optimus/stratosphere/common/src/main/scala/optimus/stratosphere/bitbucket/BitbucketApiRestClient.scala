@@ -25,7 +25,6 @@ import java.time.Instant
 import java.time.{Duration => JDuration}
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -75,7 +74,7 @@ object RepoPermission extends Enumeration {
 
 final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     val timeout: JDuration,
-    val bitbucketHost: String = workspace.internal.bitbucket.hostname)
+    val bitbucketHost: String = workspace.internal.bitbucket.defaultHostname)
     extends BitbucketApiRestClientProtocol {
 
   private val version = "1.0"

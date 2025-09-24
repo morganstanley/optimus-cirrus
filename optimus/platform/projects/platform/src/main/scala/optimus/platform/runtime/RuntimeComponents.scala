@@ -11,8 +11,6 @@
  */
 package optimus.platform.runtime
 
-import java.net.URI
-import java.time.Instant
 import msjava.slf4jutils.scalalog._
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.Breadcrumbs
@@ -30,7 +28,6 @@ import optimus.graph.Scheduler
 import optimus.graph.Settings
 import optimus.graph.TweakNode
 import optimus.graph.TweakValueProviderNode
-import optimus.graph.diagnostics.InfoDumper
 import optimus.graph.diagnostics.sampling.SamplingProfilerSwitch
 import optimus.graph.{Settings => gs}
 import optimus.platform.RuntimeEnvironment.KnownNames._
@@ -44,26 +41,22 @@ import optimus.platform.dal.config.DalAsyncConfig
 import optimus.platform.dsi.bitemporal.DSI
 import optimus.platform.dsi.bitemporal.NoDSI
 import optimus.platform.internal.TemporalSource
-import optimus.platform.internal.UninitializedInitialTimeException
 
+import java.net.URI
+import java.time.Instant
 import scala.annotation.tailrec
 
 object RuntimeComponents {
   private val log = getLogger[RuntimeComponents]
   log.info("newCache is used")
 
-  val DsiUriProperty = RuntimeProperties.DsiUriProperty
+  def DsiUriProperty: String = RuntimeProperties.DsiUriProperty
 
   def apply(c: RuntimeConfiguration) = new RuntimeComponents(c)
   def apply(c: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncConfig]) = new RuntimeComponents(c, asyncConfigOpt)
 
   def createEntityResolver(dsi: DSI): EntityResolver =
     DALEntityResolver(dsi)
-
-  /** Extracts [[InitialRuntime.initialTime]] from a scenario stack */
-  private[optimus] def getInitialRuntimeInitialTime(ss: ScenarioStack): Instant = {
-    ss.getNode(InitialRuntime.initialTime.key).get
-  }
 
   class WithConstantTime(rc: RuntimeConfiguration, t: Instant) extends RuntimeComponents(rc) {
     override protected[this] final def timeLookup(resolver: EntityResolver): Instant = t
@@ -79,7 +72,7 @@ object RuntimeComponents {
   }
 }
 
-@entity private object InitialRuntime {
+@entity private[platform] object InitialRuntime {
   @node(tweak = true) private[optimus] def initialTime: Instant = TemporalSource.uninitializedInitialTime()
   initialTime_info.internalSetTweakMaskForDAL()
 }
@@ -193,7 +186,7 @@ class RuntimeComponents(
           val provider = new SITweakValueProvider {
             // resolving initial time lazily and in background
             private lazy val initTime: Instant = timeLookup(resolver)
-            override def valueOf(node: PropertyNode[_]): AnyRef = initTime
+            override def valueOf(node: PropertyNode[_]): Any = initTime
             override def isKeyDependent: Boolean = false
             override def serializeAsValue: Option[Any] = Some(initTime)
           }

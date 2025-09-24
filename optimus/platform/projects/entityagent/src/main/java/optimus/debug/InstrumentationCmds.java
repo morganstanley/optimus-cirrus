@@ -17,15 +17,22 @@ import static optimus.debug.InstrumentationConfig.*;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.stream.Collectors;
 import optimus.graph.DiagnosticSettings;
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 
 @SuppressWarnings({"unused", "WeakerAccess"})
 // A number of methods in the class are called via reflection when loaded from a config
@@ -60,15 +67,44 @@ public class InstrumentationCmds {
         } else if (lastToken.equals("false")) {
           args.add(Boolean.FALSE);
           argTypes.add(boolean.class);
+        } else if (lastToken.startsWith("ForwardFlags.")) {
+          args.add(ForwardFlags.valueOf(lastToken.substring("ForwardFlags.".length())));
+          argTypes.add(ForwardFlags.class);
+        } else throw new IllegalArgumentException("Unable to parse token " + lastToken);
+      }
+    }
+
+    private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
+
+    void invoke() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+      if (function != null) {
+        MethodHandle handle = lookup.unreflect(findMethod());
+        try {
+          handle.invokeWithArguments(args);
+        } catch (Throwable e) {
+          throw new InvocationTargetException(e);
         }
       }
     }
 
-    void invoke() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-      if (function != null) {
-        var method = InstrumentationCmds.class.getMethod(function, argTypes.toArray(new Class[0]));
-        method.invoke(null, args.toArray());
-      }
+    private Method findMethod() throws NoSuchMethodException {
+      var methods =
+          Arrays.stream(InstrumentationCmds.class.getMethods())
+              .filter(
+                  m ->
+                      m.getName().equals(function)
+                          && Modifier.isStatic(m.getModifiers())
+                          && Modifier.isPublic(m.getModifiers()))
+              .collect(Collectors.toList());
+      if (methods.isEmpty())
+        throw new NoSuchMethodException(
+            "No public static method found for name '" + function + "'");
+      if (methods.size() > 1)
+        throw new IllegalArgumentException(
+            "Multiple public static method overloads found for name '"
+                + function
+                + "' and we don't support overload resolution");
+      return methods.get(0);
     }
   }
 
@@ -85,6 +121,10 @@ public class InstrumentationCmds {
   private static void loadAndParseConfig() {
     try {
       if (DiagnosticSettings.enableRTVerifier) parseAndApplyConfig(readResource("rt_verifier.sc"));
+
+      if (DiagnosticSettings.useVirtualThreads) parseAndApplyConfig(readResource("vt_helpers.sc"));
+      if (DiagnosticSettings.enableVTVerifier) parseAndApplyConfig(readResource("vt_verifier.sc"));
+      if (Runtime.version().feature() >= 24) parseAndApplyConfig(readResource("java24_compat.sc"));
 
       if (DiagnosticSettings.modifyScalaHashCollectionIterationOrder)
         parseAndApplyConfig(readResource("modify_scala212_hash_improver.sc"));
@@ -136,7 +176,7 @@ public class InstrumentationCmds {
    */
   public static void injectCurrentNodeAndStackToField(String fieldName, String methodName) {
     InstrumentationConfig.addRecordPrefixCallIntoMemberWithStackTrace(
-        fieldName, asMethodRef(methodName), traceCurrentNodeAndStack);
+        fieldName, null, asMethodRef(methodName), traceCurrentNodeAndStack);
   }
 
   /**
@@ -210,7 +250,7 @@ public class InstrumentationCmds {
   public static void cacheHashCode(String className) {
     var mref = new MethodRef(className, "hashCode");
     var patch = putIfAbsentMethodPatch(mref);
-    patch.cacheInField = addField(className, "__hashCode", "I");
+    patch.cacheInField = addField(className, "__hashCode", "I", null, null);
   }
 
   /**
@@ -234,6 +274,11 @@ public class InstrumentationCmds {
     addTraceEntryAsNodeAndParents(from);
   }
 
+  public enum ForwardFlags {
+    MethodToCallOwnerIsInterface,
+    DropMethodArgs
+  }
+
   /**
    * Instrument @methodToPatch to call @methodToCall by forwarding all the arguments
    *
@@ -242,15 +287,23 @@ public class InstrumentationCmds {
    * @param toStatic true if method to call is static (or virtual otherwise)
    * @param saveOrgSuffix if non-null save the original function renaming it by appending this value
    */
-  public static void forward(
-      String methodToPatch, String methodToCall, boolean toStatic, String saveOrgSuffix) {
+  private static void forward(
+      String methodToPatch,
+      String methodToCall,
+      boolean toStatic,
+      String saveOrgSuffix,
+      ForwardFlags... flags) {
     MethodRef from = asMethodRef(methodToPatch);
     MethodRef to = asMethodRef(methodToCall);
     var pre = InstrumentationConfig.addPrefixCall(from, to, false, true);
     pre.prefixIsFullReplacement = true;
     pre.noArgumentBoxing = true;
-    pre.keepOriginalMethodAs = from.method + saveOrgSuffix;
+    pre.keepOriginalMethodAs = saveOrgSuffix == null ? null : from.method + saveOrgSuffix;
     pre.forwardToCallIsStatic = toStatic;
+
+    var flagSet = Set.of(flags);
+    pre.forwardToOwnerIsInterface = flagSet.contains(ForwardFlags.MethodToCallOwnerIsInterface);
+    pre.prefixWithArgs = !flagSet.contains(ForwardFlags.DropMethodArgs);
   }
 
   /**
@@ -259,8 +312,20 @@ public class InstrumentationCmds {
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
    */
-  public static void forward(String methodToPatch, String methodToCall) {
-    forward(methodToPatch, methodToCall, true, FWD_ORG_DEFAULT_SUFFIX);
+  public static void forward(String methodToPatch, String methodToCall, ForwardFlags... flags) {
+    forward(methodToPatch, methodToCall, true, FWD_ORG_DEFAULT_SUFFIX, flags);
+  }
+
+  /**
+   * Instrument @methodToPatch to call @methodToCall by forwarding all the arguments No Copy mean
+   * don't retain the original version
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void forwardNoCopy(
+      String methodToPatch, String methodToCall, ForwardFlags... flags) {
+    forward(methodToPatch, methodToCall, true, null, flags);
   }
 
   /**
@@ -269,8 +334,9 @@ public class InstrumentationCmds {
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
    */
-  public static void forwardToVirtual(String methodToPatch, String methodToCall) {
-    forward(methodToPatch, methodToCall, false, null);
+  public static void forwardToVirtual(
+      String methodToPatch, String methodToCall, ForwardFlags... flags) {
+    forward(methodToPatch, methodToCall, false, null, flags);
   }
 
   /**
@@ -307,8 +373,11 @@ public class InstrumentationCmds {
    *
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
+   * @param clsLoader the classLoader for which the interception should be enabled. If it should
+   *     intercept for all classLoader, use null
    */
-  public static void suffixCallTyped(String methodToPatch, String methodToCall) {
+  public static void suffixCallTyped(
+      String methodToPatch, String methodToCall, ClassLoader clsLoader) {
     MethodRef from = asMethodRef(methodToPatch);
     MethodRef to = asMethodRef(methodToCall);
     var suffix = InstrumentationConfig.addSuffixCall(from, to);
@@ -317,6 +386,21 @@ public class InstrumentationCmds {
     suffix.suffixWithArgs = true; // Rest of the arguments
     suffix.noArgumentBoxing = true; // No boxing
     suffix.suffixReplacesReturnValue = true; // Replaces the return value
+    InstrumentationConfig.restrictToClassLoader(from.cls, clsLoader);
+  }
+
+  /**
+   * Instrument @methodToPatch to call @methodToCall as the first call. <br>
+   * The methodToCall has to be a public static method with signature staring with return value and
+   * the rest matching the methodToPatch, <br>
+   * If methodToPatch is not static, the second argument of methodToCall will be the instance of the
+   * class
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void suffixCallTyped(String methodToPatch, String methodToCall) {
+    suffixCallTyped(methodToPatch, methodToCall, null);
   }
 
   /**
@@ -342,9 +426,9 @@ public class InstrumentationCmds {
 
   /**
    * Inject prefix call InstrumentedModuleCtor.trigger in EvaluationContext.current Only useful if
-   * you also executed markAllModuleCtors
+   * you also executed markAllModuleConstructors
    *
-   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationCmds#markAllModuleConstructors ()
    * @see InstrumentedModuleCtor#trigger()
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
    * @see RTVerifierCategory#MODULE_CTOR_SI_NODE
@@ -366,10 +450,10 @@ public class InstrumentationCmds {
   }
 
   /**
-   * When markAllModuleCtors is requested this function allows additions to the exclusion list
+   * When markAllModuleConstructors enabled, function allows additions to the exclusion list
    *
    * @param className JVM class name of the module
-   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationCmds#markAllModuleConstructors ()
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    */
   public static void excludeFromModuleOrEntityCtorReporting(String className) {
@@ -378,11 +462,11 @@ public class InstrumentationCmds {
   }
 
   /**
-   * When markAllModuleCtors or individual module bracketing is enabled, some call stacks can be
-   * disabled
+   * When markAllModuleConstructors or individual module bracketing is enabled, some call stacks can
+   * be disabled
    *
    * @param methodToPatch fully specified method reference
-   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationCmds#markAllModuleConstructors ()
    * @see InstrumentationConfig#addModuleConstructionIntercept
    */
   public static void excludeMethodFromModuleCtorReporting(String methodToPatch) {
@@ -406,8 +490,8 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors
-   * as running
+   * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity
+   * constructors as running
    *
    * @see InstrumentationCmds#reportFindingTweaksInEntityConstructor()
    * @see InstrumentationCmds#reportTouchingTweakableInEntityConstructor()
@@ -419,14 +503,14 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module ctors
-   * as running
+   * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module
+   * constructors as running. Lazy vals will be marked as well.
    *
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
    * @see RTVerifierCategory#MODULE_CTOR_SI_NODE
    * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
-  public static void markAllModuleCtors() {
+  public static void markAllModuleConstructors() {
     instrumentAllModuleConstructors = true;
   }
 
@@ -455,6 +539,78 @@ public class InstrumentationCmds {
    */
   public static void reportSuspiciousEqualityCalls() {
     instrumentEquals = true;
+  }
+
+  /**
+   * Instrument all classes that try to compare floats or doubles and report NaN comparison
+   *
+   * @apiNote Almost all flagged case are wrong
+   * @see InstrumentedByteCodes#equals
+   */
+  public static void reportSuspiciousFloatCompares() {
+    DiagnosticSettings.enableNaNWarnings = true;
+  }
+
+  /**
+   * If enabled for a given class the following method will be called
+   * optimus.debug.InstrumentedByteCodes#checkCast(java.lang.Object, java.lang.String)
+   *
+   * @param className The fully specified class name of the target of the cast to
+   */
+  public static void reportCheckCastOf(String className) {
+    DiagnosticSettings.enableCastTracing = true;
+    checkCastFilter.put(className.replace(".", "/"), defCheckCast);
+  }
+
+  /**
+   * If enabled for a given class the following method will be called
+   * optimus.debug.InstrumentedByteCodes#checkCast(java.lang.Object, java.lang.String)
+   *
+   * @param className The fully specified class name of the target of the cast to
+   * @param target Fully specified target method
+   */
+  public static void reportCheckCastOfTo(String className, String target) {
+    DiagnosticSettings.enableCastTracing = true;
+    checkCastFilter.put(className.replace(".", "/"), asMethodRef(target));
+  }
+
+  /**
+   * If enabled for a given class the following method will be called
+   * optimus.debug.InstrumentedByteCodes#instanceOf(java.lang.Object, java.lang.String)
+   *
+   * @param className The fully specified class name of the target of the cast to
+   */
+  public static void reportInstanceOf(String className) {
+    DiagnosticSettings.enableCastTracing = true;
+    instanceOfFilter.put(className.replace(".", "/"), defInstanceOf);
+  }
+
+  /**
+   * If enabled for a given class the following method will be called
+   * optimus.debug.InstrumentedByteCodes#instanceOf(java.lang.Object, java.lang.String)
+   *
+   * @param className The fully specified class name of the target of the cast to
+   * @param target Fully specified target method
+   */
+  public static void reportInstanceOfTo(String className, String target) {
+    DiagnosticSettings.enableCastTracing = true;
+    instanceOfFilter.put(className.replace(".", "/"), asMethodRef(target));
+  }
+
+  public static void reportExcludeCheckCastAndInstanceOf(String method) {
+    castRelatedExclusions.put(asMethodRef(method), Boolean.TRUE);
+  }
+
+  /**
+   * If enabled for a given class the following method will be called
+   * optimus.debug.InstrumentedByteCodes#instanceOf(java.lang.Object, java.lang.String)
+   *
+   * @param className The fully specified class name of the target of the cast to
+   * @param target Fully specified target method
+   */
+  public static void reportInstanceOf(String className, String target) {
+    DiagnosticSettings.enableCastTracing = true;
+    instanceOfFilter.put(className.replace(".", "/"), asMethodRef(target));
   }
 
   /**
@@ -516,7 +672,7 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Sometimes developers inadvertanly write non-RT constructors. Enabling this probe will often
+   * Sometimes developers inadvertently write non-RT constructors. Enabling this probe will often
    * find those issues
    */
   public static void verifyEntityDeepEqualityDuringCaching() {

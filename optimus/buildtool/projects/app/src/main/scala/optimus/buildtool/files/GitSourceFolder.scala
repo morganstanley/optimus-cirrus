@@ -19,7 +19,6 @@ import optimus.platform._
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevCommit
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 // Note: Do not add constructor arguments to GitSourceFolder without considering cache misses due to entity

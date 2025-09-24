@@ -28,7 +28,9 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /** Strategy for setting workspace location. */
-sealed abstract class WorkspaceLocation(val path: Option[Path])
+sealed abstract class WorkspaceLocation(val path: Option[Path]) {
+  def reloadBaseConfig: Boolean = true
+}
 
 /** Use location from given path. */
 final case class CustomWorkspace(root: Path) extends WorkspaceLocation(Some(root))
@@ -42,16 +44,21 @@ object CustomWorkspace {
 case object AutoDetect extends WorkspaceLocation(None)
 
 /** Use when running outside of workspace */
-case object NoWorkspace extends WorkspaceLocation(Some(null))
+case object NoWorkspace extends WorkspaceLocation(Some(null)) {
+  override def reloadBaseConfig: Boolean = false
+}
 
-class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLocation, bootstrapLogger: String => Unit)
-    extends TypeSafeOptions {
+class StratoWorkspaceCommon protected (
+    val customWorkspaceLocation: WorkspaceLocation,
+    customLogger: Option[CentralLogger]
+) extends TypeSafeOptions {
 
   private var _config: Config = _
   private var _directoryStructure: CommonDirectoryStructure = _
   private var _intellijDirectoryStructure: IntellijDirectoryStructure = _
   private var _log: CentralLogger = _
   private var _reloadCallback: () => Unit = () => {}
+  private var _baseConfigs: BaseConfigs = _
 
   object msGroup {
     lazy val msGroupPath: Path = StratoWorkspaceCommon.this.internal.msGroup
@@ -64,19 +71,30 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
     }
   }
 
-  final def config: Config =
-    if (_config == null) notInitialized() else _config
+  final def config: Config = loadOrThrow(_config)
 
   protected final def config_=(newConfig: Config): Unit = _config = newConfig
 
+  final def baseConfigs: BaseConfigs = loadOrThrow(_baseConfigs)
+
+  protected final def baseConfigs_=(newBaseConfigs: BaseConfigs): Unit = {
+    _baseConfigs = newBaseConfigs
+  }
+
+  final def defaultConfig: Config = baseConfigs.defaultConfig
+
+  final def localUserConfig: Config = baseConfigs.localUserConfig
+
+  final def globalUserConfig: Config = baseConfigs.globalUserConfig
+
   final def directoryStructure: CommonDirectoryStructure =
-    if (_directoryStructure == null) notInitialized() else _directoryStructure
+    loadOrThrow(_directoryStructure)
 
   final def intellijDirectoryStructure: IntellijDirectoryStructure =
-    if (_intellijDirectoryStructure == null) notInitialized() else _intellijDirectoryStructure
+    loadOrThrow(_intellijDirectoryStructure)
 
   implicit final def log: CentralLogger =
-    if (_log == null) notInitialized() else _log
+    loadOrThrow(_log)
 
   final def addLogger(additionalLogger: Logger): Unit = {
     _log = _log.withLogger(additionalLogger)
@@ -89,10 +107,15 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
   final def reload(
       workspaceLocation: WorkspaceLocation = Option(_directoryStructure)
         .map(ds => CustomWorkspace(ds.stratosphereWorkspaceDir))
-        .getOrElse(customWorkspaceLocation)
+        .getOrElse(customWorkspaceLocation),
+      withBaseConfig: Boolean = true
   ): Unit = {
     // Cannot use logger here, we're initializing it below
-    bootstrapLogger("Initializing workspace...")
+    val msg = "Initializing workspace..."
+    customLogger match {
+      case Some(l) => l.info(msg)
+      case None    => println(msg)
+    }
 
     _config =
       workspaceLocation.path.map(StratosphereConfig.loadFromLocation).getOrElse(StratosphereConfig.loadFromCurrentDir())
@@ -101,7 +124,7 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
 
     _intellijDirectoryStructure = IntellijDirectoryStructure(this)
 
-    _log = {
+    _log = customLogger.getOrElse {
       val logDir =
         try {
           val logDir = directoryStructure.logsDirectory
@@ -116,6 +139,7 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
       new CentralLogger(logDir, internal.console.colors)
     }
 
+    if (withBaseConfig) _baseConfigs = BaseConfigs(directoryStructure)
     _reloadCallback()
   }
 
@@ -133,6 +157,8 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
     config = config.withValue(name, ConfigValueFactory.fromAnyRef(value))
   }
 
+  private def loadOrThrow[T](nullableThing: T): T = Option(nullableThing).getOrElse(notInitialized())
+
   private def notInitialized() =
     throw new IllegalStateException("Trying to access stratosphere workspace before it is initialised.")
 }
@@ -143,10 +169,10 @@ object StratoWorkspaceNames {
 
 class StratoWorkspace protected (
     override val customWorkspaceLocation: WorkspaceLocation = AutoDetect,
-    bootstrapLogger: String => Unit = println
-) extends StratoWorkspaceCommon(customWorkspaceLocation, bootstrapLogger) {
+    customLogger: Option[CentralLogger] = None
+) extends StratoWorkspaceCommon(customWorkspaceLocation, customLogger) {
 
-  reload()
+  reload(withBaseConfig = customWorkspaceLocation.reloadBaseConfig)
 
   def apply(customWorkspaceLocation: WorkspaceLocation = AutoDetect): StratoWorkspace =
     StratoWorkspace(customWorkspaceLocation)
@@ -157,7 +183,7 @@ class StratoWorkspace protected (
 object StratoWorkspace {
   def apply(
       customWorkspaceLocation: WorkspaceLocation,
-      bootstrapLogger: String => Unit = println
+      customLogger: Option[CentralLogger] = None
   ): StratoWorkspace =
-    new StratoWorkspace(customWorkspaceLocation, bootstrapLogger)
+    new StratoWorkspace(customWorkspaceLocation, customLogger)
 }

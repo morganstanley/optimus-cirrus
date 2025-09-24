@@ -14,8 +14,9 @@ package optimus.examples.platform01.data
 import optimus.examples.platform.entities.SimpleEntity
 import optimus.platform._
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 
-object SimpleInvalidate extends LegacyOptimusApp[SupplyEntityNameArgs] {
+object SimpleInvalidate extends LegacyOptimusApp[SupplyEntityNameArgs] with PrintlnInterceptor {
   val simpleEntity = SimpleEntity.get(cmdLine.name)
 
   newEvent(SimpleEvent.uniqueInstance("Invalidate")) {

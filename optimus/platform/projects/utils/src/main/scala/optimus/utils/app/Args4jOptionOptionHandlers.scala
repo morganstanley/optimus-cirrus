@@ -24,6 +24,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Duration
 import java.time.Instant
+import scala.util.matching.Regex
 
 /*
  * Args4j handlers for Option[A] kind.
@@ -111,4 +112,50 @@ final class DurationOptionOptionHandler(parser: CmdLineParser, option: OptionDef
 final class SeqStringOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Seq[String]]])
     extends OptionOptionHandler[Seq[String]](parser, option, setter) {
   def convert(s: String): Seq[String] = s.split(",").toList
+}
+
+final class SeqIntegerOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Seq[Int]]])
+    extends OptionOptionHandler[Seq[Int]](parser, option, setter) {
+  def convert(s: String): Seq[Int] = s.split(",").map(_.toInt) toList
+}
+
+final class DelimitedTuple2StringIntOptionOptionHandler(
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Option[Map[String, Int]]])
+    extends OptionOptionHandler[Map[String, Int]](parser, option, setter) {
+  def convert(arg: String): Map[String, Int] = arg
+    .split(",")
+    .map { k =>
+      k.split("\\:") match {
+        case Array(a, b) => a -> augmentString(b).toInt
+        case _ =>
+          throw new IllegalArgumentException(
+            "Unable to parse as Tuple2[String, String]... A string of the format: A+B is expected")
+      }
+    }
+    .toMap
+}
+
+abstract class MapOptionOptionHandler[K, V](parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Map[K, V]]])
+    extends OptionOptionHandler[Map[K, V]](parser, option, setter) {
+
+  final override def convert(s: String): Map[K, V] =
+    s.split(entrySeparator)
+      .map(_.split(keyValueSeparator))
+      .map {
+        case Array(k, v) => convertKey(k) -> convertValue(v)
+        case kv          => throw new IllegalArgumentException(s"Unable to parse key-value pair [$kv]")
+      }
+      .toMap
+
+  def convertKey(s: String): K
+  def convertValue(s: String): V
+  def entrySeparator: String
+  def keyValueSeparator: String
+}
+
+final class RegexOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Regex]])
+    extends OptionOptionHandler(parser, option, setter) {
+  override def convert(arg: String): Regex = raw"""$arg""".r
 }

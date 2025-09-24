@@ -24,8 +24,6 @@ import optimus.buildtool.trace.Scala
 import optimus.buildtool.trace.Signatures
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 final case class CompilerOutput(
     classes: Option[InternalClassFileArtifact],
     messages: CompilerMessagesArtifact,

@@ -18,9 +18,30 @@ import java.nio.file.Paths;
 public class WorkspaceRoot {
   public static final String STRATOSPHERE_CONFIG_FILE = "stratosphere.conf";
   private static final String SRC_DIR = "src";
+  public static final String DOT_SHADOW = ".shadow";
+  public static final String DOT_WORKSPACE = ".workspace.json";
 
   public static Path find() {
     return find(Paths.get("").toAbsolutePath());
+  }
+
+  public static boolean isTrain(Path maybeTrainPath) {
+    return Files.exists(maybeTrainPath)
+        && Files.exists(maybeTrainPath.resolve(DOT_SHADOW))
+        && Files.exists(maybeTrainPath.resolve(DOT_WORKSPACE));
+  }
+
+  public static Path trainRoot(Path maybeRootPath) {
+    if (maybeRootPath.getNameCount() > 3) {
+      Path trainRoot =
+          maybeRootPath
+              .getRoot()
+              .resolve(maybeRootPath.subpath(0, maybeRootPath.getNameCount() - 3));
+      if (isTrain(trainRoot)) {
+        return trainRoot;
+      }
+    }
+    return maybeRootPath;
   }
 
   public static Path find(Path currentDir) {
@@ -28,14 +49,12 @@ public class WorkspaceRoot {
       return null;
     }
     Path srcDir = currentDir.resolve(SRC_DIR);
-    if (Files.exists(srcDir)) {
-      if (Files.exists(srcDir.resolve(STRATOSPHERE_CONFIG_FILE))) {
-        SparseUtils.assertRequiredDirectoriesExist(srcDir);
-        return currentDir;
-      } else {
-        SparseUtils.assertValidSparseConfig(srcDir);
-      }
+    if (Files.exists(srcDir) && Files.exists(srcDir.resolve(STRATOSPHERE_CONFIG_FILE))) {
+      SparseUtils.assertRequiredDirectoriesExist(srcDir);
+      SparseUtils.assertValidSparseConfig(srcDir);
+      return currentDir;
     }
+
     return find(currentDir.getParent());
   }
 }

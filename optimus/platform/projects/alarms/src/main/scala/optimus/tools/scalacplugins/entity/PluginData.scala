@@ -103,15 +103,13 @@ class PluginData(private val global: Global) {
     var rewriteCaseClassToFinal = false
     var intToFloat = false
     var unsorted = false
+    var xmlLoader = false
     def anyEnabled =
-      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || rewritePostfix || unitCompanion || procedureSyntax || autoApplication || nilaryOverride || anyFormatted || any2StringAdd || importShadow || rewriteCaseClassToFinal || intToFloat || unsorted
+      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || rewritePostfix || unitCompanion || procedureSyntax || autoApplication || nilaryOverride || anyFormatted || any2StringAdd || importShadow || rewriteCaseClassToFinal || intToFloat || unsorted || xmlLoader
 
     // disabled in some unit tests
     var useOptimusCompat: Boolean = true
   }
-
-  // TODO (OPTIMUS-48502): Drop this once we drop 2.12 support and then adopt 2.13 meaning of Seq
-  var varargs213Compat = true
 
   var slowCompilationWarningThresholdMs = 20 * 1000L
   var forceLoad: List[String] = Nil

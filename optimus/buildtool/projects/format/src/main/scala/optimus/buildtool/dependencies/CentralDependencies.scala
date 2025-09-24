@@ -17,8 +17,9 @@ import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.MavenDependencies
 import optimus.buildtool.config.ModuleSet
+import optimus.buildtool.config.ModuleSetId
 
-import scala.collection.immutable.Seq
+import java.util.concurrent.ConcurrentHashMap
 
 final case class CentralDependencies(
     jvmDependencies: JvmDependencies,
@@ -35,8 +36,13 @@ final case class CentralDependencies(
   private val dependencySets = jvmDependencies.dependencySets.map(ds => ds.id -> ds).toMap
   private val variantSets = jvmDependencies.variantSets.map(vs => vs.id -> vs).toMap
 
-  def externalDependencies(ms: ModuleSet): ExternalDependencies =
-    externalDependencies(ms.transitiveNonVariantDependencySets.map(dependencySets), ms.variantSets.map(variantSets))
+  private val externalDependencyCache = new ConcurrentHashMap[ModuleSetId, ExternalDependencies]()
+  def externalDependencies(ms: ModuleSet): ExternalDependencies = externalDependencyCache.computeIfAbsent(
+    ms.id,
+    { _ =>
+      externalDependencies(ms.transitiveNonVariantDependencySets.map(dependencySets), ms.variantSets.map(variantSets))
+    }
+  )
 
   private def externalDependencies(
       dependencySets: Set[DependencySet],
@@ -54,8 +60,10 @@ final case class CentralDependencies(
 
     val boms = dependencySets.flatMap(_.boms) ++ variantSets.flatMap(_.boms)
 
+    val substitutions = loadedMultiSourceDeps.substitutions
+
     val allAfs = AfsDependencies(unmappedAfsDeps, afsMappedDeps)
-    val allMaven = MavenDependencies(unmappedMavenDeps, mixedModeMavenDeps, boms.to(Seq))
+    val allMaven = MavenDependencies(unmappedMavenDeps, mixedModeMavenDeps, boms.to(Seq), substitutions)
     ExternalDependencies(allAfs, allMaven)
   }
 }

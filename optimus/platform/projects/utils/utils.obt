@@ -32,7 +32,7 @@ main {
       ossjava.guava,
       ossjava.hkdf,
       ossjava.jakarta.activation,
-      ossjava.javamail,
+      ossjava.javax.mail,
       ossjava.jettison,
       ossjava.logback,
       ossjava.opencsv,

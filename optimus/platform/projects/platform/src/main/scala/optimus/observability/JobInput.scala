@@ -23,15 +23,11 @@ import optimus.platform.inputs.dist.DistNodeInputs
 import optimus.platform.inputs.dist.GSFSections
 import optimus.platform.inputs.dist.GSFSections.EngineSpecEnvVar
 import optimus.platform.inputs.dist.GSFSections.EngineSpecJavaOpt
-import optimus.platform.inputs.dist.GSFSections.GSFSection
 import optimus.platform.inputs.loaders.FoldedNodeInput
 import optimus.platform.inputs.loaders.LoaderSource
 import optimus.platform.inputs.registry.Registry
 import optimus.platform.inputs.registry.Source
 import optimus.platform.storable.Entity
-
-import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 /** An input to the @job computation */
 @embeddable
@@ -89,8 +85,8 @@ sealed trait SIJobInput extends JobInput {
   /** Overrides the bound [[JobValue]] for this [[JobInput]] */
   def withValue(newValue: JobValue): SIJobInput
 
-  private[optimus] def isLocal: Boolean
-  private[optimus] def forwardToEngine: Boolean
+  def isLocal: Boolean
+  def forwardToEngine: Boolean
   private[optimus] def affectsExecutionProcessWide: Boolean
   private[optimus] def requiresRestart: Boolean = false
   private[optimus] def asNodeInput: NodeInputResolver.Entry[Any]
@@ -130,8 +126,8 @@ final case class PluginTagJobInput(className: String, name: String, description:
     PluginTagKeyValue(pluginTagKey, value.value)
   }
   override def withValue(newValue: JobValue): PluginTagJobInput = copy(value = newValue)
-  private[optimus] override def isLocal = true
-  private[optimus] override def forwardToEngine = true
+  override def isLocal = true
+  override def forwardToEngine = true
   private[optimus] override def affectsExecutionProcessWide = false
   private[optimus] override def asNodeInput: NodeInputResolver.Entry[Any] = asPluginTagKeyValue
 }
@@ -152,8 +148,8 @@ final case class JavaOptJobInput(
     javaProperty: Option[String],
     pattern: String,
     javaValue: String,
-    private[optimus] val isLocal: Boolean,
-    private[optimus] val forwardToEngine: Boolean,
+    isLocal: Boolean,
+    forwardToEngine: Boolean,
     private[optimus] val affectsExecutionProcessWide: Boolean)
     extends SIJobInput {
   def name: String = nameOpt.getOrElse(asJavaOpt)
@@ -206,8 +202,8 @@ final case class EnvVarJobInput(
     description: String,
     envKey: String,
     envValue: String,
-    private[optimus] val isLocal: Boolean,
-    private[optimus] val forwardToEngine: Boolean,
+    isLocal: Boolean,
+    forwardToEngine: Boolean,
     private[optimus] val affectsExecutionProcessWide: Boolean)
     extends SIJobInput {
   override def value: JobValue = StrJobValue(envValue)
@@ -252,8 +248,8 @@ final case class RegistryJobInput(
     name: String,
     description: String,
     value: JobValue,
-    private[optimus] val isLocal: Boolean,
-    private[optimus] val forwardToEngine: Boolean,
+    isLocal: Boolean,
+    forwardToEngine: Boolean,
     private[optimus] val affectsExecutionProcessWide: Boolean,
     private[optimus] val loaderSource: String)
     extends SIJobInput {

@@ -16,8 +16,6 @@ import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.files.FileAsset
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 trait ComponentInstaller {
   def descriptor: String
   @async def install(installable: InstallableArtifacts): Seq[FileAsset]

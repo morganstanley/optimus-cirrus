@@ -38,8 +38,15 @@ public abstract class PNodeTask {
 
   public static final PNodeTaskInfo startNodeInfo =
       new PNodeTaskInfo(OGSchedulerContext.NODE_ID_ROOT, "", NodeTaskInfo.Names.startName);
+
   public static final PNodeTaskInfo syncEntryGroupInfo =
       new PNodeTaskInfo(Integer.MIN_VALUE, "", "[SyncEntryGroup]");
+
+  static {
+    fakeInfo.flags |= NodeTaskInfo.DONT_CACHE;
+    startNodeInfo.flags |= NodeTaskInfo.DONT_CACHE;
+    syncEntryGroupInfo.flags |= NodeTaskInfo.DONT_CACHE;
+  }
 
   private static final int IGNORE_RESULT_IN_COMPARE = 0x1;
   private static final int IGNORE_ARGUMENTS_IN_COMPARE = 0x2;
@@ -227,6 +234,8 @@ public abstract class PNodeTask {
 
   public abstract String stateAsString();
 
+  public abstract String stateAsDetailedString(boolean html);
+
   public final boolean isUnattachedNode() {
     return !getCallees().hasNext() && getCallers().isEmpty();
   }
@@ -331,6 +340,8 @@ public abstract class PNodeTask {
   }
 
   public abstract String propertyFlagsAsString();
+
+  public abstract String propertyFlagsAsDetailedString(boolean html);
 
   public abstract String propertyCachePolicy();
 

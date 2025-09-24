@@ -12,6 +12,11 @@
 package optimus.buildtool
 package app
 
+import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.CrumbHint
+import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.buildtool.app.OptimusBuildToolCmdLineT._
 import optimus.buildtool.artifacts._
 import optimus.buildtool.bsp.BuildServerProtocolServer
@@ -62,9 +67,9 @@ import optimus.buildtool.compilers.runconfc.Templates
 import optimus.buildtool.compilers.venv.PythonEnvironment
 import optimus.buildtool.compilers.zinc.AnalysisLocatorImpl
 import optimus.buildtool.compilers.zinc.CompilerThrottle
+import optimus.buildtool.compilers.zinc.ScalacProvider
 import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
-import optimus.buildtool.compilers.zinc.ZincClasspathResolver
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GlobalConfig
@@ -73,24 +78,24 @@ import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.RunConfConfiguration
-import optimus.buildtool.config.ScalaVersionConfig
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
-import optimus.buildtool.config.StaticLibraryConfig.scalaJarNamesForZinc
 import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files._
 import optimus.buildtool.generators.CppBridgeGenerator
+import optimus.buildtool.generators.FixGenerator
 import optimus.buildtool.generators.FlatbufferGenerator
 import optimus.buildtool.generators.JaxbGenerator
 import optimus.buildtool.generators.JsonSchemaGenerator
 import optimus.buildtool.generators.JxbGenerator
 import optimus.buildtool.generators.ProtobufGenerator
 import optimus.buildtool.generators.AvroSchemaGenerator
+import optimus.buildtool.generators.PodcastGenerator
+import optimus.buildtool.generators.DomainGenerator
 import optimus.buildtool.generators.ScalaxbGenerator
-import optimus.buildtool.generators.ZincGenerator
 import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.processors.FreemarkerProcessor
 import optimus.buildtool.processors.OpenApiProcessor
@@ -114,7 +119,8 @@ import optimus.buildtool.utils._
 import optimus.graph.Settings
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.platform._
-import optimus.stratosphere.artifactory.ArtifactoryToolDownloader
+import optimus.rest.bitbucket.MergeCommitUtils
+import optimus.stratosphere.artifactory.ArtifactoryToolInstaller
 import optimus.stratosphere.artifactory.Credential
 import optimus.stratosphere.config.StratoWorkspace
 
@@ -125,10 +131,8 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.Deflater
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.io.StdIn
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -145,6 +149,7 @@ object OptimusBuildToolImpl {
     instrumentation: BuildInstrumentation,
     errorReporter: Option[ErrorReporter] = None
 ) {
+  private val requireCredentials = OptimusBuildToolProperties.getOrFalse("private.requireCredentials")
   // do this first to avoid mistakes (failing to write to logs is unhelpful)
   Files.createDirectories(cmdLine.logDir)
   private val logDir: Directory = Directory(cmdLine.logDir)
@@ -231,18 +236,48 @@ object OptimusBuildToolImpl {
     s"Graph threads: ${EvaluationContext.current.scheduler.getIdealThreadCount} (configured: ${Settings.threadsIdeal})"
   )
   log.info(s"Max heap: ${gbString(Runtime.getRuntime.maxMemory)}GB")
-  if (cmdLine.dhtRemoteStore != NoneArg) log.info(s"DHT (${cmdLine.cacheMode}): ${cmdLine.dhtRemoteStore}")
+  log.info(s"DHT (${cmdLine.cacheMode}): ${cmdLine.dhtRemoteStore}")
 
   if (appDir.replace("\\", "/").startsWith(installDir.toString) && cmdLine.install) {
-    log.error(s"""Build can't be continued because OBT is attempting to build the workspace
-                 |into the install directory which contains OBT artifacts used by this build.
-                 |
-                 |This will result in runtime filesystem errors and is most likely unintended.
-                 |In order to fix it make sure to clean your global `internal.obt.install` config.
-                 |
-                 |OBT app directory: $appDir
-                 |Install directory: $installDir""".stripMargin)
+    throw new IllegalArgumentException(
+      s"""Build can't be continued because OBT is attempting to build the workspace
+         |into the install directory which contains OBT artifacts used by this build.
+         |
+         |This will result in runtime filesystem errors and is most likely unintended.
+         |In order to fix it make sure to clean your global `internal.obt.install` config.
+         |
+         |OBT app directory: $appDir
+         |Install directory: $installDir""".stripMargin)
   }
+
+  val obtRunDetails: Map[String, String] = Map(
+    "hostname" -> Utils.hostName.getOrElse("unknown"),
+    "processID" -> Utils.processId.getOrElse("unknown"),
+    "user" -> sys.props("user.name"),
+    "osVersion" -> OsUtils.osVersion,
+    "appDir" -> appDir,
+    "artifactVersion" -> version,
+    "workingDir" -> workingDir.pathString,
+    "workspaceRoot" -> workspaceRoot.pathString,
+    "sourceDir" -> workspaceSourceRoot.pathString,
+    "dockerDir" -> dockerDir.pathString,
+    "installDir" -> installDir.pathString,
+    "javaHome" -> Utils.javaHome.pathString,
+    "classVersion" -> Utils.javaClassVersion,
+    "configuredGraphThreads" -> Settings.threadsIdeal.toString,
+    "actualGraphThreads" -> EvaluationContext.current.scheduler.getIdealThreadCount.toString,
+    "maxHeap" -> s"${gbString(Runtime.getRuntime.maxMemory())}GB"
+  )
+
+  Breadcrumbs.info(
+    ChainedID.root,
+    PropertiesCrumb(
+      _,
+      ObtCrumbSource,
+      Set.empty[CrumbHint],
+      Properties.obtRunDetails -> obtRunDetails
+    )
+  )
 
   // intentionally sending this to debug as this is a bit verbose for users to see
   private def optimusSysProps = sys.props.collect { case (k, v) if k.toLowerCase.contains("optimus") => s"$k=$v" }
@@ -280,7 +315,15 @@ object OptimusBuildToolImpl {
     else None
 
   @node @scenarioIndependent protected def gitLog: Option[GitLog] =
-    gitUtils.map(u => GitLog(u, workspaceSourceRoot, stratoWorkspace(), cmdLine.gitFilterRe, cmdLine.gitLength))
+    gitUtils.map(u =>
+      GitLog(
+        u,
+        workspaceSourceRoot,
+        stratoWorkspace(),
+        cmdLine.targetBranch,
+        cmdLine.gitFilterRe.getOrElse(MergeCommitUtils.prMessagePattern(cmdLine.targetBranch).toString()),
+        cmdLine.gitLength
+      ))
 
   @node private def latestCommit: Option[Commit] = gitLog.flatMap(_.HEAD)
 
@@ -332,28 +375,13 @@ object OptimusBuildToolImpl {
     installPathBuilder(installDir, globalConfig.versionConfig.installVersion)
   }
 
-  @node private def scalaPath: Directory = cmdLine.scalaDir.asDirectory.getOrElse(globalConfig.scalaPath)
-
-  @node private def scalaLibPath: ReactiveDirectory =
-    directoryFactory.reactive(scalaPath.resolveDir("lib"))
-
-  @node private def scalaJars: Seq[JarAsset] = {
-    def isScalaJar(f: FileAsset) = {
-      val name = f.name
-      name.endsWith(".jar") && !name.endsWith(".src.jar") && scalaJarNamesForZinc.exists(name.startsWith)
-    }
-    scalaLibPath.listFiles.filter(isScalaJar).map(_.asJar)
-  }
-
   @node private def dependencyMetadataResolvers: DependencyMetadataResolvers = obtConfig.depMetadataResolvers
-
-  @node def scalaVersionConfig: ScalaVersionConfig =
-    ScalaVersionConfig(globalConfig.scalaVersion, scalaLibPath, scalaJars)
 
   @node @scenarioIndependent protected def rubbishTidyer: Option[RubbishTidyer] =
     cmdLine.maxBuildDirSize.map { maxSizeMegabytes =>
-      val gitLog =
-        gitUtils.map(u => GitLog(u, workspaceSourceRoot, stratoWorkspace(), commitLength = cmdLine.gitPinDepth))
+      val gitLog = gitUtils.map { u =>
+        GitLog(u, workspaceSourceRoot, stratoWorkspace(), cmdLine.targetBranch, commitLength = cmdLine.gitPinDepth)
+      }
       val freeDiskSpaceTriggerBytes = cmdLine.freeDiskSpaceTriggerMb.map(_.toLong << 20L)
       new RubbishTidyerImpl(maxSizeMegabytes.toLong << 20L, freeDiskSpaceTriggerBytes, buildDir, sandboxDir, gitLog)
     }
@@ -361,21 +389,30 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def zincAnalysisCache =
     new ZincAnalysisCache(cmdLine.zincAnalysisCacheSize, instrumentation)
 
-  @node private def zincResolver: ZincClasspathResolver = new ZincClasspathResolver(
-    dependencyResolver.resolver(ModuleSet.empty), // we require zinc to be a core dependency
+  @node def scalaResolver: ScalaResolver = new ScalaResolver(
+    dependencyResolver.resolver(ModuleSet.empty),
     dependencyCopier,
-    scalaVersionConfig.scalaMajorVersion
+    globalConfig.scalaVersion
+  )
+
+  val interfaceDir = cmdLine.zincInterfaceDir.asDirectory.getOrElse {
+    buildDir.resolveDir("zincCompilerInterface")
+  }
+
+  @node protected def scalacProvider: ScalacProvider = ScalacProvider.instance(
+    dependencyResolver.resolver(ModuleSet.empty),
+    dependencyCopier,
+    scalaResolver.scalaVersionConfig,
+    ZincClassLoaderCaches,
+    interfaceDir
   )
 
   @node private def underlyingCompilerFactory: ZincCompilerFactory = {
-    val interfaceDir = cmdLine.zincInterfaceDir.asDirectory.getOrElse {
-      buildDir.resolveDir("zincCompilerInterface")
-    }
 
     ZincCompilerFactory(
       jdkPath = globalConfig.javaPath,
-      scalaConfig = scalaVersionConfig,
-      zincLocator = zincResolver,
+      scalaConfig = scalaResolver.scalaVersionConfig,
+      scalacProvider = scalacProvider,
       workspaceRoot = workspaceRoot,
       buildDir = outputDir,
       interfaceDir = interfaceDir,
@@ -425,14 +462,15 @@ object OptimusBuildToolImpl {
     StratoConfig.stratoWorkspace(workspaceRoot)
 
   @node @scenarioIndependent private def credentials: Seq[Credential] =
-    if (cmdLine.credentialFiles == NoneArg) {
+    if (cmdLine.credentialFiles == NoneArg && !requireCredentials) Nil
+    else if (cmdLine.credentialFiles == NoneArg) {
       val ws = stratoWorkspace()
       def existCredentialFile: Option[Credential] = Credential.fromJfrogConfFile(ws.internal.jfrog.configFile)
       existCredentialFile match {
         case Some(file) => Seq(file)
         case None =>
           log.warn(s"No credential files defined! obt will try generate one now")
-          ArtifactoryToolDownloader.presetArtifactoryCredentials(ws)
+          ArtifactoryToolInstaller.presetArtifactoryCredentials(ws)
           existCredentialFile.to(Seq)
       }
     } else
@@ -468,10 +506,10 @@ object OptimusBuildToolImpl {
     val withLocalCache =
       Files.exists(depCopyRoot.resolveDir("https").path) || Files.exists(depCopyRoot.resolveDir("http").path)
 
-    if (withMavenLibs && loaded.isEmpty && !withRemoteCache && !withLocalCache)
+    if (requireCredentials && withMavenLibs && loaded.isEmpty && !withRemoteCache && !withLocalCache)
       throw new IllegalArgumentException(
         s"Build failed: no credential and cache available, unable to download ${mavenLibs.size} maven libraries!")
-    else if (withMavenLibs && loaded.isEmpty && (withRemoteCache || withLocalCache))
+    else if (requireCredentials && withMavenLibs && loaded.isEmpty && (withRemoteCache || withLocalCache))
       log.warn(
         s"Maven server offline mode: no credential found! maven libs: ${mavenLibs.size}, local cache: $withLocalCache, remote cache: $withRemoteCache")
     loaded
@@ -483,10 +521,10 @@ object OptimusBuildToolImpl {
       dependencies = obtConfig.jvmDependencies,
       dependencyCopier = dependencyCopier,
       globalExcludes = obtConfig.globalExcludes,
-      globalSubstitutions = obtConfig.globalSubstitutions,
       credentials = validateCredentials(credentials, obtConfig.jvmDependencies.allExternalDependencies),
       remoteAssetStore = remoteAssetStore,
-      enableMappingValidation = enableMappingValidation
+      enableMappingValidation = enableMappingValidation,
+      throttle = Some(AdvancedUtils.newThrottle(cmdLine.resolverThrottle))
     )
 
   @node private def webDependencyResolver: WebDependencyResolver = {
@@ -505,10 +543,12 @@ object OptimusBuildToolImpl {
       JaxbGenerator(directoryFactory, workspaceSourceRoot),
       JxbGenerator(workspaceSourceRoot),
       JsonSchemaGenerator(directoryFactory, workspaceRoot),
-      ProtobufGenerator(workspaceSourceRoot),
+      PodcastGenerator(workspaceSourceRoot, obtConfig),
+      ProtobufGenerator(dependencyResolver.resolver(ModuleSet.empty), dependencyCopier, workspaceSourceRoot),
       ScalaxbGenerator(workspaceSourceRoot),
       AvroSchemaGenerator(workspaceSourceRoot),
-      ZincGenerator(zincResolver, depCopyRoot)
+      FixGenerator(workspaceSourceRoot),
+      DomainGenerator(workspaceSourceRoot)
     ).map(g => g.tpe -> g).toMap
 
   @node private def processors =
@@ -528,6 +568,7 @@ object OptimusBuildToolImpl {
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
     AsyncPythonCompilerImpl(
+      workspaceSourceRoot,
       sandboxFactory,
       logDir,
       pythonEnvironment,
@@ -538,8 +579,7 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def electronCompiler =
     AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node private def stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
-  @node private def runconfCompiler =
-    AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig, buildDir, dependencyCopier)
+  @node private def runconfCompiler = AsyncRunConfCompilerImpl.load(obtConfig, stratoConfig, dependencyCopier)
   @node @scenarioIndependent private def resourcePackager = JarPackager()
   @node @scenarioIndependent private def genericFilesPackager = GenericFilesPackager(cmdLine.installVersion)
   @node @scenarioIndependent private def manifestGenerator = ManifestGenerator(dependencyCopier, cmdLine.cppFallback)
@@ -554,7 +594,7 @@ object OptimusBuildToolImpl {
   @node private def buildCache = {
     val caches = remoteCaches.remoteBuildCache match {
       case Some(remoteCache) =>
-        if (cmdLine.remoteCacheWritable) {
+        if (cmdLine.cacheMode.canWrite) {
           // If we've enabled remote cache writes, then write to it even if we've found it in our
           // filesystem cache. Among other benefits, this works around a bug that can cause artifacts not to
           // be written to remote cache if they've been written to the filesystem as a side-effect of compiling for a different
@@ -580,7 +620,7 @@ object OptimusBuildToolImpl {
   private[buildtool] val dependencyTracker = DependencyTrackerRoot()
 
   private[buildtool] val scopedCompilationFactory: ScopedCompilationFactory = ScopedCompilationFactoryImpl()
-  @entity private[buildtool] class ScopedCompilationFactoryImpl() extends CompilationNodeFactory {
+  @entity private[buildtool] class ScopedCompilationFactoryImpl extends CompilationNodeFactory {
     @node def globalMessages: Seq[MessagesArtifact] = {
       obtConfig.messages.map { case ((tpe, trace), messages) =>
         val id = InternalArtifactId(ScopeId.RootScopeId, tpe, None)
@@ -597,19 +637,7 @@ object OptimusBuildToolImpl {
 
     @node override def lookupScope(id: ScopeId): Option[CompilationNode] = {
       if (scopeConfigSource.compilationScopeIds.contains(id)) ObtTrace.traceTask(id, InitializeScope) {
-        val scopeConfig0 = scopeConfigSource.scopeConfiguration(id)
-
-        // Temporary workaround to differentiate compressed and uncompressed jars
-        // that will be removed once we deploy incremental jar compression
-        val scopeConfig = {
-          val additionalJarCompressionFlag =
-            if (Jars.incrementalHashingEnabled || scalaVersionConfig.scalaVersion.startsWith("2.11")) Nil
-            else Seq("-Yjar-compression-level", Deflater.NO_COMPRESSION.toString)
-
-          val updatedScalaConfig =
-            scopeConfig0.scalacConfig.copy(scopeConfig0.scalacConfig.options ++ additionalJarCompressionFlag)
-          scopeConfig0.copy(scalacConfig = updatedScalaConfig)
-        }
+        val scopeConfig = scopeConfigSource.scopeConfiguration(id)
 
         val runConfConfig = RunConfConfiguration(
           asSourceFolders(scopeConfig.absScopeConfigDir, Templates.potentialLocationsFromScopeConfigDir) ++
@@ -641,7 +669,8 @@ object OptimusBuildToolImpl {
           cache = buildCache,
           factory = this,
           directoryFactory = directoryFactory,
-          mischief = mischiefOpts.mischief(id)
+          mischief = mischiefOpts.mischief(id),
+          buildAfsMapping = globalConfig.buildAfsMapping
         )
 
         Some(
@@ -736,7 +765,8 @@ object OptimusBuildToolImpl {
       generatePoms = generatePoms,
       useMavenLibs = useMavenLibs,
       pythonConfiguration = InstallTpa,
-      externalDependencies = obtConfig.jvmDependencies
+      externalDependencies = obtConfig.jvmDependencies,
+      fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig
     )
   }
 
@@ -746,10 +776,16 @@ object OptimusBuildToolImpl {
         log.info(s"Cleaning $buildDir...")
         AssetUtils.recursivelyDelete(buildDir)
       } else {
-        val snippets: Set[String] = scopeSelector.scopes().map(_.properPath)
-        if (snippets.nonEmpty) {
-          log.info(s"Cleaning $buildDir contents matching ${snippets.mkString("|")}")
-          AssetUtils.recursivelyDelete(buildDir, d => snippets.exists(d.getFileName.toString.contains))
+        try {
+          val snippets: Set[String] = scopeSelector.scopes().map(_.properPath)
+          if (snippets.nonEmpty) {
+            log.info(s"Cleaning $buildDir contents matching ${snippets.mkString("|")}")
+            AssetUtils.recursivelyDelete(buildDir, d => snippets.exists(d.getFileName.toString.contains))
+          }
+        } catch {
+          case t: Throwable =>
+            val msg = CompilationMessage.errorMsg(obtConfig.messages.values.flatten.toList)
+            throw new IllegalStateException(msg, t)
         }
       }
     }
@@ -859,15 +895,23 @@ object OptimusBuildToolImpl {
     for {
       git <- gitLog
       tag <- tagName
-      currentHead <- git.updatedTagCommit(tag)
       bc <- buildCache
     } {
       if (bc.store.incompleteWrites == 0) {
         // Unfortunately, we cannot create the git tag ourselves as we don't have the permission to push the git tag
         // so we delegate this for a more powerful user id (via Jenkins)
         val taggingFile = installDir.resolveFile("tag.properties")
-        val properties = Map("tag.name" -> tag, "tag.hash" -> currentHead)
-        log.info(s"${taggingFile.pathString} created: tag $tagName should be moved to $currentHead (HEAD)")
+        val properties =
+          Map("tag.name" -> tag) ++
+            git
+              .updatedTagCommit(tag)
+              .map { currentHead =>
+                log.info(s"${taggingFile.pathString} created: tag $tagName should be moved to $currentHead (HEAD)")
+                Map("tag.hash" -> currentHead)
+              }
+              .getOrElse {
+                Map("tag.skip" -> "true")
+              }
         Utils.writePropertiesToFile(taggingFile, properties)
       } else {
         log.warn(s"Skipping $tag write due to ${bc.store.incompleteWrites} incomplete writes")
@@ -882,9 +926,9 @@ object OptimusBuildToolImpl {
   protected def stdin: InputStream = System.in
   protected def stdout: OutputStream = OptimusBuildTool.originalStdOut
   protected def traceFilter: Option[TraceFilter] =
-    if (sys.props.get("optimus.buildtool.showAllWarnings").contains("true"))
+    if (OptimusBuildToolProperties.getOrFalse("showAllWarnings"))
       Some(TraceFilter.AllWarningsFilter) // override
-    else TraceFilter.parse(sys.props.get("optimus.buildtool.showWarnings"))
+    else TraceFilter.parse(OptimusBuildToolProperties.get("showWarnings"))
 
   protected def extraBspPostBuilders: Seq[PostBuilder] = Nil
 
@@ -909,7 +953,7 @@ object OptimusBuildToolImpl {
       clientInitializationTimeoutMs = cmdLine.bspClientInitializationTimeoutMs,
       sendCrumbs = useCrumbs,
       installerFactory = asNode(bspInstaller),
-      scalaVersionConfig = asNode(() => scalaVersionConfig),
+      scalaVersionConfig = asNode(() => scalaResolver.scalaVersionConfig),
       pythonBspConfig = PythonBspConfig(
         asNode(() => globalConfig.pythonEnabled),
         asNode(() => globalConfig.extractVenvs),
@@ -1017,7 +1061,8 @@ object OptimusBuildToolImpl {
           minimal = cmdLine.minimalInstall,
           bundleClassJars = cmdLine.bundleClassJars,
           pythonConfiguration = if (globalConfig.installWheels) InstallTpaWithWheels(pythonEnvironment) else InstallTpa,
-          externalDependencies = obtConfig.jvmDependencies
+          externalDependencies = obtConfig.jvmDependencies,
+          fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig
         )
       )
     } else None
@@ -1041,7 +1086,8 @@ object OptimusBuildToolImpl {
           depCopyDir = depCopyRoot,
           useCrumbs = useCrumbs,
           minimalInstallScopes = scopeSelector.minimalInstallScopes,
-          genericRunnerGenerator = DockerGenericRunnerGenerator(installPathBuilder, globalConfig.genericRunnerConfig)
+          genericRunnerGenerator = DockerGenericRunnerGenerator(installPathBuilder, globalConfig.genericRunnerConfig),
+          gitLog = gitLog,
         )
       }
     }

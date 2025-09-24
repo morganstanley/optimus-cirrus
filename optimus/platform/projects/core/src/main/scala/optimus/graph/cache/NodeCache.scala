@@ -15,13 +15,18 @@ object NodeCache {
 
   def createPerPropertyCache(maxSize: Int) = new PerPropertyCache(maxSize)
 
-  def createCacheControlConcurrencyAndOverflow(maxSize: Int, concurrent: Boolean = true, evict: Boolean = false) =
+  def createCacheControlConcurrencyAndEvict(
+      maxSize: Int,
+      concurrent: Boolean = true,
+      evict: Boolean = false,
+      name: String = PerPropertyCache.defaultName) =
     new PerPropertyCache(
-      PerPropertyCache.defaultName,
+      name,
       maxSize,
       if (concurrent) CacheDefaults.DEFAULT_CONCURRENCY else 1,
       CacheDefaults.DEFAULT_BATCH_SIZE,
       CacheDefaults.DEFAULT_BATCH_SIZE_PADDING,
+      evict,
       evict
     )
 }

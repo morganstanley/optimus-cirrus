@@ -28,6 +28,7 @@ import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.utils.Hide
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils.distinctLast
 import optimus.platform._
@@ -36,8 +37,7 @@ import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity object JavaScopedCompilation {
   object Config {
-    private val prefix = "optimus.buildtool"
-    val incrementalJava: Boolean = sys.props.get(s"$prefix.incrementalJava").forall(_.toBoolean) // default to true
+    val incrementalJava: Boolean = OptimusBuildToolProperties.getOrTrue("incrementalJava")
   }
 
   @node def updateNetworkPaths(dependencyCopier: DependencyCopier, artifacts: Seq[Artifact]): Seq[Artifact] = {

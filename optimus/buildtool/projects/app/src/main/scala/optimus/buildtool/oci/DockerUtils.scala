@@ -26,7 +26,6 @@ import optimus.platform._
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 class DockerUtils(dockerImageCacheDir: Directory, useCrumbs: Boolean) extends Log {

@@ -11,12 +11,15 @@
  */
 package optimus.stratosphere.utils
 
+import optimus.stratosphere.common.IntellijConfigStore
+import optimus.stratosphere.common.IntellijConfigStore.IntellijConfigStore
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.logger.Logger
 import optimus.stratosphere.utils.IntellijBackupCause.IntellijBackupCause
 
 import java.io.File
+import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -91,9 +94,19 @@ object IntellijUtils {
       }
 
       ideaDir.dir.copyTo(targetBackupDir, shouldDirBeCopied = excludeIgnoredDirs)
+      backupConfigStore(IntellijConfigStore.workspace, ijVersion, targetBackupDir)
+      backupConfigStore(IntellijConfigStore.scratches, ijVersion, targetBackupDir)
       backupDir.dir.rotate(keep = stratoWorkspace.intellij.backup.maxBackupsCount)
       Some(backupName)
     } else None
+  }
+
+  private def backupConfigStore(configStoreName: IntellijConfigStore, fromVersion: String, targetBackupDir: Path)(
+      implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
+    val configStoreDir =
+      stratoWorkspace.intellijDirectoryStructure.intellijConfigStoreSection(configStoreName, fromVersion)
+    val configStoreBackupDir = targetBackupDir.resolve(configStoreName.toString).dir.create()
+    configStoreDir.foreach(_.dir.copyTo(configStoreBackupDir))
   }
 
   private def versionForBackupCreation(stratoWorkspace: StratoWorkspaceCommon): Option[String] = {

@@ -25,7 +25,6 @@ import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 import optimus.platform.util.Log
 
-import scala.collection.immutable.Seq
 import scala.reflect.internal.util.ScalaClassLoader.URLClassLoader
 import scala.util.control.NonFatal
 

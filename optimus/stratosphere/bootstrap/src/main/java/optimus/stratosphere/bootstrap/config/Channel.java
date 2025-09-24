@@ -13,6 +13,7 @@ package optimus.stratosphere.bootstrap.config;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import com.typesafe.config.Config;
 import optimus.platform.partial.rollout.PartialRollout;
 
@@ -30,12 +31,14 @@ Example channel format
 * */
 public record Channel(
     String name, List<String> users, int autoIncludePercent, Config config, String description) {
-  public static Channel create(Config config) {
+  public static Channel create(Config config, Map<String, Integer> autoIncludeMapping) {
     final String name = config.getString("name");
     final List<String> users =
         config.hasPath("users") ? config.getStringList("users") : Collections.emptyList();
     final int autoIncludePercent =
-        config.hasPath("auto-include.percent") ? config.getInt("auto-include.percent") : 0;
+        config.hasPath("auto-include.percent")
+            ? config.getInt("auto-include.percent")
+            : autoIncludeMapping.getOrDefault(name, 0);
     final Config conf = config.getConfig("config");
     final String description = config.hasPath("description") ? config.getString("description") : "";
     return new Channel(name, users, autoIncludePercent, conf, description);

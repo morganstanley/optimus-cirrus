@@ -17,11 +17,12 @@ import optimus.graph.tracking.NoOpTrackedNodeInvalidationObserver
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
+import optimus.platform.dal.EntityResolver
 import optimus.platform.dal.Marker
 import optimus.platform.storable.Entity
 
 import scala.collection.immutable.ArraySeq
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 /**
  * Expands tweaks which have tweak translators (a.k.a. also-sets) and also Markers (i.e. validTime and friends).
@@ -29,14 +30,14 @@ import scala.collection.mutable.ArrayBuffer
  * The expansion is done in a cached node so that we don't waste time redoing work and also so that it can be
  * invalidated by the normal mechanisms if any tweakables used during expansion are modified.
  */
-private[optimus] object TweakExpander {
+object TweakExpander {
   private[this] val log = getLogger(TweakExpander)
 
   /**
    * Returns the fully expanded version of scenario under evaluateIn. scenario must be a single layer scenario (no
    * nesting)
    */
-  def expandTweaks(scenario: Scenario, evaluateIn: ScenarioStack): Scenario = {
+  private[optimus] def expandTweaks(scenario: Scenario, evaluateIn: ScenarioStack): Scenario = {
     if (Settings.schedulerAsserts && scenario.nestedScenarios.nonEmpty)
       throw new GraphInInvalidState("Scenario for expansion should not be nested")
     val node = new ExpandTweaksNode(scenario)
@@ -78,7 +79,7 @@ private[optimus] object TweakExpander {
 
     private def doExpansion(): Scenario = {
       val tweaks = scenario.topLevelTweaks
-      val expB = ArraySeq.newBuilder[Tweak]
+      val expB = mutable.ArrayBuffer.empty[Tweak]
       expB.sizeHint(tweaks.size)
       val it = tweaks.iterator
       while (it.hasNext) {
@@ -87,43 +88,43 @@ private[optimus] object TweakExpander {
         else expB += tweak
       }
 
-      val expanded = expB.result()
+      // all entityResolvers are assumed to process tweak markers equivalently (we only delegate because we don't
+      // have access to the implementation code from here), so don't track the usage (otherwise any given block
+      // will be considered dependent on the runtime env)
+      val expanded = processMarkers(expB, scenarioStack.ssShared.environmentWithoutTrackingAccess.entityResolver)
 
-      val results = new ArrayBuffer[Tweak](expanded.size)
-      var markers: JIdentityHashMap[Marker[_], Tweak] = null
-      val size = expanded.size
-      var i = 0
-      while (i < size) {
-        val twk = expanded(i)
-        val target = twk.target
-        val hashKey = target.hashKey
-
-        if (target.isMarker) {
-          if (markers eq null) markers = new JIdentityHashMap[Marker[_], Tweak]
-          markers.put(hashKey.asInstanceOf[Marker[_]], twk)
-        } else {
-          results += twk
-        }
-        i += 1
-      }
-
-      if (markers ne null) processMarkers(markers, results)
-      val expandedScenario = Scenario.validate(
-        results.toList,
-        "After tweak expansion",
-        scenario.unorderedTweaks,
-        scenario.flagsWithoutUnresolved)
+      val expandedScenario =
+        Scenario.validate(expanded, "After tweak expansion", scenario.unorderedTweaks, scenario.flagsWithoutUnresolved)
       expandedScenario
     }
+  }
 
-    private[this] def processMarkers(
-        markers: JIdentityHashMap[Marker[_], Tweak],
-        outputBuffer: ArrayBuffer[Tweak]): Unit = {
+  def processMarkers(tweaks: Iterable[Tweak], resolver: EntityResolver): Seq[Tweak] = {
+    val results = ArraySeq.newBuilder[Tweak]
+    results.sizeHint(tweaks.size)
+    var markers: JIdentityHashMap[Marker[_], Tweak] = null
+    val iter = tweaks.iterator
+    while (iter.hasNext) {
+      val twk = iter.next()
+      val target = twk.target
+      val hashKey = target.hashKey
+
+      if (target.isMarker) {
+        if (markers eq null) markers = new JIdentityHashMap[Marker[_], Tweak]
+        markers.put(hashKey.asInstanceOf[Marker[_]], twk)
+      } else {
+        results += twk
+      }
+    }
+
+    if (markers ne null) {
       // Unfortunately entityResolver.translateMarkers relies on EC.current...
       // In the cases where EC scenario is not updated right away (e.g. nest scenario, sequences etc..)
       // We need to make it look as if it has been set! A better solution would to have translateMarkers take in evaluateIn
-      val twks = scenarioStack.env.entityResolver.translateMarkers(markers)
-      outputBuffer ++= twks
+      val twks = resolver.translateMarkers(markers)
+      results ++= twks
     }
+
+    results.result()
   }
 }

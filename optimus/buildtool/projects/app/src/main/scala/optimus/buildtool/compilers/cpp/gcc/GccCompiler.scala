@@ -25,8 +25,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.utils.TypeClasses._
 
-import scala.collection.immutable.Seq
-
 class GccCompiler(scopeId: ScopeId, toolchain: CppToolchain) extends CppFileCompiler {
   import CppFileCompiler._
   import GccCompiler._

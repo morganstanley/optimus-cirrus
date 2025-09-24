@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.runconf.plugins
 
-import scala.collection.immutable.Seq
-
 final case class SuiteConfig(
     includes: Seq[String],
     excludes: Seq[String],

@@ -10,7 +10,8 @@
  * limitations under the License.
  */
 package optimus.platform.util
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
+import optimus.core.needsPluginWithLocationTag
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 import optimus.platform.annotations.withLocationTag
@@ -30,7 +31,7 @@ object ScenarioMap {
   def uniqueInstance[K, V]: ScenarioMap[K, V] = builder[K, V].build
 
   @withLocationTag
-  def apply[K, V](): ScenarioMap[K, V] = needsPlugin
+  def apply[K, V](): ScenarioMap[K, V] = needsPluginWithLocationTag
   def apply$LT[K, V](tag: LocationTag): ScenarioMap[K, V] = builder[K, V].build(tag)
 
   /**
@@ -163,7 +164,7 @@ object ScenarioMap {
    * Create a view that lazily maps values to a new type.
    */
   @alwaysAutoAsyncArgs
-  def mapValues[V1](f: V => V1): ScenarioMapView[K, V1] = ???
+  def mapValues[V1](f: V => V1): ScenarioMapView[K, V1] = needsPluginAlwaysAutoAsyncArgs
   def mapValues[V1](f: V => V1 @node): ScenarioMapView[K, V1] = Views.MapValues(this, f)
 
   /**
@@ -171,7 +172,7 @@ object ScenarioMap {
    * that key isn't filtered.
    */
   @alwaysAutoAsyncArgs
-  def filterKeys(f: K => Boolean): ScenarioMapView[K, V] = ???
+  def filterKeys(f: K => Boolean): ScenarioMapView[K, V] = needsPluginAlwaysAutoAsyncArgs
   def filterKeys(f: K => Boolean @node): ScenarioMapView[K, V] = Views.FilterKeys(this, f)
 
   /**
@@ -183,7 +184,7 @@ object ScenarioMap {
    * Indices provided a similar mechanism with fewer invalidations, at the cost of more expensive updates.
    */
   @alwaysAutoAsyncArgs
-  def groupBy[K1](f: K => K1): ScenarioMapView[K1, Set[V]] = ???
+  def groupBy[K1](f: K => K1): ScenarioMapView[K1, Set[V]] = needsPluginAlwaysAutoAsyncArgs
   def groupBy[K1](f: K => K1 @node): ScenarioMapView[K1, Set[V]] = Views.GroupBy(this, f)
 }
 

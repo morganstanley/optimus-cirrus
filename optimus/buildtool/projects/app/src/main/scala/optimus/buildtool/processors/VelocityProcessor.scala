@@ -22,7 +22,6 @@ import org.apache.velocity.app.VelocityEngine
 import org.apache.velocity.runtime.resource.loader.StringResourceLoader
 
 import java.io.StringWriter
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 @entity class VelocityProcessor extends TemplatingProcessor {

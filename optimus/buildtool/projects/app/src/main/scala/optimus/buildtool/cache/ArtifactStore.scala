@@ -13,18 +13,15 @@ package optimus.buildtool.cache
 
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
-import optimus.buildtool.config.NamingConventions.ConfigPrefix
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace.ArtifactCacheTraceType
 import optimus.buildtool.trace.CacheTraceType
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.RemoteAssetCacheTraceType
-import optimus.buildtool.utils.BlockingQueue
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.platform._
 
-import java.util.Timer
-import java.util.TimerTask
 import scala.concurrent.duration._
 
 trait ArtifactReader {
@@ -79,12 +76,11 @@ object ArtifactStoreBase {
 
   object Config {
     val dedupIntervalMillis: Long =
-      sys.props.get(s"$ConfigPrefix.messageDedup.intervalMillis").map(_.toLong).getOrElse(30.seconds.toMillis)
+      OptimusBuildToolProperties.asLong("messageDedup.intervalMillis").getOrElse(30.seconds.toMillis)
   }
 }
 
-trait ArtifactStoreBase extends ArtifactStore {
-  import ArtifactStoreBase._
+@entity trait ArtifactStoreBase extends ArtifactStore {
 
   protected def cacheType: String
   protected def stat: ObtStats.Cache
@@ -148,31 +144,5 @@ trait ArtifactStoreBase extends ArtifactStore {
   final def warn(id: ScopeId, msg: => String): Unit = log.warn(s"[$id] $cacheType: $msg")
   final def warn(msg: => String, t: Throwable): Unit = log.warn(s"$cacheType: $msg", t)
   final def warn(id: ScopeId, msg: => String, t: Throwable): Unit = log.warn(s"[$id] $cacheType: $msg", t)
-
-  private val dedupMessageTimer = new Timer("DedupedMessagePublisher", /*isDaemon*/ true)
-  private val warningsToDedup = new BlockingQueue[String]()
-
-  // these messages are accumulated for time (see ArtifactStoreBase.Config.dedupIntervalMillis)
-  // and deduplicated before being logged.
-  final def warnDedupped(msg: => String): Unit = {
-    warningsToDedup.put(msg)
-    startPublishingDedupedMessages
-  }
-
-  // this is initialized the first time we receive a message to accumulate
-  private lazy val startPublishingDedupedMessages: Unit = {
-    val task = new TimerTask {
-      override def run(): Unit = flushDedupedMessages()
-    }
-    dedupMessageTimer.schedule(task, /*delay*/ 0L, ArtifactStoreBase.Config.dedupIntervalMillis)
-  }
-
-  private def flushDedupedMessages(): Unit =
-    warningsToDedup.pollAll().distinct.foreach(msg => warn(msg))
-
-  protected def closeDedupedMessages(): Unit = {
-    flushDedupedMessages()
-    dedupMessageTimer.cancel()
-  }
 
 }

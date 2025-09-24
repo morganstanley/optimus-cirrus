@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object InnerJoin extends LegacyOptimusApp {
+object InnerJoin extends LegacyOptimusApp with PrintlnInterceptor {
 
   final case class Comparison(
       val symbol: String,

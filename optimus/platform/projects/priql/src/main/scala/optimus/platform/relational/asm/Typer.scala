@@ -252,7 +252,7 @@ class Typer private () extends QueryTreeVisitor {
     var inst = visitElement(func.instance)
     var arguments = flatten(visitElementList(func.arguments))
     if ((inst eq null) && c.method.declaringType <:< classOf[CoreAPI] && c.method.name == "liftNode") {
-      val m = Func.getClass.getMethod("liftNode", collection.Seq(arguments(0).rowTypeInfo.clazz): _*)
+      val m = Func.getClass.getMethod("liftNode", Seq(arguments(0).rowTypeInfo.clazz): _*)
       val desc = new RuntimeMethodDescriptor(
         javaTypeInfo(m.getDeclaringClass),
         m.getName,

@@ -192,3 +192,476 @@ abstract class LNodeFunction9[T1, T2, T3, T4, T5, T6, T7, T8, T9, R]
       args(7).asInstanceOf[T9]
     )
 }
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, R]
+    extends LNodeFunction[R]
+    with NodeFunction10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, R] {
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10): NodeFuture[R] =
+    new AsNode10(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode10(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, R]
+    extends LNodeFunction[R]
+    with NodeFunction11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, R] {
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11)
+      : NodeFuture[R] =
+    new AsNode11(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode11(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, R]
+    extends LNodeFunction[R]
+    with NodeFunction12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, R] {
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11, v12: T12)
+      : NodeFuture[R] =
+    new AsNode12(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode12(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, R]
+    extends LNodeFunction[R]
+    with NodeFunction13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13): NodeFuture[R] =
+    new AsNode13(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode13(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, R]
+    extends LNodeFunction[R]
+    with NodeFunction14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14): NodeFuture[R] =
+    new AsNode14(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode14(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, R]
+    extends LNodeFunction[R]
+    with NodeFunction15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15): NodeFuture[R] =
+    new AsNode15(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode15(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, R]
+    extends LNodeFunction[R]
+    with NodeFunction16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16): NodeFuture[R] =
+    new AsNode16(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode16(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15],
+      args(14).asInstanceOf[T16]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, R]
+    extends LNodeFunction[R]
+    with NodeFunction17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17): NodeFuture[R] =
+    new AsNode17(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode17(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15],
+      args(14).asInstanceOf[T16],
+      args(15).asInstanceOf[T17]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, R]
+    extends LNodeFunction[R]
+    with NodeFunction18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18): NodeFuture[R] =
+    new AsNode18(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode18(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15],
+      args(14).asInstanceOf[T16],
+      args(15).asInstanceOf[T17],
+      args(16).asInstanceOf[T18]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, R]
+    extends LNodeFunction[R]
+    with NodeFunction19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19): NodeFuture[R] =
+    new AsNode19(this, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode19(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15],
+      args(14).asInstanceOf[T16],
+      args(15).asInstanceOf[T17],
+      args(16).asInstanceOf[T18],
+      args(17).asInstanceOf[T19]
+    )
+}
+
+//noinspection ScalaUnusedSymbol
+abstract class LNodeFunction20[
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
+    T12,
+    T13,
+    T14,
+    T15,
+    T16,
+    T17,
+    T18,
+    T19,
+    T20,
+    R]
+    extends LNodeFunction[R]
+    with NodeFunction20[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, R] {
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19,
+      v20: T20): NodeFuture[R] =
+    new AsNode20(
+      this,
+      v1,
+      v2,
+      v3,
+      v4,
+      v5,
+      v6,
+      v7,
+      v8,
+      v9,
+      v10,
+      v11,
+      v12,
+      v13,
+      v14,
+      v15,
+      v16,
+      v17,
+      v18,
+      v19,
+      v20).enqueue
+  override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =
+    new AsNode20(
+      this,
+      entity.asInstanceOf[T1],
+      args(0).asInstanceOf[T2],
+      args(1).asInstanceOf[T3],
+      args(2).asInstanceOf[T4],
+      args(3).asInstanceOf[T5],
+      args(4).asInstanceOf[T6],
+      args(5).asInstanceOf[T7],
+      args(6).asInstanceOf[T8],
+      args(7).asInstanceOf[T9],
+      args(8).asInstanceOf[T10],
+      args(9).asInstanceOf[T11],
+      args(10).asInstanceOf[T12],
+      args(11).asInstanceOf[T13],
+      args(12).asInstanceOf[T14],
+      args(13).asInstanceOf[T15],
+      args(14).asInstanceOf[T16],
+      args(15).asInstanceOf[T17],
+      args(16).asInstanceOf[T18],
+      args(17).asInstanceOf[T19],
+      args(18).asInstanceOf[T20]
+    )
+}

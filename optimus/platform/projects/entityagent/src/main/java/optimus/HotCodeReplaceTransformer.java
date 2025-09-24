@@ -56,7 +56,7 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
 
   private static void log(String message, boolean always) {
     if (always || DiagnosticSettings.enableHotCodeReplaceLogging) {
-      System.out.println("HCR>> " + message);
+      System.err.println("HCR>> " + message);
     }
   }
 

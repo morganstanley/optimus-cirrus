@@ -52,6 +52,7 @@ final class DependencyTrackerActionTask[T](nti: NodeTaskInfo, cause: EventCause,
     OGTrace.observer.enqueueFollowsSequenceLogic(this, Int.MaxValue)
     completeWithResult(expr(), ec)
     ProgressTracker.reportCompleteIfPossible(progressTracker)
+
   }
 
   override def executionInfo(): NodeTaskInfo = nti
@@ -221,7 +222,7 @@ abstract class DependencyTrackerAction[T] extends NodeCauseInfo {
   private def checkForDeadlock(): Unit = {
     val current = EvaluationContext.currentNode
     var commands = Set.empty[DependencyTrackerAction[_]]
-    object deadlockVisitor extends NodeTask.Visitor {
+    object deadlockVisitor extends NodeTaskVisitor {
       override protected def visit(info: NodeCauseInfo, depth: Int): Unit = info match {
         case command: DependencyTrackerAction[_] => commands += command
       }
@@ -336,9 +337,6 @@ trait DependencyTrackerActionEvaluateBase[T] extends DependencyTrackerAction[T] 
 
   /**
    * Generates a logging message for starting the action.
-   *
-   * @param q
-   *   Ignored.
    */
   override def beforeAction(): Unit = {
     if (Settings.timeTrackingScenarioEvaluate) logProgress(DependencyTrackerActionProgress.START_DELAY)
@@ -347,9 +345,6 @@ trait DependencyTrackerActionEvaluateBase[T] extends DependencyTrackerAction[T] 
 
   /**
    * Generates a logging message for ending the action.
-   *
-   * @param q
-   *   Ignored.
    */
   override def afterAction(): Unit = {
     if (Settings.timeTrackingScenarioEvaluate) logProgress(DependencyTrackerActionProgress.END_ACTION)
@@ -411,11 +406,15 @@ trait DependencyTrackerActionOneNodeBase[T] extends DependencyTrackerAction[T] {
     if (disposed) {
       result = alreadyDisposedResult
       // execute callback asynchronously to avoid stack overflow when there are a lot of actions on the queue
-      scheduler.evaluateAsync(ScenarioStack.constantNC)(afterExecute(0L), null)
+      scheduler.evaluateAsync(ScenarioStack.constantNC)(
+        afterExecute(0L),
+        null,
+        effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) cause else null)
     } else {
       val node = asNode
       attachCauseInfoAndScenarioStack(node)
       if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.beforeRunNodes(node :: Nil)
+
       scheduler.evaluateNodeAsync(
         node,
         true,
@@ -426,7 +425,8 @@ trait DependencyTrackerActionOneNodeBase[T] extends DependencyTrackerAction[T] {
         },
         // important to override callbackSS otherwise we are called back in node's SS which may have been cancelled,
         // in which case the callback would never run
-        cbSS = ScenarioStack.constantNC
+        cbSS = ScenarioStack.constantNC,
+        effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) cause else null
       )
     }
   }
@@ -481,7 +481,10 @@ trait DependencyTrackerActionManyNodesBase extends DependencyTrackerAction[Unit]
     if (disposed) {
       result = alreadyDisposedResult
       // execute callback asynchronously to avoid stack overflow when there are a lot of actions on the queue
-      scheduler.evaluateAsync(ScenarioStack.constantNC)(afterExecute(0L), null)
+      scheduler.evaluateAsync(ScenarioStack.constantNC)(
+        afterExecute(0L),
+        null,
+        effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) cause else null)
     } else {
       val nodes = if (disposed) Nil else asNodes
       OGTrace.observer.enqueueFollowsSequenceLogic(OGSchedulerContext.current.getCurrentNodeTask, Int.MaxValue)
@@ -493,7 +496,9 @@ trait DependencyTrackerActionManyNodesBase extends DependencyTrackerAction[Unit]
         doneCallback = { startTime =>
           result = DependencyTrackerActionManyNodesBase.successUnit
           afterExecute(startTime)
-        })
+        },
+        effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) cause else null
+      )
     }
   }
 }
@@ -569,9 +574,6 @@ abstract class DependencyTrackerActionUpdate[T]
 
   /**
    * Generate logging messages and start a batch in the given queue.
-   *
-   * @param q
-   *   Queue in which to start a batch.
    */
   final override def beforeAction(): Unit = {
     if (Settings.timeTrackingScenarioUpdate) logProgress(DependencyTrackerActionProgress.START_DELAY)

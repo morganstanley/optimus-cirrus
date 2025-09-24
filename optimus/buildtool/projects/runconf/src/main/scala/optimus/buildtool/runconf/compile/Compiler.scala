@@ -25,6 +25,7 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.config.WorkspaceId
 import optimus.buildtool.runconf.compile.RunConfSupport.names
+import optimus.buildtool.runconf.compile.RunConfSupport.names.allDefaultTemplatesByLowercase
 import optimus.buildtool.runconf.compile.plugins.DTCSupport
 import optimus.buildtool.runconf.compile.plugins.ExtraExecOptionsSupport
 import optimus.buildtool.runconf.compile.plugins.JacocoOptionsSupport
@@ -43,7 +44,6 @@ import optimus.scalacompat.collection._
 import java.nio.file.Path
 import java.util.Properties
 import java.util.{Map => JMap}
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -216,16 +216,6 @@ class Compiler(
           }
         )
       )
-
-  def filterJavaRuntimeOptions(reporter: Reporter, opts: Seq[String], maybeJvmVersion: Option[String]): Seq[String] =
-    javaFiltering
-      .map { conf =>
-        maybeJvmVersion.fold(conf)(v => conf.copy(jvmVersion = v))
-      }
-      .fold(opts) { conf =>
-        import conf._
-        JavaOpts.filterJavaRuntimeOptions(jvmVersion, opts, reporter.atName)
-      }
 
   private val globalReporter = new GlobalReporter
 
@@ -606,6 +596,15 @@ class Compiler(
       duplicatedRunconfs.foreach(conf => conf.reportError.atName(Messages.duplicatedRunconfName(conf.name)))
     }
 
+    def reportIncorrectlyCasedDefaultTemplates(): Unit = {
+      allRunConfs.foreach { c =>
+        allDefaultTemplatesByLowercase.get(c.name.toLowerCase).map { correctlyCased =>
+          if (c.name != correctlyCased)
+            c.reportError.atName(Messages.incorrectlyCasedTemplate(c.name, correctlyCased))
+        }
+      }
+    }
+
     def addExplicitParents(): Unit = {
       typedRunConfs.foreach { conf =>
         conf.runConf.parents.foreach { scopedParentName =>
@@ -651,21 +650,26 @@ class Compiler(
         isDefinedAsTest || explicitParentIsTest || implicitParentCandidateIsTest
       }
 
-      def defaultRunConfParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] = {
-        defaultParents(conf, names.RunConfDefaults)
+      def defaultAppParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] = {
+        val types =
+          if (useAppDefaults) Seq(names.RunConfDefaults, names.ApplicationDefaults) else Seq(names.RunConfDefaults)
+        defaultParents(conf, types)
       }
 
-      def defaultAppParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] =
-        defaultRunConfParents(conf) ++ {
-          if (useAppDefaults) defaultParents(conf, names.ApplicationDefaults) else Seq.empty
-        }
-
       def defaultTestParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] =
-        defaultRunConfParents(conf) ++ defaultParents(conf, names.TestDefaults)
+        // include conf.name (e.g. test or integrationTest) at each level
+        defaultParents(conf, Seq(names.RunConfDefaults, names.TestDefaults, conf.name))
 
-      def defaultParents(conf: RunConfCompilingState, name: String): Seq[RunConfCompilingState] = {
-        val allIds = if (conf.name != name) conf.id.withParents else conf.id.parents
-        allIds.flatMap(id => runConfsByName.get(ScopedName(id, name)))
+      def defaultParents(conf: RunConfCompilingState, names: Seq[String]): Seq[RunConfCompilingState] = {
+        // Later confs will override earlier confs, so we start with the outermost (global.runconf) confs, and then
+        // override with more specific confs (all the way to the module). At each level, RunConfDefaults is overridden
+        // by more specific default (e.g. ApplicationDefaults)
+        conf.id.withParents.flatMap { id =>
+          names.flatMap { name =>
+            val scopedName = ScopedName(id, name)
+            if (scopedName == conf.scopedName) Nil else runConfsByName.get(scopedName).toList
+          }
+        }
       }
 
       def isApp(conf: RunConfCompilingState) = {
@@ -678,11 +682,11 @@ class Compiler(
 
       typedRunConfs.foreach { conf =>
         if (isTest(conf)) {
-          conf.prependParents(defaultTestParents(conf) ++ possibleTestParents(conf))
+          conf.prependParents(defaultTestParents(conf))
         } else if (isApp(conf)) {
           conf.prependParents(defaultAppParents(conf))
         } else if (isRunConfDefaults(conf)) {
-          conf.prependParents(defaultRunConfParents(conf))
+          conf.prependParents(defaultParents(conf, Seq(names.RunConfDefaults)))
         }
       }
     }
@@ -705,8 +709,8 @@ class Compiler(
 
     addExplicitParents()
     addImplicitParents()
-    if (reportDuplicates)
-      reportDuplicatedNames()
+    if (reportDuplicates) reportDuplicatedNames()
+    reportIncorrectlyCasedDefaultTemplates()
     findAndReportCyclicDependencies()
   }
 
@@ -1103,9 +1107,8 @@ class Compiler(
   private def normalizeJavaOpts(conf: ResolvedRunConfCompilingState): Unit = {
     def normalize(javaOpts: Seq[String], maybeJavaVersion: Option[String]): Seq[String] =
       externalCache.javaOpts.cached(conf.scopedName -> maybeJavaVersion, javaOpts) {
-        JavaOpts.normalize {
-          filterJavaRuntimeOptions(conf.reportWarning, javaOpts, maybeJavaVersion)
-        }
+        val javaVersion = javaFiltering.map(f => maybeJavaVersion.getOrElse(f.jvmVersion))
+        JavaOpts.normalize(javaOpts, javaVersion, conf.reportWarning.atName)
       }
 
     conf.transformRunConf {

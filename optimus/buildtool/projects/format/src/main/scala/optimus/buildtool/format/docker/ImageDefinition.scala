@@ -23,7 +23,6 @@ import optimus.buildtool.format.Result
 import optimus.buildtool.format.Success
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
 
 final case class ImageDefinition(

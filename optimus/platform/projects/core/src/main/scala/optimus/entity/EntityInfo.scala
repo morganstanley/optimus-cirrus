@@ -19,11 +19,13 @@ import optimus.config.OptimusConfigParsingException
 import optimus.config.PerPropertyConfigGroup
 import optimus.graph.DiagnosticSettings
 import optimus.graph.PropertyInfo
+import optimus.graph.Settings
 import optimus.graph.diagnostics.DbgObjectSupport
 import optimus.platform.UpcastDomain
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation
 import optimus.platform.pickling.PickledInputStream
 import optimus.platform.pickling.ReflectiveEntityPickling
+import optimus.platform.pickling.StatsBasedInterner
 import optimus.platform.pickling.UnsafeFieldInfo
 import optimus.platform.relational.tree.MemberDescriptor
 import optimus.platform.storable._
@@ -36,6 +38,9 @@ import scala.collection.{concurrent => c}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 import scala.util.hashing.MurmurHash3
+import java.lang.invoke.MethodHandle
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
 
 trait OptimusInfo {
   def runtimeClass: Class[_]
@@ -150,6 +155,20 @@ trait StorableInfo extends OptimusInfo {
 
   def createUnpickled(is: PickledInputStream, forceUnpickle: Boolean): BaseType
   final def createUnpickled(is: PickledInputStream): BaseType = createUnpickled(is, forceUnpickle = false)
+
+  private lazy val maybeInterner = StatsBasedInterner(unsafeFieldInfo.size, Settings.InterningScope.UNPICKLED)
+
+  private[optimus] lazy val maybeIntern_mh: MethodHandle = {
+    val lookup = MethodHandles.lookup()
+    val intern_mt = MethodType.methodType(classOf[AnyRef], classOf[AnyRef], classOf[Int])
+    val mh = lookup.findVirtual(classOf[StorableInfo], "maybeIntern", intern_mt)
+    MethodHandles.insertArguments(mh, 0, this)
+  }
+
+  // Having this indirection rather than returning a handle to the StatsBasedInterner.maybeIntern
+  // avoids the recursive calls between EntityInfo.prepareMeta and val maybeInterner initializer.
+  // noinspection ScalaUnusedSymbol - called via maybeIntern_mh
+  private def maybeIntern(o: AnyRef, propIndex: Int): AnyRef = maybeInterner.maybeIntern(o, propIndex)
 }
 
 abstract class EntityInfo(props: Seq[PropertyInfo[_]], val parents: Seq[ClassEntityInfo])
@@ -236,7 +255,7 @@ class ClassEntityInfo(
   lazy val baseTypes: Set[ClassEntityInfo] = parentTypes + this
 
   override lazy val monoTemporal: Boolean =
-    Option(runtimeClass.getAnnotation(classOf[EntityMetaDataAnnotation])).map(_.monoTemporal()).getOrElse(false)
+    Option(runtimeClass.getAnnotation(classOf[EntityMetaDataAnnotation])).exists(_.monoTemporal())
 
   override lazy val linkages: Seq[LinkageType] = (properties collect {
     case p if p.isChildToParent => EntityLinkageProperty(p.name, runtimeClass.getName)

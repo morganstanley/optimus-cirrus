@@ -18,7 +18,6 @@ import optimus.scalacompat.collection._
 import optimus.scalacompat.collection.BuildFrom
 
 import scala.collection.SeqLike
-import scala.collection.immutable.Seq
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable.ListBuffer
 import scala.util._
@@ -215,6 +214,17 @@ object CollectionUtils extends CollectionUtils {
     }
 
     def isDistinct: Boolean = as.toSet.size == as.size
+
+    def indexOf(p: A => Boolean): Int = {
+      var i = 0
+      val it = as.iterator
+      while (it.hasNext) {
+        if (p(it.next())) return i
+        i += 1
+      }
+      -1
+    }
+
   }
 
   class ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](underlying: Repr[T]) {
@@ -387,9 +397,10 @@ trait CollectionUtils {
     }
   }
 
-  implicit class RichSeqOps[A, C[X] <: Seq[X]](private val xs: C[A]) {
+  implicit class RichSeqOps[A, C[X] <: collection.Seq[X]](private val xs: C[A]) {
     def combinations2: Iterator[(A, A)] =
-      xs.combinations(2).map(x => (x: @unchecked) match { case Seq(a, b) => (a, b) })
-    def sliding2: Iterator[(A, A)] = xs.sliding(2).map(x => (x: @unchecked) match { case Seq(a, b) => (a, b) })
+      xs.combinations(2).map(x => (x: @unchecked) match { case collection.Seq(a, b) => (a, b) })
+    def sliding2: Iterator[(A, A)] =
+      xs.sliding(2).map(x => (x: @unchecked) match { case collection.Seq(a, b) => (a, b) })
   }
 }

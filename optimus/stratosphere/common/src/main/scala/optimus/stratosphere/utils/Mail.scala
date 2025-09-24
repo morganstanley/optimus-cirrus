@@ -19,7 +19,6 @@ import java.time.ZonedDateTime
 import java.util.Properties
 import javax.activation.CommandMap
 import javax.activation.MailcapCommandMap
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 object Mail {

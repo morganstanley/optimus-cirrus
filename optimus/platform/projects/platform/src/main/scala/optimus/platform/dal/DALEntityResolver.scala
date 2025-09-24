@@ -131,7 +131,7 @@ class DALEntityResolver(override val dsi: bitemporal.DSI) extends ResolverImpl w
       value
     } getOrElse Nil
 
-    blobs.apar(maxConcurrency = Async.DefaultConcurrency, runtimeChecks = false).map { e: PersistentEntity =>
+    blobs.apar(maxConcurrency = AsyncInternals.DefaultConcurrency, runtimeChecks = false).map { e: PersistentEntity =>
       EntitySerializer.deserialize(e.serialized, loadContext, DSIStorageInfo.fromPersistentEntity(e)).asInstanceOf[E]
     }
   }

@@ -12,6 +12,7 @@
 package optimus.platform.dsi.versioning
 
 import optimus.platform.ImmutableArray
+import optimus.platform.embeddable
 import optimus.platform.storable.SerializedEntity
 import optimus.platform.versioning.RegisteredFieldTypeT
 import org.apache.commons.codec.binary.Base32
@@ -22,7 +23,23 @@ final case class SlotMetadata(
     key: SlotMetadata.Key,
     shapes: Set[StoredShapeT],
     classpathHashes: Set[PathHashT],
-    storageMetadata: Set[StorageMetadataT])
+    storageMetadata: Set[StorageMetadataT]) {
+  override def toString: String = s"""SlotMetadata(
+                                     |  key=$key
+                                     |  shapes=$shapes
+                                     |  classpathHashes:${firstTenStr(classpathHashes)}
+                                     |  storageMetdata=$storageMetadata)""".stripMargin
+
+  private def firstTenStr(cpHashes: Set[PathHashT]) =
+    if (cpHashes.isEmpty) "Empty()"
+    else {
+      val builder = new StringBuilder(s" size ${cpHashes.size}, first 10 are:\n")
+      shapes.toSeq
+        .take(10)
+        .foreach(s => builder.append("  ").append(s).append('\n'))
+      builder.toString
+    }
+}
 object SlotMetadata {
   final case class Key(className: SerializedEntity.TypeRef, slotNumber: Int)
 
@@ -34,12 +51,15 @@ trait StoredShapeT {
   def fields: SortedMap[String, RegisteredFieldTypeT]
 }
 
-trait PathHashT {
+// Has to be @embeddable because it is being extended by an @embeddable
+// *AND* we are declaring a final def equals which is disallowed by
+// Optimus Error: 21622
+@embeddable trait PathHashT {
   def hash: ImmutableArray[Byte]
-  override def toString(): String = s"PathHash(${id})"
+  override def toString: String = s"PathHash($id)"
 
   // This is used as a representation in ZK nodes etc. Please don't change it without understanding the ramifications.
-  final def id = PathHashT.idCodec.bytesToId(hash.rawArray)
+  final def id: String = PathHashT.idCodec.bytesToId(hash.rawArray)
 
   final override def hashCode(): Int = hash.hashCode
   final override def equals(other: Any): Boolean = other.isInstanceOf[PathHashT] && {

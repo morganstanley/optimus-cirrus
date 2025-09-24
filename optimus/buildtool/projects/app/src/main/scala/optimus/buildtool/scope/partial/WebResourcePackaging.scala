@@ -25,7 +25,7 @@ import scala.collection.immutable.IndexedSeq
     override protected val scope: CompilationScope,
     override protected val sources: WebCompilationSources,
     compiler: AsyncWebCompiler
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import scope._
 
   @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()

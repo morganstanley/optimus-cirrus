@@ -85,7 +85,7 @@ object ChildProcessSampling extends Log {
       s"alloc=1048575b,live,collapsed,memoframes,total," +
       // dump new collapsed stack output at specified periodicity
       s"loop=${childLoopPeriodSec}s," +
-      s"cstack=dwarf," +
+      s"cstack=$cstack," +
       // same stack sampling interval as parent
       s"interval=${AsyncProfilerSampler.apInterval},etypeframes,persist,jemalloc," +
       // suffix to append to temporary files before being atomically moved to permanent name

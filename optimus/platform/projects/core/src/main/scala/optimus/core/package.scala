@@ -15,5 +15,19 @@ import msjava.slf4jutils.scalalog._
 package object core {
   private[optimus] val log = getLogger("optimus.graph")
 
-  def needsPlugin = throw new NoSuchMethodException("This source file needs to be compiled with optimus plugin")
+  def needsPlugin: Nothing = throw new NoSuchMethodException(
+    "This source file needs to be compiled with optimus plugin")
+
+  /**
+   * for use with @alwaysAutoAsyncArgs.  Use this variant of needsPlugin to indicate usage pattern
+   */
+  def needsPluginAlwaysAutoAsyncArgs: Nothing = throw new NoSuchMethodException(
+    "This source file needs to be compiled with optimus plugin (alwaysAutoAsyncArgs)")
+
+  /**
+   * for use with @withLocationTag.  Use this variant of needsPlugin to indicate usage pattern
+   */
+  def needsPluginWithLocationTag: Nothing = throw new NoSuchMethodException(
+    "This source file needs to be compiled with optimus plugin (withLocationTag)")
+
 }

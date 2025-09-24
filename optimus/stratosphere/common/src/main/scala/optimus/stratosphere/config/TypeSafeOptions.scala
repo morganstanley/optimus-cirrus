@@ -12,15 +12,20 @@
 package optimus.stratosphere.config
 
 import com.typesafe.config.Config
+import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.config.Channel
 import optimus.stratosphere.bootstrap.config.StratosphereChannelsConfig
+import optimus.stratosphere.bootstrap.config.StratosphereConfig
 import optimus.stratosphere.common.PluginBundle
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
+import optimus.stratosphere.common.TrainWorkspaceInfo
+import optimus.stratosphere.config.RichConfigValue._
 import optimus.stratosphere.indexing.IndexingFilterConfig
 import optimus.stratosphere.indexing.JdkSharedIndexesConfig
 import optimus.stratosphere.indexing.ProjectSharedIndexesConfig
 import optimus.stratosphere.indexing.SharedIndexesConfig
+import optimus.stratosphere.updater.GitUpdater
 import optimus.stratosphere.utils.RemoteUrl
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
@@ -30,7 +35,6 @@ import java.nio.file.Path
 import java.time.Instant
 import java.time.{Duration => JDuration}
 import scala.annotation.implicitNotFound
-import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
@@ -55,25 +59,61 @@ object ConsoleColors {
 // IMPORTANT: Remember to add a case to TypeSafeOptionsTest every time you add an 'object' here
 // All values needs to be `def`s here to allow for updating configuration in-memory.
 trait TypeSafeOptions { self: StratoWorkspaceCommon =>
+  private implicit val stratoWorkspace: StratoWorkspaceCommon = self
 
-  def javaVersion: String = self.select("javaVersion")
+  def javaVersionTyped: RichConfigValue[String] =
+    javaVersion.enrich(TypeSafeOptions.javaVersionKey, Some("Java version"))
+  def javaVersion: String = self.select[String]("javaVersion")
   def javaShortVersion: String = self.select("javaShortVersion")
   def javaProject: String = self.select("javaProject")
-  def scalaVersion: String = self.select("scalaVersion")
+  def scalaVersionTyped: RichConfigValue[String] =
+    Try(
+      self
+        .select[String](TypeSafeOptions.scalaVersionAfKey)
+        .enrich(TypeSafeOptions.scalaVersionAfKey, Some("Scala Version")))
+      .getOrElse(
+        self
+          .select[String](TypeSafeOptions.scalaVersionKey)
+          .enrich(TypeSafeOptions.scalaVersionKey, Some("Scala Version")))
+  def scalaVersion: String =
+    Try(self.select[String](TypeSafeOptions.scalaVersionAfKey))
+      .getOrElse(self.select[String](TypeSafeOptions.scalaVersionKey))
   def scalaHomePath: String = self.select("scalaHomePath")
 
   def historyMerges: Seq[Config] = self.select("history-merges")
 
-  def obtDhtLocation: Option[String] = self.select("obt.dht.location")
+  def obtDhtLocationTyped: RichConfigValue[Option[String]] =
+    obtDhtLocation.enrich(TypeSafeOptions.obtDhtLocationKey, Some("Remote cache (DHT)"))
+  def obtDhtLocation: Option[String] = self.select[Option[String]](TypeSafeOptions.obtDhtLocationKey)
+  def obtVersionTyped: RichConfigValue[String] =
+    obtVersion
+      .enrich(TypeSafeOptions.obtVersionProperty, Some("OBT version"), TypeSafeOptions.buildtoolOverrideEnvName)
+      .withReleaseDate(internal.stratosphere.releaseDatePattern)
   def obtVersion: String = self.select("obt-version")
-
-  def profile: Option[String] = self.select("profile")
+  def gitVersionTyped: RichConfigValue[String] = {
+    if (OsSpecific.isWindows) {
+      val version = GitUpdater.gitVersion(this).map(_.toString).getOrElse("N/A")
+      RichConfigValue("", version, ConfigSourceLocation.Workspace, Some("Git version"))
+    } else {
+      val key = "git.recommended-version"
+      select(key).enrich(key, Some("Git version"))
+    }
+  }
+  def profileTyped: RichConfigValue[Option[String]] = profile.enrich(TypeSafeOptions.profileKey, Some("Profile"))
+  def profile: Option[String] = self.select[Option[String]](TypeSafeOptions.profileKey)
   def stratosphereChannel: Option[String] = self.select("stratosphereChannel")
   def stratosphereInfra: Path = self.select("stratosphereInfra")
   def stratosphereInfraOverride: Option[String] = self.select("stratosphereInfraOverride")
   def stratosphereInstallDir: Option[Path] = self.select("stratosphereInstallDir")
   def stratosphereHome: Path = self.select("stratosphereHome")
   def stratosphereSrcDir: Option[String] = self.select("stratosphereSrcDir")
+  def stratosphereVersionTyped: RichConfigValue[String] =
+    stratosphereVersion
+      .enrich(
+        TypeSafeOptions.stratosphereVersionProperty,
+        Some("Stratosphere Version"),
+        TypeSafeOptions.stratosphereInfraOverrideEnvName)
+      .withReleaseDate(internal.stratosphere.releaseDatePattern)
   def stratosphereVersion[A: Extractor]: A = self.select("stratosphereVersion")
   def stratosphereVersionSymlink: Option[String] = self.select("stratosphereVersionSymlink")
   def stratosphereWorkspace: String = self.select("stratosphereWorkspace")
@@ -152,6 +192,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object intellij {
     def attachAgent: Boolean = self.select("intellij.attach-agent")
+    def enableStatusBanner: Boolean = self.select("intellij.enable-status-banner")
     def jarRepoFile: Path = self.select("intellij.jar-repo-file")
     def jdk: Option[String] = self.select("intellij.jdk")
     def licenseServer: String = self.select("intellij.license-server")
@@ -160,6 +201,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def pythonCommunityPluginVersion: String = self.select("intellij.plugins.python-community.version")
     def pythonUltimatePluginVersion: String = self.select("intellij.plugins.python-ultimate.version")
     def scalaPluginVersion: String = self.select("intellij.plugins.scala.version")
+    def tweakedGc: Boolean = self.select("intellij.tweaked-gc")
     def ultimate: Boolean = self.select("intellij.ultimate")
     def version: String = self.select("intellij.version")
 
@@ -182,6 +224,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def newVersionStartup: FiniteDuration = self.select("intellij.defaults.new-version-startup")
       def reformatOnPaste: Boolean = self.select("intellij.defaults.reformat-on-paste")
       def addImportsOnPaste: Boolean = self.select("intellij.defaults.add-imports-on-paste")
+      def shellPath: Option[String] = self.select("intellij.defaults.shell-path")
     }
 
     object globalJarMapping {
@@ -191,6 +234,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object idea64 {
       def vmoptions: Seq[String] = self.select("intellij.idea64.vmoptions")
       def extraVmoptions: Seq[String] = self.select("intellij.idea64.extraVmoptions")
+      def extraGcVmOptions: Seq[String] = self.select("intellij.idea64.extra-gc-vm-options ")
     }
 
     object allowedInspections {
@@ -200,6 +244,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object jetfire {
       def path: String = self.select("intellij.jetfire.path")
+      // TODO (OPTIMUS-76817): Remove feature flag when implementation is end-user ready
+      def obtModuleCreatorEnabled: Boolean = self.select("intellij.jetfire.obt-module-creator-enabled")
     }
 
     object junit5 {
@@ -239,6 +285,9 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     }
 
     object plugins {
+      object copilot {
+        def enabled: Boolean = self.select("intellij.plugins.copilot.enabled")
+      }
       object disabled {
         protected def disabledPlugins: Seq[Map[String, String]] = self.select("intellij.plugins.disabled")
         def names: Seq[String] = disabledPlugins.map(_.apply("name"))
@@ -325,7 +374,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
 
     object bitbucket {
-      def hostname: String = self.select("internal.bitbucket.hostname")
+      def defaultHostname: String = self.select("internal.bitbucket.default-hostname")
+      def validHostnames: Seq[String] = self.select("internal.bitbucket.valid-hostnames")
       def allUsersGroup: String = self.select("internal.bitbucket.all-users-group")
     }
 
@@ -340,12 +390,20 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object channels {
       private def listRaw: Seq[Config] = self.select(StratosphereChannelsConfig.channelsListKey)
-      def list: Seq[Channel] = listRaw.map(Channel.create)
+      def autoIncludeMappings: Map[String, Int] =
+        self.select[Map[String, Int]](StratosphereChannelsConfig.externalAutoIncludeMapping)
+      def list: Seq[Channel] = {
+        val mappings = autoIncludeMappings.map { case (k, v) => (k, Integer.valueOf(v)) }
+        listRaw.map(channel => Channel.create(channel, mappings.asJava))
+      }
       def userSelected: Seq[String] = self.select(StratosphereChannelsConfig.userSelectedChannelsKey)
       def useThresholds: Boolean = self.select(StratosphereChannelsConfig.useAutoIncludeFlagKey)
       def ignoredChannels: Seq[String] = self.select(StratosphereChannelsConfig.ignoredChannelsKey)
       def optOutUsers: Seq[String] = self.select(StratosphereChannelsConfig.optOutUsersKey)
-      def usedChannels: Seq[String] = self.select(StratosphereChannelsConfig.usedChannelsKey)
+      def usedChannelsTyped: RichConfigValue[Seq[String]] =
+        usedChannels
+          .enrich(StratosphereChannelsConfig.usedChannelsKey, Some("Strato channels"))
+      def usedChannels: Seq[String] = self.select[Seq[String]](StratosphereChannelsConfig.usedChannelsKey)
       def channelCollisions: Map[String, Seq[String]] = self
         .select(StratosphereChannelsConfig.reportedChannelCollisions)
     }
@@ -378,7 +436,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def codetreeReleaseArchiveUrl: Option[RemoteUrl] =
         self.select("internal.history-truncation.codetree-release-archive-url")
       def isWorkspaceMigrated: Option[Boolean] = self.select("internal.history-truncation.is-workspace-migrated")
-      def newRootCommit: Option[String] = self.select("internal.history-truncation.new-root-commit")
+      def newRootCommit: Option[String] =
+        self.select[Option[String]]("internal.history-truncation.new-root-commit").filter(_.nonEmpty)
     }
 
     object java {
@@ -427,6 +486,12 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def enableImageLinks: Option[Boolean] = self.select("internal.markdown.graphviz.enable-image-links")
       }
 
+      object graphs {
+        def imagesRemovalTime: FiniteDuration = self.select("internal.markdown.graphs.images-removal-time")
+        def reRenderTime: FiniteDuration = self.select("internal.markdown.graphs.re-render-time")
+        def lastModifiedThreshold: FiniteDuration = self.select("internal.markdown.graphs.last-modified-threshold")
+        def initialLoadingTime: FiniteDuration = self.select("internal.markdown.graphs.initial-loading-time")
+      }
     }
 
     object obt {
@@ -488,12 +553,24 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object stratosphere {
       def infraPath: String = self.select("internal.stratosphere.infra-path")
       def scriptsDir: String = self.select("internal.stratosphere.scripts-dir")
+      def releaseObsoleteThreshold: FiniteDuration =
+        self.select("internal.stratosphere.release-obsolete-threshold")
+      def releaseDatePattern: Regex =
+        self.select("internal.stratosphere.release-date-pattern")
+
     }
 
     object telemetry {
       def enabled: Boolean = self.select("internal.telemetry.enabled")
       def destination: String = self.select("internal.telemetry.destination")
       def timeout: FiniteDuration = self.select("internal.telemetry.timeout")
+    }
+
+    object train {
+      def enabled: Boolean = self.select("internal.train.enabled")
+      def info: Option[TrainWorkspaceInfo] = self.select[Option[Config]]("internal.train.info").map { c =>
+        TrainWorkspaceInfo(c.getString("meta"), c.getString("project"), c.getString("repo"))
+      }
     }
 
     object tools {
@@ -530,19 +607,17 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def all: Map[String, HostnamePort] = self
           .select[Map[String, String]]("internal.urls.bitbucket")
           .map { case (name, value) => (name, HostnamePort.parse(value)) }
-        def byMPR(meta: String, project: String, repo: String): Option[HostnamePort] = {
+        def byMpr(meta: String, project: String, repo: String): Option[HostnamePort] = {
           self.select[Option[String]](s"internal.urls.repos.$meta.$project.$repo").map { instanceId: String =>
             HostnamePort(self.select[Config](s"internal.urls.bitbucket.$instanceId"))
           }
         }
-        def metaForPR(project: String, repo: String): Option[String] = {
+        def metaForPr(project: String, repo: String): Option[String] = {
           self
             .select[Config]("internal.urls.repos")
             .entrySet()
             .asScala
-            .filter { key =>
-              key.getKey.endsWith(s"$project.$repo")
-            }
+            .filter(_.getKey.endsWith(s"$project.$repo"))
             .toSeq match {
             case Seq(singleEntry) => Some(singleEntry.getKey.split("\\.").head)
             case Seq(_, _*) =>
@@ -567,11 +642,21 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def check: String = self.select("internal.urls.pc-health.check")
         def credentialGuard: String = self.select("internal.urls.pc-health.credential-guard")
         def freeSwapSpace: MemSize = self.select("internal.urls.pc-health.free-swap-space")
+        def freeDiskSpaceThreshold: MemSize = self.select("internal.urls.pc-health.free-disk-space-threshold")
       }
 
       object workflowServer {
         def host: String = self.select("internal.urls.workflow-server.host")
         def port: Int = self.select("internal.urls.workflow-server.port")
+      }
+    }
+
+    object iotest {
+      object timeThresholds {
+        def write: FiniteDuration = self.select("internal.iotest.time-thresholds.write")
+        def exist: FiniteDuration = self.select("internal.iotest.time-thresholds.exist")
+        def read: FiniteDuration = self.select("internal.iotest.time-thresholds.read")
+        def delete: FiniteDuration = self.select("internal.iotest.time-thresholds.delete")
       }
     }
   }
@@ -600,6 +685,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object server {
       def args: Seq[String] = self.select("obt.server.args")
       def opts: Seq[String] = self.select("obt.server.opts")
+    }
+
+    object visualizer {
+      def args: Seq[String] = self.select("obt.visualizer.args")
+      def opts: Seq[String] = self.select("obt.visualizer.opts")
     }
   }
 
@@ -638,7 +728,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def mainBranch: String = self.select("setup.defaults.mainBranch")
       def stagingBranch: String = self.select("setup.defaults.stagingBranch")
       def repo: String = self.select("setup.defaults.repo")
-      def referenceRepo: Option[String] = self.select("setup.defaults.referenceRepo")
+      def referenceRepo: Option[Path] = self.select("setup.defaults.referenceRepo")
       def usePrivateFork: Boolean = self.select("setup.defaults.use-private-fork")
       def fetchMode: String = self.select("setup.defaults.fetchMode")
       def fetchOvernight: Boolean = self.select("setup.defaults.fetch-overnight")
@@ -687,4 +777,16 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   }
 
   // please keep the object sorted
+}
+
+object TypeSafeOptions {
+  val javaVersionKey: String = "javaVersion"
+  val scalaVersionKey: String = "scalaVersion"
+  val scalaVersionAfKey: String = "scalaVersionAF"
+  val obtDhtLocationKey: String = "obt.dht.location"
+  val profileKey: String = "profile"
+  val obtVersionProperty: String = StratosphereConfig.obtVersionProperty
+  val buildtoolOverrideEnvName: String = StratosphereConfig.BUILDTOOL_OVERRIDE_ENV_NAME
+  val stratosphereVersionProperty: String = StratosphereConfig.stratosphereVersionProperty
+  val stratosphereInfraOverrideEnvName: String = StratosphereConfig.STRATOSPHERE_INFRA_OVERRIDE_ENV_NAME
 }

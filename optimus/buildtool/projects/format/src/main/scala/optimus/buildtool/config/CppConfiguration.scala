@@ -20,7 +20,6 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.utils.PathUtils.{fingerprintAsset => fa}
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 final case class CppConfiguration(
     osVersion: String,

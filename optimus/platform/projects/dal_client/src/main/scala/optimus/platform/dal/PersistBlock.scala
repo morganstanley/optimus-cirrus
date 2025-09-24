@@ -13,13 +13,14 @@ package optimus.platform.dal
 
 import java.time.DateTimeException
 import java.time.Instant
-
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.graph.DiagnosticSettings
 import optimus.graph.PropertyInfo
 import optimus.platform._
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.dsi.bitemporal.WriteCommand
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.pickling.{AbstractPickledOutputStream, TemporaryEntityException}
 import optimus.platform.storable._
 
@@ -84,8 +85,11 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
     throw new DALTransactionConflictException(given.entity, msg)
   }
 
-  val entityMutationAllowed =
-    !java.lang.Boolean.parseBoolean(System.getProperty(AbstractPersistBlock.UseImmutableEntitiesProperty, "false"))
+  val entityMutationAllowed: Boolean =
+    !DiagnosticSettings.getBoolProperty(AbstractPersistBlock.UseImmutableEntitiesProperty, false)
+
+  val generateIgnoreListForReferenceResolutionEnabled: Boolean =
+    DiagnosticSettings.getBoolProperty(AbstractPersistBlock.generateIgnoreListForReferenceResolution, false)
   val writeRetryAllowed = false
 
   private[this] var deferredValidations: List[() => Unit] = Nil
@@ -95,9 +99,15 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
   protected def storeValidTimeOf(a: A): Instant
 
-  @async def commit(asserts: Set[(EntityReference, A)], cache: Iterable[PersistCacheEntry]): PersistResult
+  @async def commit(
+      asserts: Set[(EntityReference, A)],
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): PersistResult
 
-  def createCommandsInternal(asserts: Set[(EntityReference, A)], cache: Iterable[PersistCacheEntry]): Seq[WriteCommand]
+  def createCommandsInternal(
+      asserts: Set[(EntityReference, A)],
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): Seq[WriteCommand]
 
   sealed trait CacheKey
   case class EntityKey(entity: Entity) extends CacheKey
@@ -423,8 +433,8 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    *   The result of committing the created asserts.
    */
   @async final def flush(): PersistResult = {
-    val asserts = prepareFlush()
-    val r = commit(asserts, cache.values.flatten)
+    val (asserts, ignoreListForReferenceResolution) = prepareFlush()
+    val r = commit(asserts, cache.values.flatten, ignoreListForReferenceResolution)
     completeFlush()
     r
   }
@@ -435,12 +445,14 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    * @return
    *   The created asserts.
    */
-  final def prepareFlush(): Set[(EntityReference, A)] = {
-    val asserts = closeAndCreateAsserts()
+  final def prepareFlush(): (Set[(EntityReference, A)], Set[EntityReference]) = {
+    val (asserts, ignoreListForReferenceResolution) = closeAndCreateAsserts()
     // Assigns references to temporary entities and replaces their 'cache' entries with reference entries.
     // This will throw if a temporary entity resolves to a reference that's already in the transaction with a conflicting operation.
     upgradeTemporaryEntities()
-    asserts
+    (
+      asserts,
+      ignoreListForReferenceResolution.map { ent => Option(ent.dal$entityRef).getOrElse(entityRefs(ent)) }.toSet)
   }
 
   /**
@@ -472,12 +484,11 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    *   Result of filtering created asserts through createCommandsInternal.
    */
   final def createCommands(): Seq[WriteCommand] = {
-    val asserts = prepareFlush()
-    val ret = createCommandsInternal(asserts, cache.values.flatten)
+    val (asserts, ignoreListForReferenceResolution) = prepareFlush()
+    val ret = createCommandsInternal(asserts, cache.values.flatten, ignoreListForReferenceResolution)
 
     // Probably unneeded, we don't reuse PersistBlocks afaik so these will be eligible for GC immediately anyway.
     cache.clear()
-
     ret
   }
 
@@ -521,15 +532,16 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    * @return
    *   The AssertEntries extracted from the cache.
    */
-  private[this] def closeAndCreateAsserts(): Set[(EntityReference, A)] = {
+  private[this] def closeAndCreateAsserts(): (Set[(EntityReference, A)], Seq[Entity]) = {
     // snapshot cache on entry as it will be changing from underneath us
     val ops = cache.toMap
 
     val assertOps = immutable.HashSet.newBuilder[AssertEntry]
+    val ignoreListForReferenceResolution = immutable.Seq.newBuilder[Entity]
 
     class PersistVisitor(vt: A, upsert: Boolean, cmid: Option[MSUuid]) extends AbstractPickledOutputStream {
       private[this] var currentPropertyInfo: PropertyInfo[_] = _
-      private[this] var outerMonoTemporal: Boolean = _
+      private[this] var containsFinalTypedReferencesOnly: Boolean = true
 
       private def tryPersist(entity: Entity): Boolean = {
         checkTransient(entity)
@@ -538,21 +550,55 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
       def apply(entity: Entity): Unit = {
         tryPersist(entity)
-        outerMonoTemporal = entity.$info.monoTemporal
         // Pickle call here is used to build assert operations through writePropertyInfo and writeEntity
         entity.pickle(this)
+        if (containsFinalTypedReferencesOnly && generateIgnoreListForReferenceResolutionEnabled) {
+          ignoreListForReferenceResolution += entity
+        }
+      }
+
+      private def traversePropToFindReferences(data: Any): Unit = if (containsFinalTypedReferencesOnly) {
+        data match {
+          // if we encounter a non FinalTypedReference being pickled, don't add this into ignoreList.
+          case e: FinalTypedReference =>
+          case e: FinalReference      => containsFinalTypedReferencesOnly = false
+          case e: TemporaryReference  => containsFinalTypedReferencesOnly = false
+          // Using forall to exit the iteration on first encounter of non-finalTyped reference.
+          case col: PickleSeq[_] @unchecked =>
+            col.forall { x =>
+              traversePropToFindReferences(x)
+              containsFinalTypedReferencesOnly
+            }
+          case col: collection.Set[_] @unchecked =>
+            col.forall { x =>
+              traversePropToFindReferences(x)
+              containsFinalTypedReferencesOnly
+            }
+          case m: Map[_, _] @unchecked =>
+            m.forall { case (k, v) =>
+              traversePropToFindReferences(k)
+              traversePropToFindReferences(v)
+              containsFinalTypedReferencesOnly
+            }
+          case x: Any =>
+        }
+      }
+
+      override def writeRawObject(data: AnyRef): Unit = if (containsFinalTypedReferencesOnly) {
+        traversePropToFindReferences(data)
       }
 
       override def writeEntity(entity: Entity): Unit = {
         if (entity.$isModule) checkTransient(entity)
-        else if (!entity.$inline) {
-          if (outerMonoTemporal)
-            require(
-              entity.$info.monoTemporal,
-              s"DAL doesn't support monotemporal entities referencing bitemporal entities such as ${entity.$info.runtimeClass}")
-          assertOps += AssertEntry(entity, vt, currentPropertyInfo)
+        else if (!entity.$inline) assertOps += AssertEntry(entity, vt, currentPropertyInfo)
+        // if dal$entityRef is null or isTemporary then it is a heap entity, or if it is a finalReference
+        if (
+          containsFinalTypedReferencesOnly && Option(entity.dal$entityRef).forall { r =>
+            r.isTemporary || r.getTypeId.isEmpty
+          }
+        ) {
+          containsFinalTypedReferencesOnly = false
         }
-
       }
 
       override def writePropertyInfo(info: PropertyInfo[_]): Unit = {
@@ -588,7 +634,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
     val refTxTimes = assertResult.flatMap(a => Option(a.entity.dal$storageInfo.txTime)) ++ maxDalEventTt
     if (refTxTimes.nonEmpty) minAssignableTtOpt = Some(refTxTimes.max)
 
-    assertResult flatMap { case ae @ AssertEntry(entity, vt, propertyInfo) =>
+    val asserts = assertResult flatMap { case ae @ AssertEntry(entity, vt, propertyInfo) =>
       cache.get(keyOf(entity)) match {
         // If we're persisting the entity before or at the same VT (as the assertion), let it through.
         // This is not always correct in the case where the entity has been previously invalidated at a later VT,
@@ -621,17 +667,21 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
         // This needs to be strategically handled on the server-side, so not attempting to address here.
         case Some(ex :: _) =>
           throwConflictException(ex, ae)
-        case e @ Some(Nil) => throw new MatchError(e)
+        case e @ Some(Nil)                        => throw new MatchError(e)
         case None if getEntityRef(entity) eq null =>
+// unexpected temporary entity found.
           throw new TemporaryEntityException(entity, propertyInfo)
         case None => Some((getEntityRef(entity), vt))
       }
     }
+    // return the seq of entities that do not point to temporary entities. The entities in this skiplist could be temporary or final themselves - so no assumptions on the type of containing entity.
+    (asserts, ignoreListForReferenceResolution.result())
   }
 }
 
 object AbstractPersistBlock {
   val UseImmutableEntitiesProperty = "optimus.dsi.transaction.immutable"
+  val generateIgnoreListForReferenceResolution = "optimus.dsi.transaction.generateIgnoreListForReferenceResolution"
   private val log = getLogger[AbstractPersistBlock[_]]
 
   def scenario(twks: Iterable[Tweak]): Scenario = PersistBlock.scenario(twks)
@@ -712,7 +762,8 @@ class BasicPersistBlock(resolver: EntityResolverWriteImpl) extends AbstractPersi
    */
   protected[this] def createCommit(
       as: Set[(EntityReference, Instant)],
-      cache: Iterable[PersistCacheEntry]): Seq[(Option[Entity], WriteCommand)] = {
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): Seq[(Option[Entity], WriteCommand)] = {
 
     val persistBldr = Vector.newBuilder[(Entity, Instant, Boolean, Option[MSUuid])]
     val invalidateOps = mutable.HashMap[Entity, Instant]()
@@ -748,7 +799,8 @@ class BasicPersistBlock(resolver: EntityResolverWriteImpl) extends AbstractPersi
         invalidateByRefOps,
         entityRefs,
         lockTokens,
-        minAssignableTtOpt)
+        minAssignableTtOpt,
+        ignoreListForReferenceResolution)
     else
       Nil
   }
@@ -763,8 +815,11 @@ class BasicPersistBlock(resolver: EntityResolverWriteImpl) extends AbstractPersi
    * @return
    *   The result of the commit operation.
    */
-  @async final def commit(as: Set[(EntityReference, Instant)], cache: Iterable[PersistCacheEntry]): PersistResult = {
-    val cmds = createCommit(as, cache)
+  @async final def commit(
+      as: Set[(EntityReference, Instant)],
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): PersistResult = {
+    val cmds = createCommit(as, cache, ignoreListForReferenceResolution)
     if (cmds.nonEmpty)
       resolver.commitPersistBlock(cmds, entityMutationAllowed)
     else
@@ -783,8 +838,9 @@ class BasicPersistBlock(resolver: EntityResolverWriteImpl) extends AbstractPersi
    */
   override def createCommandsInternal(
       as: Set[(EntityReference, Instant)],
-      cache: Iterable[PersistCacheEntry]): Seq[WriteCommand] = {
-    createCommit(as, cache).map(_._2)
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): Seq[WriteCommand] = {
+    createCommit(as, cache, ignoreListForReferenceResolution).map(_._2)
   }
 
   override protected def storeValidTimeOf(i: Instant) = i
@@ -801,7 +857,6 @@ trait BasicPersistBlockComponent extends PersistBlockComponent[BasicPersistBlock
    * To be precise, it is not entirely side-effect free, but tries its best. Currently implemented:
    *   - Put operations don't modify dal$entityRef and dal$storageInfo
    */
-  protected[optimus] def createPersistBlockNoSideEffect: DALBlock = new BasicPersistBlock(resolver) {
-    override val entityMutationAllowed = false
-  }
+  protected[optimus] def createPersistBlockNoSideEffect: PluginTagKeyValue[BasicPersistBlock] =
+    PluginTagKeyValue(BasicPersistBlock, new BasicPersistBlock(resolver) { override val entityMutationAllowed = false })
 }

@@ -202,10 +202,6 @@ class SilverKingPlantConfig(
     nodePatterns.flatten.toSet
   }
 
-  def createSkgc(): ClientDHTConfiguration = {
-    new ClientDHTConfiguration(skDhtName, ZkUtils.getSilverKingZkConfig(zkEnv, Some(getSkRootZNode(skClusterName))))
-  }
-
   def getHosts(
       zkClient: CuratorZkOperations = zkClient,
       ignoreSysLoc: Boolean,

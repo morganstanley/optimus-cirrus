@@ -17,7 +17,6 @@ import com.typesafe.config.ConfigFactory
 
 import java.util.{Map => JMap}
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 final case class ProjectProperties(config: Config) {

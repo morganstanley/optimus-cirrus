@@ -11,6 +11,8 @@
  */
 package optimus.graph;
 
+import java.util.Arrays;
+import optimus.platform.EvaluationContext$;
 import optimus.platform.debugger.OptimusCutPoint;
 import optimus.core.MonitoringBreadcrumbs$;
 import optimus.graph.profiled.NodeSync;
@@ -33,7 +35,10 @@ public class GraphDebuggerExtensionsServer {
       MonitoringBreadcrumbs$.MODULE$.sendAsyncStackTracesCrumb();
       alreadySentCrumbs = true;
     }
-    return NodeStacks.reconstitutedNodeAndJvmStackAsStrings();
+
+    // TODO (OPTIMUS-77147): We should use transformStackElemsToString directly instead in the
+    // plugin but this will need a stratosphere release.
+    return transformStackElemsToString(nodeAndJvmOptimusStackElems());
   }
 
   /**
@@ -42,7 +47,17 @@ public class GraphDebuggerExtensionsServer {
    */
   @SuppressWarnings("unused")
   public static StackElem[] nodeAndJvmOptimusStackElems() {
-    return NodeStacks.reconstitutedNodeAndJvmStack();
+    return nodeAndJvmOptimusStackElemsForNode(EvaluationContext$.MODULE$.currentNode());
+  }
+
+  public static String[] transformStackElemsToString(StackElem[] input) {
+    return Arrays.stream(nodeAndJvmOptimusStackElems())
+        .map(StackElem::toStackString)
+        .toArray(String[]::new);
+  }
+
+  public static StackElem[] nodeAndJvmOptimusStackElemsForNode(NodeTask node) {
+    return NodeStacks.reconstitutedNodeAndJvmStack(node);
   }
 
   /**

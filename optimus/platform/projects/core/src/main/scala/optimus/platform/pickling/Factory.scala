@@ -13,6 +13,7 @@ package optimus.platform.pickling
 
 import scala.reflect.runtime.universe._
 import PicklingReflectionUtils._
+import optimus.platform.storable
 
 /**
  * Interface for a Factory that can create values of type Pickler
@@ -60,7 +61,22 @@ trait OrderingFactory extends Factory[Ordering] {
  * entities and embeddables
  */
 protected[pickling] trait DefaultFactoryTrait
-trait DefaultFactory[Value[_]] extends DefaultFactoryTrait { self: Factory[Value] => }
+trait DefaultFactory[Value[_]] extends Factory[Value] with DefaultFactoryTrait {
+  private lazy val enumValueClassKey: ClassKey = classKeyOf[Enumeration#Value]
+  private lazy val embeddableClassKey: ClassKey = classKeyOf[storable.Embeddable]
+
+  override protected def matchedKey(superclassKeys: List[String]): Option[String] = {
+    // Special case for types that are @enumeration which also extend Enumeration#Value
+    // This can happen when we have scala enumerations whose values extend
+    // @embeddable traits, for example.
+    super.matchedKey(superclassKeys).map { m =>
+      if (m == embeddableClassKey && superclassKeys.contains(enumValueClassKey))
+        enumValueClassKey
+      else
+        m
+    }
+  }
+}
 
 /**
  * A Factory tries to create a value for a given type by applying predefined rules.
@@ -84,7 +100,7 @@ trait Factory[Value[_]] {
    * List[Type] represents the list of type arguments of a type. Examples are following:
    *   - `String` has no type arguments,
    *   - `Option[String]` has one type argument: `String`
-   *   - `Map[Int, Long]` has two type arguments: `Int` and `Long` We return an Option[Value[_]] as we may want to
+   *   - `Map[Int, Long]` has two type arguments: `Int` and `Long` We return an `Option[Value[_]]` as we may want to
    *     generate a value only for a class for specific type args
    */
   protected def values: Map[ClassKey, List[Type] => Option[Value[_]]]
@@ -102,8 +118,11 @@ trait Factory[Value[_]] {
   }
 
   final def createInstanceFromSuperclass(tpe: Type, superclassKeys: List[String]): Option[Value[_]] = {
-    val matchedKey = superclassKeys.find(allowedSuperclasses.contains)
-    matchedKey.flatMap(key => superclassValues(key)(tpe))
+    matchedKey(superclassKeys).flatMap(key => superclassValues(key)(tpe))
+  }
+
+  protected def matchedKey(superclassKeys: List[String]): Option[String] = {
+    superclassKeys.find(allowedSuperclasses.contains)
   }
 
   protected def classKeyOf[T: TypeTag]: ClassKey = {

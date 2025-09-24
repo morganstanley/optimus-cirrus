@@ -51,8 +51,8 @@ public class AllTestResults extends CompositeTestResults {
     return addTest(packageResults.addTest(classId, className, testName, duration));
   }
 
-  public Optional<CoverageResult> addCoverageResult(Optional<CoverageResult> coverage) {
-    return addCoverage(coverage);
+  public void addCoverageResult(String scope, CoverageResult coverage) {
+    addCoverageByScope(scope, coverage);
   }
 
   public ClassTestResults addTestClass(long classId, String className) {

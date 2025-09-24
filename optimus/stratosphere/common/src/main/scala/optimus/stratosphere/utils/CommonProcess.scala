@@ -14,7 +14,6 @@ package optimus.stratosphere.utils
 import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
-import optimus.stratosphere.common.IntellijClientDirectoryStructure
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.logger.CustomProcessLogger
@@ -27,7 +26,6 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -49,9 +47,8 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
   def runIntellij(sourceDir: Path): Try[Int] =
     runStratosphereCommand("ide")(sourceDir, stratoWorkspace.log.info)
 
-  def runIntellijClient(clientVersion: String): Int = {
-    val cmdLine: List[String] = List(
-      IntellijClientDirectoryStructure(stratoWorkspace, clientVersion).intellijClientExecutable.getFullPath)
+  def runIntellijClient(execPath: Path): Int = {
+    val cmdLine: List[String] = List(execPath.getFullPath)
     val processBuilder = addJavaToPath(new ProcessBuilder(cmdLine.asJava))
     processBuilder.start()
     ExitCode.Success
@@ -109,40 +106,6 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
         ScalaProcess(command, Some(sourceDir.toFile.getCanonicalFile), env: _*).!(ProcessLogger(log))
       }
     }
-  }
-
-  def runNodeScript(
-      script: String,
-      runInDir: Path,
-      nodeVersion: String,
-      processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false)
-  ): String = {
-    val args =
-      if (OsSpecific.isLinux)
-        Seq("ksh", "-c") ++ Seq(
-          Seq(
-            s". ${stratoWorkspace.internal.paths.initEnviron}",
-            "export TRAIN_CI=true",
-            "export WORKSPACE=/var/tmp/$$_$USER",
-            s"export NODE_VERSION=$nodeVersion",
-            "export NPM_CONFIG_USERCONFIG=/var/tmp/$$_$USER/.npmrc",
-            "export NPM_CONFIG_CACHE=/var/tmp/$$_$USER/npm-cache",
-            "module load msde/artifactory-eng-tools/prod",
-            "setup_user -cli npm",
-            s"module load ossjs/node/$nodeVersion",
-            script
-          ).mkString(" && "))
-      else
-        CommonProcess.preamble ++ Seq(
-          Seq(
-            s"set NODE_VERSION=$nodeVersion",
-            "module load msde/artifactory-eng-tools/prod",
-            "setup_user -cli npm",
-            s"module load ossjs/node/$nodeVersion",
-            script
-          ).mkString(" && "))
-
-    runAndWaitFor(args, dir = Some(runInDir), processLogger = processLogger)
   }
 
   def runAndWaitForPb(

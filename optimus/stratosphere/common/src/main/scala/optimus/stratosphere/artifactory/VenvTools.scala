@@ -55,7 +55,7 @@ object RuffTool extends VenvTool {
     new CommonProcess(stratoWorkspace)
       .runAndWaitFor(
         command,
-        env = Map(ArtifactoryToolDownloader.PipConfigFile -> stratoWorkspace.internal.pypi.configFile.toFile.toString),
+        env = Map(ArtifactoryToolInstaller.PipConfigFile -> stratoWorkspace.internal.pypi.configFile.toFile.toString),
         ignoreExitCode = true
       )
     if (!binary(stratoWorkspace).toFile.exists()) stratoWorkspace.log.warning(s"Installing ruff failed")

@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object OuterJoin extends LegacyOptimusApp {
+object OuterJoin extends LegacyOptimusApp with PrintlnInterceptor {
 
   // This example demonstrates left, right and full outer  joins
   leftJoin()

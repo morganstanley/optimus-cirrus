@@ -21,7 +21,6 @@ import optimus.buildtool.utils.Jars
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 import scala.util.Properties.isWin
 
 object PythonConstants {

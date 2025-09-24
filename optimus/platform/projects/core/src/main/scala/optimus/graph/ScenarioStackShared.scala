@@ -18,6 +18,7 @@ import optimus.core.MonitoringBreadcrumbs
 import optimus.graph.cache.CacheSelector
 import optimus.graph.cache.NodeCCache
 import optimus.graph.cache.UNodeCache
+import optimus.platform.AdvancedUtils
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.RuntimeEnvironmentKnownNames._
 import optimus.platform.Scenario
@@ -29,6 +30,7 @@ import optimus.platform.util.html.NoStyleNamed
 
 import java.util.concurrent.ConcurrentMap
 import scala.util.control.NonFatal
+import optimus.platform.EvaluationContext
 
 /**
  * This is a private object and a private class for ScenarioStack and we just don't want ScenarioStack class to get even
@@ -60,6 +62,7 @@ private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
       uniqueID: Boolean): ScenarioStackShared = {
     val cacheID =
       if (uniqueID) SSCacheID.newUnique()
+      else if (Settings.compatAllowCrossRuntimeCacheHits) SSCacheID.commonRoot // see [[CROSS_RUNTIME_MATCHING]]
       else CacheIDs.putIfAbsent(RuntimeEnvironmentCacheKey(env), SSCacheID.newUnique())
 
     val ssShared = new ScenarioStackShared(env)
@@ -93,8 +96,39 @@ private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
  * RuntimeEnvironment, siStack etc... `siStack`, `siStackWithIgnoreSyncStack` and `siRootCache` are all basically caches
  * in that they hold scenario stacks
  */
-private[optimus /*ScenarioStack*/ ] final class ScenarioStackShared private (val environment: RuntimeEnvironment) {
+private[optimus /*ScenarioStack*/ ] final class ScenarioStackShared private (_environment: RuntimeEnvironment) {
   def config: RuntimeComponents = environment.config
+
+  def environment: RuntimeEnvironment = {
+    val cn = EvaluationContext.currentNodeOrNull
+    if (cn ne null) {
+      // we always mark the access even if not in a withoutDAL block because it affects cache correctness
+      if (!cn.accessedRuntimeEnv())
+        cn.markAccessedRuntimeEnv()
+
+      // we only capture the violations if we're in a withoutDAL block
+      if (cn.scenarioStack.hasFlag(EvaluationState.IN_WITHOUT_DAL_BLOCK))
+        cn.scenarioStack
+          .findPluginTag(AdvancedUtils.WithoutDALViolationCollector)
+          .foreach(_.addLocation(cn.enqueuerChain()))
+    }
+
+    _environment
+  }
+
+  /**
+   * Gets the environment WITHOUT tracking the access.
+   *
+   * !!DANGER!! This is only safe to call if the usage of the environment doesn't affect the result of any nodes.
+   *
+   * For example, it's fine to use this to get details for logging, or to inspect the environment for optimization
+   * purposes. It's INCORRECT if the environment is being used in a way that affects the resulting value of a node,
+   * (including whether or not that node throws an RT exception) because we would not have tracked that the node depends
+   * upon the environment and would late allow reuse of that node from other environments.
+   *
+   * Most callers should use environment instead.
+   */
+  def environmentWithoutTrackingAccess: RuntimeEnvironment = _environment
 
   // `siStack`, `siStackWithIgnoreSyncStack` and `siRootCache` are all basically caches in that they hold scenario stacks in which
   // we want to often compute. we regenerate them each time and so not share them across the engine, because the probability of such cache

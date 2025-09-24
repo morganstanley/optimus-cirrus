@@ -131,7 +131,11 @@ class AnnotatingComponent(
 
   // these will only be flagged in new/modified files - useful for avoiding PR merge races
   private val newDeprecatings =
-    Seq[(String, List[String])]("java.net.URL.<init>" -> List(useInstead("new URI( ).toURL")))
+    Seq[(String, List[String])](
+      "java.net.URL.<init>" -> List(useInstead("new URI( ).toURL")),
+      "scala.xml.XML" -> List(useInstead(
+        "optimus.platform.util.xml.XmlLoader (or another XmlLoader copy if the module does not have a dependency on `platform`)")),
+    )
 
   private lazy val deprecatedAnno = rootMirror.getRequiredClass("scala.deprecated")
   private lazy val deprecatingAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.deprecating")

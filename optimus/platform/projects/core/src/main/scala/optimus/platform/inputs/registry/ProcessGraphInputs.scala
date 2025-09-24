@@ -39,6 +39,7 @@ import optimus.graph.diagnostics.tsprofiler.TemporalSurfProfilingLevel
 import optimus.graph.diagnostics.tsprofiler.TemporalSurfProfilingLevel.TemporalSurfProfilingLevel
 import optimus.graph.DiagnosticSettings
 import optimus.graph.OGTrace.changeObserver
+import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.graph.diagnostics.gridprofiler.Level
 import optimus.graph.diagnostics.gridprofiler.Level.Level
 import optimus.graph.diagnostics.trace.OGEventsObserver
@@ -371,6 +372,7 @@ object ProcessGraphApplicators {
     override def nodeInput: ProcessSINodeInput[Level] = ProfileLevel
     @nowarn("msg=deprecated")
     override private[inputs] def apply(lvl: Level, firstTime: Boolean): Unit = {
+      GridProfiler.updateAccessors(lvl)
       val observerToUse =
         if (DiagnosticSettings.onGrid && lvl == Level.TRACENODES) {
           // we don't allow tracenodes on grid because of performance and memory concerns, not due to something inherent with tracenodes

@@ -22,13 +22,11 @@ import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.InstallPathingJar
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
-import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 
 class PathingJarInstaller(
     installer: Installer,
@@ -58,7 +56,7 @@ class PathingJarInstaller(
 
     includedScopeArtifacts.apar.flatMap {
       case scopeArtifacts: ScopeArtifacts
-        // javaagents always need a pathing jar containing their full classpath and agent manifest
+          // javaagents always need a pathing jar containing their full classpath and agent manifest
           if scopesNeedingPathing.contains(scopeArtifacts.scopeId) || isAgentJar(scopeArtifacts.scopeId) =>
         val scopeId = scopeArtifacts.scopeId
         val pathingJar = scopeArtifacts.pathingJar
@@ -72,8 +70,8 @@ class PathingJarInstaller(
             Jars.mergeManifests(manifestResolver.manifestFromConfig(scopeId), m)
           }
 
-        manifest.toList.flatMap { m =>
-          val hash = Hashing.hashStrings(Jars.fingerprint(m))
+        manifest.flatMap { m =>
+          val hash = manifestResolver.addBuildMetadataAndFingerprint(m)
           bundleFingerprints(scopeId).writeIfChanged(installedPathingJar, hash) {
             ObtTrace.traceTask(scopeId, InstallPathingJar) {
               Files.createDirectories(installedPathingJar.parent.path)

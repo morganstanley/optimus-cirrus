@@ -64,6 +64,11 @@ import scala.util.Using
 
 object DHTStore extends Log {
 
+  import optimus.buildtool.cache.NodeCaching.optimizerCache
+  // Try to hold onto the results of remote DHT lookups
+  cachedCheck.setCustomCache(optimizerCache)
+  cachedGet.setCustomCache(optimizerCache)
+
   // WARNING do not define codec for StoredKey as it will break DHT space optimisations
   // implicit val storedKeyValueCodec: JsonValueCodec[StoredKey] = ???
   import optimus.buildtool.artifacts.JsonImplicits.{urlValueCodec, cachedArtifactTypeValueCodec}
@@ -140,16 +145,15 @@ object DHTStore extends Log {
 
 }
 
-class DHTStore(
+@entity class DHTStore(
     pathBuilder: CompilePathBuilder,
     clusterType: ClusterType = ClusterType.QA,
     artifactVersion: String,
     val cacheMode: CacheMode,
-    clientBuilder: DHTClientBuilder)
-    extends ArtifactStoreBase
+    clientBuilder: DHTClientBuilder
+) extends ArtifactStoreBase
     with RemoteAssetStore
-    with WriteableArtifactStore
-    with Log {
+    with WriteableArtifactStore {
   import DHTStore._
   override protected def cacheType: String = s"DHT $clusterType"
   override protected def stat: ObtStats.Cache = ObtStats.DHT
@@ -229,7 +233,10 @@ class DHTStore(
     }
   }
 
-  @async private def _get[A <: StoredKey: JsonValueCodec](key: A, destination: FileAsset): Option[FileAsset] = {
+  // Note: This method isn't actually RT (since it's possible that another client will write the artifact
+  // after we have queried it), but in practice if we need the artifact and it's not present in the remote
+  // cache then we'll end up creating it ourselves and won't need to get it again from the remote cache anyway.
+  @node private def cachedGet[A <: StoredKey: JsonValueCodec](key: A, destination: FileAsset): Option[FileAsset] = {
     val id = key.id
     val traceType = key.traceType
     AdvancedUtils.timed {
@@ -249,7 +256,10 @@ class DHTStore(
     }
   }
 
-  @async private def _check[A <: StoredKey: JsonValueCodec](keys: Set[A]): Set[A] = {
+  // Note: This method isn't actually RT (since it's possible that another client will write the artifact
+  // after we have queried it), but in practice if we need the artifact and it's not present in the remote
+  // cache then we'll end up creating it ourselves and won't need to get it again from the remote cache anyway.
+  @node private def cachedCheck[A <: StoredKey: JsonValueCodec](keys: Set[A]): Set[A] = {
     if (keys.nonEmpty) {
       lvClient
         .contains(
@@ -287,7 +297,7 @@ class DHTStore(
       tpe: A,
       discriminator: Option[String]): Option[A#A] = {
     val key = ArtifactKey(id, fingerprintHash, tpe, discriminator, artifactVersion)
-    val storedAsset = _get(key, pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator))
+    val storedAsset = cachedGet(key, pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator))
     tpe.fromRemoteAsset(storedAsset, id, key.toString, stat)
   }
 
@@ -298,7 +308,7 @@ class DHTStore(
       discriminator: Option[String]): Set[String] = {
     AdvancedUtils.timed {
       ObtTrace.traceTask(id, KeyQuery(clusterType, ArtifactCacheTraceType(tpe)), failureSeverity = Warning) {
-        _check(fingerprintHashes.map(f => ArtifactKey(id, f, tpe, discriminator, artifactVersion))).map {
+        cachedCheck(fingerprintHashes.map(f => ArtifactKey(id, f, tpe, discriminator, artifactVersion))).map {
           case k: ArtifactKey => k.fingerprintHash
           case _              => throw new IllegalArgumentException("Unexpected key type") // shouldn't happen :)
         }
@@ -313,7 +323,7 @@ class DHTStore(
   }
 
   @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = {
-    _get(AssetKey(url, externalArtifactVersion), destination)
+    cachedGet(AssetKey(url, externalArtifactVersion), destination)
   }
 
   @async override def put(url: URL, file: FileAsset): FileAsset = {
@@ -324,7 +334,7 @@ class DHTStore(
   @async override def check(url: URL): Boolean = {
     AdvancedUtils.timed {
       ObtTrace.traceTask(RootScopeId, Query(clusterType, RemoteAssetCacheTraceType(url)), failureSeverity = Warning) {
-        _check(Set(AssetKey(url, externalArtifactVersion)))
+        cachedCheck(Set(AssetKey(url, externalArtifactVersion)))
       }
     } match {
       case (timeNanos, validKeys) =>

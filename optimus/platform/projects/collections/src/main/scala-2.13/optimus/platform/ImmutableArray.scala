@@ -117,6 +117,4 @@ object ImmutableArray {
       override def addOne(e: A): this.type = { buf += e; this }
     }
   }
-
-  def applyOnUnderlying[A, B](f: Array[A] => B, a: ImmutableArray[A]): B = f(a.as)
 }

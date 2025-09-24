@@ -159,7 +159,7 @@ trait TypedNodeSynthesis { this: GenerateNodeMethodsComponent =>
       if (node.rhs.isEmpty || createNodeSym.isDeferred) { // probably redundant but won't hurt
         EmptyTree
       } else if (curInfo.isLoom) {
-        addIfMissing(node.sym.owner, LoomAnnotation)
+        addLoomIfMissing(node.sym.owner)
         // The next line needs to be removed when $impl goes away
         if (!node.sym.hasAnnotation(AsyncAnnotation)) addIfMissing(node.sym, NodeAnnotation)
         q"null".setType(createNodeSym.info.finalResultType)
@@ -184,6 +184,33 @@ trait TypedNodeSynthesis { this: GenerateNodeMethodsComponent =>
 
         Apply(nodifyTyped, nodifyArg :: Nil).setType(createNodeSym.info.finalResultType)
       }
+
+    // The "non sensible equals" checks in the standard compiler do _not_ run
+    // for synthetic methods. But we need to set the x$newNode method as synthetic
+    // to avoid running into "class inherits conflicting members x$node" in certain
+    // inheritance patterns.
+    //
+    // Here, we reuse code in the refchecks transform to check the code in the context on the
+    // non-synthetic node.sym method.
+    //
+    // This issue does not effect the Loom build, which doesn't wrap the user code in x$newNode.
+    val miniRefchecks = new global.refChecks.RefCheckTransformer(currentUnit) {
+      override def transform(tree: Tree): Tree = {
+        tree match {
+          case CaseDef(pat, guard, body) =>
+            transform(guard)
+            transform(body)
+          case treeInfo.Application(fun, targs, argss) =>
+            checkSensible(tree.pos, fun, argss)
+            tree.transform(this)
+          case _ =>
+            tree.transform(this)
+        }
+        tree
+      }
+    }
+    miniRefchecks.transformStats(List(node.tree), node.sym)
+
     newTypedDefDef(createNodeSym, createNodeRhs)
   }
 

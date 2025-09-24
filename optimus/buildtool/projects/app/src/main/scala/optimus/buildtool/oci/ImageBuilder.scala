@@ -63,6 +63,7 @@ import optimus.buildtool.runconf.AppRunConf
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Commit
 import optimus.buildtool.utils.FileAttrs._
+import optimus.buildtool.utils.GitLog
 import optimus.buildtool.utils.GlibcPath
 import optimus.buildtool.utils.GlibcVersion
 import optimus.buildtool.utils.Hashing
@@ -87,7 +88,6 @@ import java.nio.file.attribute.PosixFilePermission
 import java.util.{HashSet => JHashSet}
 import java.util.{Set => JSet}
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Properties
 import scala.util.Try
@@ -139,10 +139,8 @@ object AbstractImageBuilder {
 // Selected source is a path that is selected for the target Linux distribution (e.g. native libraries)
 // Image path is the path that will be used in the final image
 private final case class FileEntrySpec(discoveredAbsPath: Path, selectedSourcePath: Path, imagePath: Path)
-    extends SymLinkSearch
 
-private final case class DependencyFile(bucketId: Int, file: FileEntrySpec) {
-  def discoveredAbsPath: Path = file.discoveredAbsPath
+private final case class DependencyFile(layerName: String, file: FileEntrySpec) {
   def selectedSourcePath: Path = file.selectedSourcePath
   def imagePath: Path = file.imagePath
 }
@@ -163,7 +161,8 @@ class ImageBuilder(
     val depCopyDir: Directory,
     val useCrumbs: Boolean,
     val minimalInstallScopes: Option[Set[ScopeId]],
-    val genericRunnerGenerator: DockerGenericRunnerGenerator
+    val genericRunnerGenerator: DockerGenericRunnerGenerator,
+    val gitLog: Option[GitLog],
 ) extends AbstractImageBuilder {
 
   override protected lazy val dynamicDependencyDetector: DynamicDependencyDetector = DynamicDependencyDetector
@@ -210,6 +209,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   val useCrumbs: Boolean
   val minimalInstallScopes: Option[Set[ScopeId]]
   val genericRunnerGenerator: DockerGenericRunnerGenerator
+  val gitLog: Option[GitLog]
 
   private val relevantBundles: Set[MetaBundle] = relevantScopes.map(_.metaBundle)
   private val stagingDir = Directory.temporary()
@@ -222,7 +222,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   private val stagingPathBuilder: InstallPathBuilder = InstallPathBuilder.staging(installVersion, stagingDir)
   private val fingerprintsCache = new DisabledBundleFingerprintsCache(stagingPathBuilder)
 
-  private val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder)
+  private val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
   private val applicationScriptsInstaller = new DockerApplicationScriptsInstaller
   private val cppInstaller = new CppInstaller(stagingPathBuilder, fingerprintsCache)
   private val copyFileInstaller = new CopyFilesInstaller(
@@ -508,7 +508,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
                 .get
             )
 
-          val hash = Hashing.hashStrings(Jars.fingerprint(manifest))
+          val hash = manifestResolver.addBuildMetadataAndFingerprint(manifest)
           val stagingJar = stagingFile(scopeId, hash, "jar").asJar
           AssetUtils.atomicallyWrite(stagingJar, replaceIfExists = true) { tempJar =>
             Jars.writeManifestJar(JarAsset(tempJar), manifest)
@@ -638,7 +638,10 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
                   getFileAbsPath(sourcePathToAdd, realPathToAdd)
               }
             val inTarPathToAdd = inTarPathToAddFct(targetPath)
-            DependencyFile(pickBucketId(inTarPathToAdd), FileEntrySpec(sourcePathToAdd, fileAbsPath, inTarPathToAdd))
+
+            val bucketId = pickBucketId(inTarPathToAdd)
+            val layerName = pickSymLinkLayer(sourcePathToAdd).getOrElse(f"<dependencies-$bucketId%02d>")
+            DependencyFile(layerName, FileEntrySpec(sourcePathToAdd, fileAbsPath, inTarPathToAdd))
           }
         }
       )
@@ -775,24 +778,12 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
             .map(_.selectedSourcePath.toString)
             .mkString(",\n")}")
       // extraImages files should be prior than dependencies extraFiles
-      extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.selectedSourcePath)) ++ includedDeps.toSeq.sortBy(e =>
-        (e.bucketId, e.selectedSourcePath))
-    } else depsPaths.toSeq.sortBy(e => (e.bucketId, e.selectedSourcePath))
-    deps.groupBy(f => f.bucketId).apar.foreach { case (bucketId, depDefs) => // parallel inserts for all buckets
-      depDefs.foreach { depDef => // jib will keep insert order
-        val absPath = depDef.selectedSourcePath
-        val symLinkLayer: Option[String] = pickSymLinkLayer(depDef.discoveredAbsPath)
-        val sourcePath =
-          if (symLinkLayer.isDefined) {
-            val finalPath = stagingDir.path.resolve(absPath)
-            if (!Files.exists(finalPath)) Files.copy(absPath, finalPath)
-            finalPath
-          } else absPath
-
-        val layerName = symLinkLayer.getOrElse(f"<dependencies-$bucketId%02d>")
-        val entry = depDef.file.copy(selectedSourcePath = sourcePath)
-        addEntryToLayer(layers.get(layerName), entry)
-      }
+      extraImagesPaths.toSeq.sortBy(e => (e.layerName, e.selectedSourcePath)) ++ includedDeps.toSeq.sortBy(e =>
+        (e.layerName, e.selectedSourcePath))
+    } else depsPaths.toSeq.sortBy(e => (e.layerName, e.selectedSourcePath))
+    deps.groupBy(f => f.layerName).apar.foreach { case (layerName, depDefs) => // parallel inserts for all buckets
+      val layer = layers.get(layerName)
+      depDefs.foreach(d => addEntryToLayer(layer, d.file)) // jib will keep insert order
     }
 
     layers.asMap.asScala.toSeq.sortBy(_._1).foreach { case (_, layer) =>

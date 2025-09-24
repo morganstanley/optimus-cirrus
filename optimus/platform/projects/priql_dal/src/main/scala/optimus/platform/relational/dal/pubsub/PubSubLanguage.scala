@@ -17,9 +17,13 @@ import optimus.platform.relational.dal.core._
 import optimus.platform.relational.data.mapping.MappingEntityLookup
 import optimus.platform.relational.data.tree.ColumnElement
 import optimus.platform.relational.data.tree.ContainsElement
+import optimus.platform.relational.data.tree.DbEntityElement
+import optimus.platform.relational.tree.FuncElement
+import optimus.platform.relational.tree.MethodCallee
 import optimus.platform.relational.tree.BinaryExpressionElement
 import optimus.platform.relational.tree.BinaryExpressionType._
 import optimus.platform.relational.tree.ConstValueElement
+import optimus.platform.relational.tree.MemberElement
 import optimus.platform.relational.tree.RelationElement
 
 class PubSubLanguage(lkup: MappingEntityLookup) extends DALLanguage(lkup) {
@@ -32,6 +36,11 @@ class PubSubLanguage(lkup: MappingEntityLookup) extends DALLanguage(lkup) {
         case c: ContainsElement if c.element.isInstanceOf[ColumnElement] => true
         case _: ColumnElement                                            => true
         case _: ConstValueElement                                        => true
+        case FuncElement(
+              mc: MethodCallee,
+              List(_: ConstValueElement),
+              _: ColumnElement | MemberElement(_: DbEntityElement, _)) =>
+          mc.name == "contains"
         case x => throw new RelationalException(s"Unsupported filter condition $x")
       }
   }
@@ -55,7 +64,9 @@ class PubSubLanguage(lkup: MappingEntityLookup) extends DALLanguage(lkup) {
           isIndex(c.element.asInstanceOf[ColumnElement]) && !isCollection(c.element.asInstanceOf[ColumnElement])
         case c: ColumnElement     => !isCollection(c)
         case _: ConstValueElement => true
-        case _                    => false
+        case FuncElement(mc: MethodCallee, List(_: ConstValueElement), c: ColumnElement) if isCollection(c) =>
+          mc.name == "contains"
+        case _ => false
       })
   }
 

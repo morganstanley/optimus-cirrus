@@ -164,6 +164,12 @@ class NodeLiftComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseInf
 
     def transformSafe(tree: Tree): Tree = tree match {
       case cd @ (_: ClassDef | _: ModuleDef) => atAsyncOffScope(cd)(super.transform(cd))
+      case d: DefDef =>
+        if (curInfo.isLoom && d.symbol.hasAnnotation(NodeSyncLiftAnnotation)) {
+          // we generate an overload of $queued
+          addLoomIfMissing(currentClass)
+        }
+        super.transform(tree)
       case Apply(fun, args) =>
         atApply(tree, fun) {
 
@@ -171,7 +177,7 @@ class NodeLiftComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseInf
           if (singleArg && tree.symbol.hasAnnotation(OnlyTweakableArgAnnotation))
             errorOnNotTweakable(args.head)
 
-          if (curInfo.isLoom && !currentClass.isAnonymousClass && tree.symbol.hasAnnotation(NodeSyncLiftAnnotation)) {
+          if (curInfo.isLoom && tree.symbol.hasAnnotation(NodeSyncLiftAnnotation)) {
             addLoomIfMissing(currentClass)
           }
           if (hasNodeLiftAnno(tree.symbol)) {

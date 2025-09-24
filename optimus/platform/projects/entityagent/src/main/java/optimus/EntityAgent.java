@@ -50,17 +50,17 @@ public class EntityAgent {
       new ConcurrentHashMap<>();
   private static final String VERSION_STRING = "Entity Agent(v8)";
 
-  /** Write to stdout. */
+  /** Writes a message to stderr. */
   public static void logMsg(String msg) {
     if (!silent) {
-      System.out.println(VERSION_STRING + ": " + msg);
+      System.err.println(VERSION_STRING + ": " + msg);
     }
   }
 
-  /** Write to stderr. */
+  /** Writes a message with prefix "ERROR" to stderr. */
   public static void logErrMsg(String msg) {
     if (!silent) {
-      System.err.println(VERSION_STRING + ": " + msg);
+      System.err.println(VERSION_STRING + ": ERROR " + msg);
     }
   }
 
@@ -398,5 +398,9 @@ public class EntityAgent {
         logException("error in retransform", e);
       }
     }
+  }
+
+  public static void retransformOrThrow(Class<?>[] clss) throws UnmodifiableClassException {
+    instrumentation.retransformClasses(clss);
   }
 }

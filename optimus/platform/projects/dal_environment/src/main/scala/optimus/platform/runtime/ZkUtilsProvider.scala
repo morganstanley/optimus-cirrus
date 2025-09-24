@@ -11,18 +11,15 @@
  */
 package optimus.platform.runtime
 
-import com.ms.silverking.cloud.zookeeper.ZooKeeperConfig
-import optimus.platform.dal.config.DalEnv
 import com.ms.zookeeper.clientutils.ZkEnv
 import msjava.zkapi.ZkaDirectoryWatcher
 import msjava.zkapi.internal.ZkaContext
 import optimus.config.RuntimeConfiguration
-import optimus.dsi.zookeeper.ZNode
+import optimus.platform.dal.config.DalEnv
 import org.apache.curator.framework.CuratorFramework
 
-import scala.jdk.CollectionConverters._
-
 import java.time.Instant
+import scala.jdk.CollectionConverters._
 
 trait ZkUtilsProvider {
   def getZkEnv(env: DalEnv): ZkEnv
@@ -59,8 +56,6 @@ trait ZkUtilsProvider {
 
   def parseInstant(raw: Array[Byte]): Instant
   def parseKnownZkEnv(envName: String): ZkEnv
-
-  def getSilverKingZkConfig(zkEnv: ZkEnv, subNodeUnderOptimusOpt: Option[ZNode]): ZooKeeperConfig
 
   def isCloud: Boolean
 

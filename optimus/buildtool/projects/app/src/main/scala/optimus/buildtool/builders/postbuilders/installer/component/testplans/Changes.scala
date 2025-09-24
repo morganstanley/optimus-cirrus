@@ -16,12 +16,13 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.runconf.RunConf
 import optimus.platform._
 
-@entity class Changes(
-    val changes: Option[Set[ScopeId]],
-    val scopeConfigSource: ScopeConfigurationSource,
-) {
+@entity trait Changes {
 
-  def isDefined: Boolean = changes.isDefined
+  def scopes: Option[Set[ScopeId]]
+
+  def scopeConfigSource: ScopeConfigurationSource
+
+  def isDefined: Boolean = scopes.isDefined
 
   /**
    * Entry is considered as 'changed' when:
@@ -37,7 +38,7 @@ import optimus.platform._
     else None
   }
 
-  @node def directlyChangedScopes: Set[ScopeId] = changes.getOrElse(Set.empty)
+  @node def directlyChangedScopes: Set[ScopeId] = scopes.getOrElse(Set.empty)
 
   @node private def taskDependenciesChanged(task: TestplanTask, includedRunconfs: Set[RunConf]): Boolean = {
     val contractTestNames = Set("consumerContractTest", "providerContractTest")
@@ -63,7 +64,7 @@ import optimus.platform._
     scopeExists
   }
 
-  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = changes.forall { c =>
+  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = scopes.forall { c =>
     val allDeps = dependencies(scopeId)
     val hasScope = allDeps.intersect(c).nonEmpty
     hasScope

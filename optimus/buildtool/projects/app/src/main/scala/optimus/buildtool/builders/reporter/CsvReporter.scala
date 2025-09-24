@@ -27,7 +27,6 @@ import optimus.buildtool.files.Pathed
 import optimus.buildtool.utils.SimpleCsvWriter
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
 
@@ -36,7 +35,15 @@ class CsvReporter(obtConfig: ObtConfig) {
   @async def writeAlertReport(dir: Directory, msgs: Seq[MessagesArtifact]): FilesToReport = {
     val scopedWarnings = toScopedMessages(msgs, CsvReporter.predicateFnOr).filter(_.msg.isWarning)
     val allWarnings = writeCsvfile(dir, scopedWarnings, "all-warnings.csv")(CompilationMessageCsvWriter)
+
     FilesToReport(toCompress = allWarnings.toIndexedSeq)
+  }
+
+  @async def writeInfoReport(dir: Directory, msgs: Seq[MessagesArtifact]): FilesToReport = {
+    val scopedInfo = toScopedMessages(msgs, CsvReporter.predicateFnNot)
+    val allInfo = writeCsvfile(dir, scopedInfo, "all-info.csv")(CompilationMessageCsvWriter)
+
+    FilesToReport(toCompress = allInfo.toIndexedSeq)
   }
 
   @node private def toScopedMessages(
@@ -44,7 +51,7 @@ class CsvReporter(obtConfig: ObtConfig) {
       filterPredicate: CompilationMessage => Boolean): Seq[ScopedCompilationMessage] =
     msgs.apar.flatMap { messageArtifact =>
       val scopeId = messageArtifact.id.scopeId
-      val owner = if (scopeId == RootScopeId) None else Some(obtConfig.owner(scopeId))
+      val owner = if (scopeId == RootScopeId) None else obtConfig.owner(scopeId)
       messageArtifact.messages.collect {
         case m if filterPredicate(m) =>
           ScopedCompilationMessage(owner, scopeId, m)
@@ -93,7 +100,7 @@ class CsvReporter(obtConfig: ObtConfig) {
 object CsvReporter {
   val predicateFnAnd: CompilationMessage => Boolean = m => m.isWarning && m.alarmId.isDefined
   val predicateFnOr: CompilationMessage => Boolean = m => m.isWarning || m.alarmId.isDefined
-
+  val predicateFnNot: CompilationMessage => Boolean = m => m.isInfo
   def toStackTraceFormat(alertLoc: AlertLoc): String = {
     val name = Pathed.name(alertLoc.loc.filepath)
     s"${alertLoc.module}.${FilenameUtils.removeExtension(name)}.($name:${alertLoc.loc.startLine})"
@@ -116,17 +123,17 @@ private[this] object CompilationMessageCsvWriter extends SimpleCsvWriter[ScopedC
       },
       ID_HEADER -> { _.msg.alarmId },
       SOURCE_PATH_HEADER -> { _.msg.pos.map(_.filepath) },
-      "Meta" -> { _.scopeId.meta },
-      "Project" -> { _.scopeId.bundle },
-      "Module" -> { _.scopeId.module },
-      "Scope" -> { _.scopeId.tpe },
-      "Filename" -> { _.msg.pos.map(p => Pathed.name(p.filepath)) },
+      META_COL_HEADER -> { _.scopeId.meta },
+      PROJECT_COL_HEADER -> { _.scopeId.bundle },
+      MODULE_COL_HEADER -> { _.scopeId.module },
+      SCOPE_COL_HEADER -> { _.scopeId.tpe },
+      FILENAME_COL_HEADER -> { _.msg.pos.map(p => Pathed.name(p.filepath)) },
       LINE_HEADER -> { _.msg.pos.map(_.startLine) },
-      "Column" -> { _.msg.pos.map(_.startColumn) },
+      COLUMN_COL_HEADER -> { _.msg.pos.map(_.startColumn) },
       MESSAGE_HEADER -> { m => StringUtils.abbreviate(m.msg.msg, "...", 500) },
-      "Clickable Reference" -> { _.msg.pos.map(p => s".(${Pathed.name(p.filepath)}:${p.startLine})") },
+      CLICKABLE_REFERENCE_COL_HEADER -> { _.msg.pos.map(p => s".(${Pathed.name(p.filepath)}:${p.startLine})") },
       SOURCE_COL_HEADER -> { _.msg.pos.map(p => FilenameUtils.getExtension(p.filepath)) },
-      "Owner" -> { _.owner }
+      OWNER_COL_HEADER -> { _.owner }
     )
 }
 

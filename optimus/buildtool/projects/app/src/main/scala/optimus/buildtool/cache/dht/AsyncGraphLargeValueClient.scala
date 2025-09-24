@@ -20,6 +20,7 @@ import optimus.dht.client.api.kv.KVLargeValue
 import optimus.dht.client.api.servers.ServerConnectionState
 import optimus.dht.client.api.transport.OperationDetails
 import optimus.dht.common.api.Keyspace
+import optimus.dht.common.util.StringTool
 import optimus.graph.NodePromise
 import optimus.platform._
 import optimus.platform.util.Log
@@ -46,16 +47,19 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
             results: util.List[KVClient.KeyWithResult[lang.Boolean, KVKey]],
             opDetails: OperationDetails): Unit = {
           val ret = results.asScala
-          log.debug(s"DHT CHECK $correlationName completing for $ret")
+          log.debug(
+            s"DHT CHECK $correlationName completing with result ${ret.map(_.result).mkString(",")}, op=$opDetails")
           ret.foreach(r => fs(r.key)(Success(Some(r.result))))
         }
         override def errors(keys: util.List[KVKey], exception: Exception, opDetails: OperationDetails): Unit = {
           val errorKeys = keys.asScala
-          log.error(s"DHT CHECK $correlationName: ERROR: ${exception.getMessage}", exception)
+          log.error(s"DHT CHECK $correlationName: ERROR: ${exception.getMessage}, op=$opDetails", exception)
           errorKeys.foreach(k => fs(k)(Success(None)))
         }
       }
     )
+    log.debug(
+      s"DHT CHECK START $correlationName keys=${keys.map(x => StringTool.formatByteHash(x.hash())).mkString("(", ",", ")")}")
   }
 
   private def _putLarge(keyspace: Keyspace, entry: KVLargeEntry[KVKey], correlationName: String)(
@@ -66,16 +70,17 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
       correlationName,
       new Callback[lang.Boolean] {
         override def result(result: lang.Boolean, opDetails: OperationDetails): Unit = {
-          log.debug(s"DHT PUT $correlationName. Overwritten: ${result.booleanValue()}")
+          log.debug(s"DHT PUT $correlationName. Overwritten: ${result.booleanValue()}, op=$opDetails")
           f(Success(result.booleanValue()))
         }
         override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
-          log.warn(s"DHT PUT $correlationName: ERROR: ${exception.getMessage}", exception)
+          log.warn(s"DHT PUT $correlationName: ERROR: ${exception.getMessage}, op=$opDetails", exception)
           failedWrites.incrementAndGet()
           f(Success(false)) // TODO (OPTIMUS-66613) implement retry logic
         }
       }
     )
+    log.debug(s"DHT PUT START $correlationName key=${StringTool.formatByteHash(entry.key().hash())}")
   }
 
   private def _removeLarge(keyspace: Keyspace, entry: KVKey, correlationName: String)(f: Try[Boolean] => Unit): Unit = {
@@ -85,15 +90,17 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
       correlationName,
       new Callback[lang.Boolean] {
         override def result(result: lang.Boolean, opDetails: OperationDetails): Unit = {
-          log.debug(s"DHT REMOVE $correlationName. Result: ${result.booleanValue()}")
+          log.debug(s"DHT REMOVE $correlationName. Result: ${result.booleanValue()}, op=$opDetails")
           f(Success(result.booleanValue()))
         }
         override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
-          log.warn(s"DHT REMOVE $correlationName: ERROR: ${exception.getMessage}", exception)
+          log.warn(s"DHT REMOVE $correlationName: ERROR: ${exception.getMessage}, op=$opDetails", exception)
           f(Success(false))
         }
       }
     )
+    log.debug(s"DHT REMOVE START $correlationName key=${StringTool.formatByteHash(entry.hash())}")
+
   }
 
   private def _getLarge(keyspace: Keyspace, key: KVKey, correlationName: String)(
@@ -105,11 +112,11 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
       new Callback[KVLargeEntry[KVKey]] {
         override def result(result: KVLargeEntry[KVKey], opDetails: OperationDetails): Unit = {
           val ret = Option(result.value)
-          log.debug(s"DHT GET $correlationName. Found: '$ret'")
+          log.debug(s"DHT GET $correlationName. Found: '$ret', op=$opDetails")
           f(Success(ret))
         }
         override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
-          log.error(s"DHT GET $correlationName: ERROR: ${exception.getMessage}")
+          log.error(s"DHT GET $correlationName: ERROR: ${exception.getMessage}, op=$opDetails")
           if (opDetails.server != null) {
             opDetails.server.state() match {
               case ServerConnectionState.DISCONNECTED =>
@@ -122,6 +129,7 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
         }
       }
     )
+    log.debug(s"DHT GET START $correlationName key=${StringTool.formatByteHash(key.hash())}")
   }
 
   @async def getLarge(keyspace: Keyspace, key: KVKey, correlationName: String): Option[KVLargeValue] = {

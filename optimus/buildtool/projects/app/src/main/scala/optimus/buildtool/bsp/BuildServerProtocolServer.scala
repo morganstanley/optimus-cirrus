@@ -39,7 +39,6 @@ import optimus.buildtool.utils.GitLog
 import optimus.platform._
 import org.eclipse.lsp4j.jsonrpc.Launcher
 
-import scala.collection.immutable.Seq
 import scala.concurrent.TimeoutException
 
 object BuildServerProtocolServer {

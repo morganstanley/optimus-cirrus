@@ -19,7 +19,6 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.JsonAsset
-import optimus.buildtool.generators.ZincGenerator.ZincGeneratorName
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace.CompileOnlyResolve
 import optimus.buildtool.trace.CompileResolve
@@ -37,13 +36,11 @@ import optimus.buildtool.utils.Jars
 import optimus.platform._
 import optimus.utils.CaseObjectExtractor
 
-import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
-import scala.collection.immutable.Seq
-import scala.jdk.CollectionConverters._
 
 trait ArtifactType {
+  type A <: Artifact
   def name: String
   def suffix: String
   protected def hash(file: FileAsset): String = Hashing.hashFileContent(file)
@@ -80,7 +77,7 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
   override val suffix = RgzExt
 
   override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
-  @node override def fromAsset(id: ScopeId, a: Asset): ResolutionArtifact = {
+  @node override def fromAsset(id: ScopeId, a: Asset): A = {
     import JsonImplicits.resolutionArtifactValueCodec
     val json = JsonAsset(a.path)
     val cached = AssetUtils.readJson[ResolutionArtifact.Cached](json)
@@ -105,7 +102,7 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
 
 trait FingerprintArtifactType extends ArtifactType {
   type A <: FingerprintArtifact
-  override val suffix = "fingerprint"
+  override val suffix = "fingerprint.zstd"
 }
 
 trait GeneratedSourceArtifactType extends CachedArtifactType {
@@ -123,8 +120,8 @@ trait GeneratedSourceArtifactType extends CachedArtifactType {
       val md = AssetUtils.readJson[GeneratedSourceMetadata](metadataFile, unzip = false)
       GeneratedSourceArtifact.create(
         id,
+        md.generatorType,
         md.generatorName,
-        this,
         JarAsset(a.path),
         md.sourcePath,
         md.messages,
@@ -150,16 +147,25 @@ trait InternalClassFileArtifactType extends CachedArtifactType {
   }
 }
 
-trait MessageArtifactType extends CachedArtifactType {
-  type A = CompilerMessagesArtifact
+sealed trait MessageArtifactType extends ArtifactType {
+  type A <: MessagesArtifact
+}
+
+sealed trait InMemoryMessageArtifactType extends MessageArtifactType {
+  override type A = InMemoryMessagesArtifact
+  override val suffix = ""
+}
+
+sealed trait CachedMessageArtifactType extends MessageArtifactType with CachedArtifactType {
+  override type A = CompilerMessagesArtifact
   override val suffix = MgzExt
 
   override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): CompilerMessagesArtifact =
-    MessageArtifactType.fromUnwatchedPath(a.path).watchForDeletion()
+    CachedMessageArtifactType.fromUnwatchedPath(a.path).watchForDeletion()
 }
 
-object MessageArtifactType {
+object CachedMessageArtifactType {
   // Artifacts created with `fromUnwatchedPath` will not be monitored for deletion automatically, and so will need to be
   // watched separately. All uses of `fromUnwatchedPath` outside tests should be accompanied by a method detailing
   // how the deletion monitoring will be achieved.
@@ -328,44 +334,33 @@ object ArtifactType {
   case object Sources extends BaseArtifactType("sources") with InternalClassFileArtifactType {
     override val suffix = "src.jar"
   }
-  case object CppBridge extends BaseArtifactType("cpp-bridge") with GeneratedSourceArtifactType
-  case object ProtoBuf extends BaseArtifactType("protobuf") with GeneratedSourceArtifactType
-  case object Jaxb extends BaseArtifactType("jaxb") with GeneratedSourceArtifactType
-  case object JsonSchema extends BaseArtifactType("json-schema") with GeneratedSourceArtifactType
-  case object Scalaxb extends BaseArtifactType("scalaxb") with GeneratedSourceArtifactType
-  case object Jxb extends BaseArtifactType("jxb") with GeneratedSourceArtifactType
-  case object FlatBuffer extends BaseArtifactType("flatbuffer") with GeneratedSourceArtifactType
-  case object Zinc extends BaseArtifactType(ZincGeneratorName) with GeneratedSourceArtifactType
-  case object Avro extends BaseArtifactType(name = "avro") with GeneratedSourceArtifactType
+  case object GeneratedSource extends BaseArtifactType("generated-source") with GeneratedSourceArtifactType
   case object Scala extends BaseArtifactType("scala") with InternalClassFileArtifactType
   case object Java extends BaseArtifactType("java") with InternalClassFileArtifactType
   case object Jmh extends BaseArtifactType("jmh") with InternalClassFileArtifactType
   case object Resources extends BaseArtifactType("resources") with InternalClassFileArtifactType
   case object ArchiveContent extends BaseArtifactType("archive-content") with InternalClassFileArtifactType
-  case object JavaMessages extends BaseArtifactType("java-messages") with MessageArtifactType
-  case object RegexMessages extends BaseArtifactType("regex-messages") with MessageArtifactType
-  case object ScalaMessages extends BaseArtifactType("scala-messages") with MessageArtifactType
-  case object JmhMessages extends BaseArtifactType("jmh-messages") with MessageArtifactType
-  case object ConfigMessages extends BaseArtifactType("config-messages") with MessageArtifactType
-  case object DuplicateMessages extends BaseArtifactType("duplicate-messages") with MessageArtifactType
-  case object ValidationMessages extends BaseArtifactType("validation-messages") with MessageArtifactType
+  case object JavaMessages extends BaseArtifactType("java-messages") with CachedMessageArtifactType
+  case object RegexMessages extends BaseArtifactType("regex-messages") with CachedMessageArtifactType
+  case object ScalaMessages extends BaseArtifactType("scala-messages") with CachedMessageArtifactType
+  case object JmhMessages extends BaseArtifactType("jmh-messages") with CachedMessageArtifactType
+  case object ConfigMessages extends BaseArtifactType("config-messages") with InMemoryMessageArtifactType
+  case object DuplicateMessages extends BaseArtifactType("duplicate-messages") with CachedMessageArtifactType
+  case object ValidationMessages extends BaseArtifactType("validation-messages") with InMemoryMessageArtifactType
   case object ScalaAnalysis extends BaseArtifactType("scala-analysis") with AnalysisArtifactType
   case object JavaAnalysis extends BaseArtifactType("java-analysis") with AnalysisArtifactType
   case object JavaAndScalaSignatures extends BaseArtifactType("signatures") with SignatureArtifactType
-  case object SignatureMessages extends BaseArtifactType("signature-messages") with MessageArtifactType
+  case object SignatureMessages extends BaseArtifactType("signature-messages") with CachedMessageArtifactType
   case object SignatureAnalysis extends BaseArtifactType("signature-analysis") with AnalysisArtifactType
   case object Pathing extends BaseArtifactType("pathing") with PathingArtifactType
   case object Cpp extends BaseArtifactType("cpp") with CppArtifactType
   case object Electron extends BaseArtifactType("electron") with ElectronArtifactType
   case object Python extends BaseArtifactType("python") with PythonArtifactType
   case object CompiledRunconf extends BaseArtifactType("runconf") with CompiledRunconfArtifactType
-  case object CompiledRunconfMessages extends BaseArtifactType("runconf-messages") with MessageArtifactType
+  case object CompiledRunconfMessages extends BaseArtifactType("runconf-messages") with CachedMessageArtifactType
   case object GenericFiles extends BaseArtifactType("generic-files") with GenericFilesArtifactType
   case object RegexMessagesFingerprint
       extends BaseArtifactType("regex-messages-fingerprint")
-      with FingerprintArtifactType
-  case object ValidationMessagesFingerprint
-      extends BaseArtifactType("validation-messages-fingerprint")
       with FingerprintArtifactType
   case object StructureFingerprint extends BaseArtifactType("structure-fingerprint") with FingerprintArtifactType
   case object GenerationFingerprint extends BaseArtifactType("generation-fingerprint") with FingerprintArtifactType
@@ -373,18 +368,17 @@ object ArtifactType {
       extends BaseArtifactType("compilation-fingerprint")
       with FingerprintArtifactType
       with CachedArtifactType {
-    private val HashRegex = s".*\\.(HASH[^.]*)\\.fingerprint".r
+    private val HashRegex = s".*\\.(HASH[^.]*)\\.fingerprint\\.zstd".r
     override type A = FingerprintArtifact with PathedArtifact
 
     override def isReadable(a: FileAsset): Boolean = AssetUtils.isTextContentReadable(a)
     @node def fromAsset(id: ScopeId, a: Asset): FingerprintArtifact with PathedArtifact = {
-      val fingerprint = Files.readAllLines(a.path).asScala.to(Seq)
       // slightly hacky
       val hash = a.pathString match {
         case HashRegex(hash) => hash
         case p               => throw new IllegalArgumentException(s"Unexpected fingerprint path: $p")
       }
-      FingerprintArtifact.create(InternalArtifactId(id, this, None), FileAsset(a.path), fingerprint, hash)
+      FingerprintArtifact.create(InternalArtifactId(id, this, None), FileAsset(a.path), hash)
     }
   }
   case object ResourceFingerprint extends BaseArtifactType("resource-fingerprint") with FingerprintArtifactType

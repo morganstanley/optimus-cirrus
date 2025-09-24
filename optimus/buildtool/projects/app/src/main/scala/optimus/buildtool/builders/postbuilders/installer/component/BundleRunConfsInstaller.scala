@@ -32,7 +32,6 @@ import optimus.platform.util.Log
 
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 /**
  * @param uniqueFiles
@@ -96,11 +95,11 @@ class BundleRunConfsInstaller(
       case a: CompiledRunconfArtifact if a.scopeId.metaBundle == metaBundle =>
         a.scopeId.properPath -> a
     }
-    SortedMap(compiledRunconfArtifacts.toArray: _*)
+    SortedMap.from(compiledRunconfArtifacts)
   }
 
   @async private[component] def collectVenvMappings(metaBundle: MetaBundle): SortedMap[String, String] = {
-    SortedMap(
+    SortedMap.from(
       factory.scopeIds
         .filter(_.metaBundle == metaBundle)
         .apar
@@ -113,8 +112,7 @@ class BundleRunConfsInstaller(
               scoped.id.toString -> pyModule.scope("main").toString
             }
           }
-        }
-        .toArray: _*)
+        })
   }
 
   // =============================================

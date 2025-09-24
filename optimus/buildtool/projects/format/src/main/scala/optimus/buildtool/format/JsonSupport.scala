@@ -12,9 +12,10 @@
 package optimus.buildtool.format
 
 import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
+import com.fasterxml.jackson.module.scala.JavaTypeable
 import optimus.buildtool.files.FileAsset
 
 import java.io.InputStream
@@ -24,26 +25,26 @@ import java.nio.file.StandardOpenOption
 
 object JsonSupport {
 
-  private val mapper: ObjectMapper with ScalaObjectMapper = {
-    val inner = new ObjectMapper() with ScalaObjectMapper
-    inner
-      .registerModule(DefaultScalaModule)
+  private val mapper: JsonMapper with ClassTagExtensions = {
+    JsonMapper
+      .builder()
+      .addModule(DefaultScalaModule)
       .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    inner
+      .build() :: ClassTagExtensions
   }
   private val prettyMapper = mapper.writerWithDefaultPrettyPrinter()
 
-  def readValue[T: Manifest](inputStream: InputStream): T = mapper.readValue[T](inputStream)
+  def readValue[T: JavaTypeable](inputStream: InputStream): T = mapper.readValue[T](inputStream)
 
-  def readValue[T: Manifest](path: Path): T = {
+  def readValue[T: JavaTypeable](path: Path): T = {
     val inputStream = Files.newInputStream(path)
     try readValue[T](inputStream)
     finally inputStream.close()
   }
 
-  def readValue[T: Manifest](file: FileAsset): T = readValue[T](file.path)
+  def readValue[T: JavaTypeable](file: FileAsset): T = readValue[T](file.path)
 
-  def writeValueAsString[T: Manifest](value: T): String = mapper.writeValueAsString(value)
+  def writeValueAsString[T: JavaTypeable](value: T): String = mapper.writeValueAsString(value)
 
   // TODO (OPTIMUS-47169): Eventually replace other json writers in AssetUtils and Asset with this one.
   /**
@@ -51,7 +52,7 @@ object JsonSupport {
    *
    * To be used with [[optimus.buildtool.utils.AssetUtils.atomicallyWrite()]].
    */
-  def jsonWriter[T: Manifest](value: T, prettyPrint: Boolean = false) = (path: Path) => {
+  def jsonWriter[T: JavaTypeable](value: T, prettyPrint: Boolean = false): Path => Unit = (path: Path) => {
     val out = Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)
     try {
       val bytes = if (prettyPrint) prettyMapper.writeValueAsBytes(value) else mapper.writeValueAsBytes(value)

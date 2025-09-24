@@ -14,7 +14,6 @@ package optimus.platform.pickling
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.pickling.ChainedIDUnpickler
-import optimus.datatype._
 import optimus.platform.AsyncImplicits._
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
@@ -32,6 +31,8 @@ import optimus.platform.storable.ReferenceHolder
 import optimus.platform.temporalSurface.operations.EntityReferenceQueryReason
 import optimus.scalacompat.collection._
 
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -43,6 +44,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import scala.annotation.unused
 import scala.collection.compat._
 import scala.collection.compat.{Factory => ScalaFactory}
 import scala.collection.immutable
@@ -82,9 +84,10 @@ class IdentityUnpickler[T: Manifest] extends Unpickler[T] {
 
 object IntUnpickler extends Unpickler[Int] {
   @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): Int = pickled match {
-    case i: Int   => i
-    case s: Short => s.toInt
-    case _        => throw new UnexpectedPickledTypeException(Manifest.Int, pickled.getClass)
+    case i: Int                    => i
+    case s: Short                  => s.toInt
+    case d: Double if d == d.toInt => d.toInt // We unfortunately wrote some doubles as ints already to the DAL
+    case _                         => throw new UnexpectedPickledTypeException(Manifest.Int, pickled.getClass)
   }
 }
 
@@ -110,13 +113,12 @@ object DoubleUnpickler extends Unpickler[Double] with NumericBoundConstants {
     case i: Int    => i.toDouble
     case s: Short  => s.toDouble
     case l: Long   => l.toDouble
-    case s: String if s == Infinity || s == NegInfinity || s == NaN => {
+    case s: String if s == Infinity || s == NegInfinity || s == NaN =>
       s match {
         case Infinity    => Double.PositiveInfinity
         case NegInfinity => Double.NegativeInfinity
         case NaN         => Double.NaN
       }
-    }
     case _ => throw new UnexpectedPickledTypeException(Manifest.Double, pickled.getClass)
   }
 }
@@ -127,13 +129,12 @@ object FloatUnpickler extends Unpickler[Float] with NumericBoundConstants {
     case d: Double => d.toFloat
     case s: Short  => s.toFloat
     case l: Long   => l.toFloat
-    case s: String if s == Infinity || s == NegInfinity || s == NaN => {
+    case s: String if s == Infinity || s == NegInfinity || s == NaN =>
       s match {
         case Infinity    => Float.PositiveInfinity
         case NegInfinity => Float.NegativeInfinity
         case NaN         => Float.NaN
       }
-    }
     case _ => throw new UnexpectedPickledTypeException(Manifest.Float, pickled.getClass)
   }
 }
@@ -146,16 +147,16 @@ object BooleanUnpickler extends Unpickler[Boolean] {
 }
 
 object ShortUnpickler extends Unpickler[Short] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): Short = pickled match {
     case l: Long  => l.toShort
     case i: Int   => i.toShort
-    case s: Short => s.toShort
+    case s: Short => s
     case _        => throw new UnexpectedPickledTypeException(Manifest.Short, pickled.getClass)
   }
 }
 
 object CharUnpickler extends Unpickler[Char] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): Char = pickled match {
     case l: Long => l.toChar
     case i: Int  => i.toChar
     case s: Char => s
@@ -164,7 +165,7 @@ object CharUnpickler extends Unpickler[Char] {
 }
 
 object ByteUnpickler extends Unpickler[Byte] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): Byte = pickled match {
     case l: Long  => l.toByte
     case i: Int   => i.toByte
     case s: Short => s.toByte
@@ -187,9 +188,9 @@ class OptionUnpickler[T: Manifest](val innerUnpickler: Unpickler[T]) extends Unp
     case None                                  => None
     case null                                  => None
     case s: collection.Seq[_] if s.length == 1 => Some(innerUnpickler.unpickle(s.head, ctxt))
-    case s: collection.Seq[_] if s.length == 0 => None
+    case s: collection.Seq[_] if s.isEmpty     => None
     case r: AnyRef                             => Some(innerUnpickler.unpickle(r, ctxt))
-    case o => throw new UnexpectedPickledTypeException(implicitly[Manifest[Option[T]]], pickled.getClass)
+    case _ => throw new UnexpectedPickledTypeException(implicitly[Manifest[Option[T]]], pickled.getClass)
   }
 }
 
@@ -201,7 +202,7 @@ class CollectionUnpickler[T, Impl <: Iterable[T]](private[optimus] val innerUnpi
     factory: ScalaFactory[T, Impl])
     extends Unpickler[Impl] {
   @node def unpickle(pickled: Any, ctxt: PickledInputStream): Impl = pickled match {
-    case i: Iterable[a] =>
+    case i: Iterable[_] =>
       i.apar.map { n =>
         innerUnpickler.unpickle(n, ctxt)
       }(factory.breakOut)
@@ -220,8 +221,14 @@ class EntityUnpickler[T <: Entity: Manifest] extends Unpickler[T] {
       val resolver = EvaluationContext.entityResolver.asInstanceOf[EntityResolverReadImpl]
       val actualType = manifest[T].runtimeClass.asSubclass(classOf[Entity])
       inlined
-        .getOrElse(resolver
-          .findByReferenceWithType(ref, ctxt.temporalContext, actualType, false, EntityReferenceQueryReason.Unpickling))
+        .getOrElse(
+          resolver
+            .findByReferenceWithType(
+              ref,
+              ctxt.temporalContext,
+              actualType,
+              clazzIsActualType = false,
+              EntityReferenceQueryReason.Unpickling))
         .asInstanceOf[T]
     // We can get raw entities here when dealing with Java Serialization of temporary entity graphs for dist.
     case ent: T =>
@@ -234,14 +241,14 @@ class EntityUnpickler[T <: Entity: Manifest] extends Unpickler[T] {
 class JavaEnumUnpickler[E <: Enum[E]: Manifest] extends Unpickler[E] {
   private[this] val manifestE = manifest[E]
 
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): E = pickled match {
     case name: String => Enum.valueOf(manifestE.runtimeClass.asInstanceOf[Class[E]], name)
     case _            => throw new UnexpectedPickledTypeException(implicitly[Manifest[Array[Any]]], pickled.getClass)
   }
 }
 
 class MSUUidUnpickler extends Unpickler[MSUuid] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): MSUuid = pickled match {
     case buf: collection.Seq[_] =>
       val is64Bit = buf(0).asInstanceOf[Boolean]
       val data = buf(1).asInstanceOf[ImmutableByteArray].data
@@ -251,17 +258,21 @@ class MSUUidUnpickler extends Unpickler[MSUuid] {
 }
 
 class EnumerationUnpickler[T <: Enumeration: Manifest] extends Unpickler[T#Value] {
-  val klass = implicitly[Manifest[T]].runtimeClass
-  lazy val module = klass.getField("MODULE$").get(klass).asInstanceOf[T]
+  private val valueClass: Class[_] = implicitly[Manifest[T#Value]].runtimeClass
+  val klass: Class[_] = implicitly[Manifest[T]].runtimeClass
+  val module: T = klass.getField("MODULE$").get(klass).asInstanceOf[T]
+  private val converter_mh = PicklingReflectionUtils.getUnpickleConverterMethodHandle(klass).getOrElse {
+    MethodHandles.lookup().findVirtual(module.getClass, "withName", MethodType.methodType(valueClass, classOf[String]))
+  }
 
-  @nodeSync def unpickle(t: Any, ctxt: PickledInputStream) = {
+  @nodeSync def unpickle(t: Any, ctxt: PickledInputStream): T#Value = {
     if (classOf[T#Value].isAssignableFrom(t.getClass))
       t.asInstanceOf[T#Value]
     else
       try {
-        module.withName(t.asInstanceOf[String])
+        converter_mh.invoke(module, t.asInstanceOf[String]).asInstanceOf[T#Value]
       } catch {
-        case ex: NoSuchElementException =>
+        case _: NoSuchElementException =>
           val msg = "Cannot find enumeration with name %s in %s during unpickling.".format(t, klass.getName)
           throw new NoSuchElementException(msg)
       }
@@ -269,7 +280,7 @@ class EnumerationUnpickler[T <: Enumeration: Manifest] extends Unpickler[T#Value
 }
 
 object ImmutableByteArrayUnpickler extends Unpickler[ImmutableArray[Byte]] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) =
+  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): ImmutableArray[Byte] =
     ImmutableArray.wrapped[Byte](Compression.decompressTaggedArray(pickled))
 }
 
@@ -306,18 +317,17 @@ object RolesetModeUnpickler extends Unpickler[RolesetMode] {
 
 trait UnpicklersLow1 extends TupleUnpicklers {
   def entityUnpickler[T <: Entity: Manifest]: Unpickler[T] =
-    (new EntityUnpickler[T]).asInstanceOf[Unpickler[T]]
+    new EntityUnpickler[T].asInstanceOf[Unpickler[T]]
   def enumUnpickler[T <: Enumeration: Manifest]: Unpickler[T#Value] = new EnumerationUnpickler[T]
   def javaEnumUnpickler[E <: Enum[E]: Manifest]: Unpickler[E] = new JavaEnumUnpickler[E]
 
   def nonstringMapUnpickler[A: Manifest, B: Manifest](
       under1: Unpickler[A],
-      under2: Unpickler[B]): Unpickler[Map[A, B]] = {
+      under2: Unpickler[B]): Unpickler[Map[A, B]] =
     new CollectionUnpickler[(A, B), Map[A, B]](tuple2Unpickler(under1, under2))
-  }
 
   def collUnpickler[T, Impl <: Iterable[T]](
-      under: Unpickler[T])(implicit manifest: Manifest[T], factory: ScalaFactory[T, Impl]): Unpickler[Impl] =
+      under: Unpickler[T])(implicit @unused manifest: Manifest[T], factory: ScalaFactory[T, Impl]): Unpickler[Impl] =
     new CollectionUnpickler[T, Impl](under)
 }
 

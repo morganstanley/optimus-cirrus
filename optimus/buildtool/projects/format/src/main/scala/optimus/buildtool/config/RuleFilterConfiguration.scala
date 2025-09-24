@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.config
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 
 private[buildtool] final case class RuleFilterConfiguration(

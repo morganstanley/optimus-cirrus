@@ -701,7 +701,7 @@ private[optimus] object NodeCacheConfigs {
     log.info(s"Checking if any optconfs are scoped...")
     if (confProviders.exists(_.scopePath.nonEmpty)) {
       confProviders
-        .find(_.scopePath.nonEmpty)
+        .filter(_.scopePath.nonEmpty)
         .foreach(provider => log.info(s"Found scoped optconf: [${provider.scopePath}]${provider.optconfPath}"))
     } else log.info(s"No scoped optconfs found.")
 

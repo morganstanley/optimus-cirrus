@@ -18,6 +18,8 @@ import com.google.common.hash.HashFunction
 import com.sun.management.ThreadMXBean
 import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NamingConventions.ContentType
+import optimus.buildtool.config.NamingConventions.ContentType._
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
@@ -49,18 +51,19 @@ trait HashedContent {
   def utf8ContentAsString: String
   def size: Int
   def compressedSize: Int
+  def tpe: ContentType
 }
 
 object HashedContent {
-  private val compressionLevel = sys.props.get("optimus.buildtool.sourceCompressionLevel").map(_.toInt)
+  private val compressionLevel = OptimusBuildToolProperties.asInt("sourceCompressionLevel")
 
-  def apply(hash: String, content: Array[Byte]): HashedContent = compressionLevel match {
-    case Some(l) if content != null => new CompressedHashedContent(hash, Zstd.compress(content, l), content.length)
-    case _                          => new HashedContentImpl(hash, content)
+  def apply(hash: String, content: Array[Byte], tpe: ContentType): HashedContent = compressionLevel match {
+    case Some(l) if content != null => new CompressedHashedContent(hash, Zstd.compress(content, l), content.length, tpe)
+    case _                          => new HashedContentImpl(hash, content, tpe)
   }
 }
 
-final class HashedContentImpl(val hash: String, content: Array[Byte]) extends HashedContent {
+final class HashedContentImpl(val hash: String, content: Array[Byte], val tpe: ContentType) extends HashedContent {
   def contentAsInputStream: InputStream = new ByteArrayInputStream(content)
   def utf8ContentAsString: String = new String(content, StandardCharsets.UTF_8)
   def size: Int = content.length
@@ -75,8 +78,12 @@ final class HashedContentImpl(val hash: String, content: Array[Byte]) extends Ha
   override def toString: String = f"HashedContent($hash, $size%,d bytes)"
 }
 
-final class CompressedHashedContent(val hash: String, compressedContent: Array[Byte], val size: Int)
-    extends HashedContent {
+final class CompressedHashedContent(
+    val hash: String,
+    compressedContent: Array[Byte],
+    val size: Int,
+    val tpe: ContentType
+) extends HashedContent {
   def contentAsInputStream: InputStream = new ByteArrayInputStream(content)
   def utf8ContentAsString: String = new String(content, StandardCharsets.UTF_8)
   private def content: Array[Byte] = Zstd.decompress(compressedContent, size)
@@ -203,7 +210,10 @@ object Hashing {
     val hasher = hashFunction.newHasher()
     // much more efficient to hash each string than concatenate them and hash the result
     strs.foreach { s =>
-      hasher.putUnencodedChars(s)
+      // despite what the docs say, putString is >10x faster than putUnencodedChars when used with SHA-256, because the
+      // latter puts one byte at a time into the digester. putString does generate a lot of garbage (due to
+      // String#getBytes) but this doesn't seem to actually affect performance (probably because it so short-lived)
+      hasher.putString(s, StandardCharsets.UTF_8)
       // need to separate the strings, else different inputs can give the same hash
       hasher.putByte(10)
     }
@@ -242,8 +252,11 @@ object Hashing {
     val hasher = hashFunction.newHasher()
     val sorted = filesToHashes.map { case (p, h) => (PathUtils.platformIndependentString(p), h) }.sortBy(_._1)
     sorted.foreach { case (p, h) =>
-      hasher.putUnencodedChars(p)
-      hasher.putUnencodedChars(h)
+      // despite what the docs say, putString is >10x faster than putUnencodedChars when used with SHA-256, because the
+      // latter puts one byte at a time into the digester. putString does generate a lot of garbage (due to
+      // String#getBytes) but this doesn't seem to actually affect performance (probably because it so short-lived)
+      hasher.putString(p, StandardCharsets.UTF_8)
+      hasher.putString(h, StandardCharsets.UTF_8)
     }
     hasher.hash().toString
   }
@@ -341,7 +354,7 @@ object Hashing {
       // If this file is a jar and needs to be hashed consistently
       if (fileCanBeStampedWithConsistentHash(file)) {
         if (returnContent) throw new IllegalArgumentException(s"Cannot return content for $file")
-        HashedContent(NamingConventions.HASH + consistentlyHashJar(file.asJar), null)
+        HashedContent(NamingConventions.HASH + consistentlyHashJar(file.asJar), null, Binary)
       } else {
         _hashFileInputStream(file.name, () => Files.newInputStream(file.path), returnContent, strict)
       }
@@ -364,14 +377,22 @@ object Hashing {
       returnContent: Boolean,
       strict: Boolean = true
   ) = {
-    def hashAsBinary =
-      if (returnContent) hashBinaryStreamWithContent(inputStream) else (hashBinaryStream(inputStream), null)
+    def hashAsBinary = {
+      val (hc, content) =
+        if (returnContent) hashBinaryStreamWithContent(inputStream) else (hashBinaryStream(inputStream), null)
+      HashedContent(NamingConventions.HASH + hc, content, Binary)
+    }
     def hashAsText(lfEndings: Boolean, isStrict: Boolean) =
-      if (isStrict)
-        hashTextStream(inputStream, returnTextContent = returnContent, lfEndings = lfEndings)
-      else
-        try hashTextStream(inputStream, returnTextContent = returnContent, lfEndings = lfEndings)
-        catch {
+      if (isStrict) {
+        val (hc, content) = hashTextStream(inputStream, returnTextContent = returnContent, lfEndings = lfEndings)
+        val tpe = if (lfEndings) Text else WindowsText
+        HashedContent(NamingConventions.HASH + hc, content, tpe)
+      } else {
+        try {
+          val (hc, content) = hashTextStream(inputStream, returnTextContent = returnContent, lfEndings = lfEndings)
+          val tpe = if (lfEndings) Text else WindowsText
+          HashedContent(NamingConventions.HASH + hc, content, tpe)
+        } catch {
           case _: IllegalArgumentException =>
             log.debug(
               s"Failed to read file as text: $file. Will read as binary instead. " +
@@ -380,19 +401,17 @@ object Hashing {
             )
             hashAsBinary
         }
+      }
 
-    val (hc, content) = {
-      val extn = NamingConventions.suffix(file)
-      // hash text files as text (with CRLF -> LF conversion), and fail if that fails
-      if (NamingConventions.isTextExtension(extn)) hashAsText(lfEndings = true, strict)
-      // hash windows text files as text (with LF -> CRLF conversion), and fail if that fails
-      else if (NamingConventions.isWindowsTextExtension(extn)) hashAsText(lfEndings = false, strict)
-      // hash binary files as binary (no CRLF conversion)
-      else if (NamingConventions.isBinaryExtension(extn)) hashAsBinary
-      // for unknown files, try as text (with CRLF -> LF conversion), and fallback to binary with a warning
-      else hashAsText(lfEndings = true, isStrict = false)
-    }
-    HashedContent(NamingConventions.HASH + hc, content)
+    val extn = NamingConventions.suffix(file)
+    // hash text files as text (with CRLF -> LF conversion), and fail if that fails
+    if (NamingConventions.isTextExtension(extn)) hashAsText(lfEndings = true, strict)
+    // hash windows text files as text (with LF -> CRLF conversion), and fail if that fails
+    else if (NamingConventions.isWindowsTextExtension(extn)) hashAsText(lfEndings = false, strict)
+    // hash binary files as binary (no CRLF conversion)
+    else if (NamingConventions.isBinaryExtension(extn)) hashAsBinary
+    // for unknown files, try as text (with CRLF -> LF conversion), and fallback to binary with a warning
+    else hashAsText(lfEndings = true, isStrict = false)
   }
 
   def hashBytes(data: Array[Byte]): String = NamingConventions.HASH + hashFunction.hashBytes(data)

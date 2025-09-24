@@ -42,7 +42,7 @@ import scala.util.control.NonFatal
  * nr@NodeSuccess(v) => println(s"Returned $v with warnings ${nr.warnings}") case NodeFailure(e) => println(s"Failed
  * with $e") }
  */
-
+@loom
 @parallelizable
 class NodeResult[+T] private[optimus] (_node: Node[T]) extends Serializable {
   private[this] var _value: T = _
@@ -389,6 +389,7 @@ sealed trait NodeTry[+T] {
   @scenarioIndependentTransparent
   def map[U](@nodeLift f: T => U): NodeTry[U]
   def map$queued[U](f: T => Node[U]): Node[NodeTry[U]]
+  def map$queued[U](f: T => U): NodeFuture[NodeTry[U]] = map$queued(toNodeFactory(f(_)))
   def map$withNode[U](f: T => Node[U]): NodeTry[U]
 
   @nodeSync
@@ -396,6 +397,7 @@ sealed trait NodeTry[+T] {
   @scenarioIndependentTransparent
   def flatMap[U](@nodeLift f: T => NodeTry[U]): NodeTry[U]
   def flatMap$queued[U](f: T => Node[NodeTry[U]]): Node[NodeTry[U]]
+  def flatMap$queued[U](f: T => NodeTry[U]): NodeFuture[NodeTry[U]] = flatMap$queued(toNodeFactory(f(_)))
   def flatMap$withNode[U](f: T => Node[NodeTry[U]]): NodeTry[U]
   /*
     1. If recovery partial function is defined and succeeds, complete with its result.
@@ -578,7 +580,7 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
   def recoverPF[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeTry[U] = recoverPF$withNode(pf)
   def recoverPF$withNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeTry[U] = recoverPF$newNode(pf).get
   // noinspection ScalaUnusedSymbol
-  def recoverPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[NodeTry[U]] =
+  def recoverPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeFuture[NodeTry[U]] =
     recoverPF$newNode(pf).enqueue
   def recoverPF$newNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[NodeTry[U]] = new NTCN[U] {
     override def run(ec: OGSchedulerContext): Unit = {
@@ -607,7 +609,7 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
     recoverWithPF$newNode(pf).get
   def recoverWithPF$withNode[U >: T](pf: OptimusPartialFunction[Throwable, NodeTry[U]]): NodeTry[U] =
     recoverWithPF$newNode(pf).get
-  def recoverWithPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, NodeTry[U]]): Node[NodeTry[U]] =
+  def recoverWithPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, NodeTry[U]]): NodeFuture[NodeTry[U]] =
     recoverWithPF$newNode(pf).enqueue
   def recoverWithPF$newNode[U >: T](pf: OptimusPartialFunction[Throwable, NodeTry[U]]): Node[NodeTry[U]] = new NTCN[U] {
     override def run(ec: OGSchedulerContext): Unit = {

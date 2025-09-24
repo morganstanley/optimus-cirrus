@@ -20,8 +20,6 @@ import sbt.util.Level
 import sbt.util.{Logger => SbtLogger}
 import xsbti.CompileCancelled
 
-import scala.collection.immutable.Seq
-
 private class CancellationException extends CompileCancelled {
   override def arguments(): Array[String] = Array.empty
 }

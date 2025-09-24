@@ -11,9 +11,10 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 
-object Aggregation extends LegacyOptimusApp {
+object Aggregation extends LegacyOptimusApp with PrintlnInterceptor {
 
   // the following query makes use of may be aggregate functions
   val byPositions =

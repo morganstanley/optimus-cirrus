@@ -20,10 +20,10 @@ import scala.util.Try
 import scala.util.Success
 import scala.util.Failure
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.platform.internal.SimpleGlobalStateHolder
 
 import scala.jdk.CollectionConverters._
 import java.util.{concurrent => juc}
-
 import scala.collection.mutable
 
 private[versioning] class TransformerRegistryState {
@@ -73,7 +73,7 @@ private[versioning] class TransformerRegistryState {
  *     accesses not to get an inconsistent answer. All the shared data structures are concurrent in order to avoid the
  *     need to synchronize on the entire state during reads.
  */
-object TransformerRegistry extends SimpleStateHolder(() => new TransformerRegistryState) {
+object TransformerRegistry extends SimpleGlobalStateHolder(() => new TransformerRegistryState) {
   private[this] val log = getLogger(this)
 
   private[optimus] sealed trait TransformerEdge { self: Edge[_, _] =>
@@ -205,6 +205,8 @@ object TransformerRegistry extends SimpleStateHolder(() => new TransformerRegist
     getState.synchronized {
       getState.forcedWriteTransforms.put(clz, transform)
     }
+
+  def clearOnlyForUnitTestUsage(): Unit = clear()
 
   private[optimus] def clear(): Unit = getState.synchronized {
     log.debug("Clearing the TransformerRegistry")

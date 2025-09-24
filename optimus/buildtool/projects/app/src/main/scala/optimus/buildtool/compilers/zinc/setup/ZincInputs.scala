@@ -35,7 +35,6 @@ import optimus.buildtool.compilers.zinc.SimpleVirtualFile
 import optimus.buildtool.compilers.zinc.VirtualSourceFile
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.compilers.zinc.ZincEntryLookup
-import optimus.buildtool.compilers.zinc.ZincInterface
 import optimus.buildtool.compilers.zinc.ZincUtils
 import optimus.buildtool.compilers.zinc.mappers.MappingTrace
 import optimus.buildtool.config.NamingConventions
@@ -57,6 +56,8 @@ import xsbti.Reporter
 import xsbti.VirtualFile
 import xsbti.VirtualFileRef
 import xsbti.compile._
+
+import java.util.zip.Deflater
 
 final case class Jars(
     signatureJar: Option[PathPair],
@@ -317,24 +318,9 @@ class ZincInputs(
       new SignatureAnalysisStore(scopeId, settings, obtInputs.saveAnalysis, j.tempPath)
     }
 
+  @entersGraph
   private def scalac: AnalyzingCompiler = {
-    val scalaInstance = settings.getScalaInstance(settings.scalaClassPath.map(_.path.toFile))
-    val interfaceJar = ZincInterface.getInterfaceJar(
-      settings.interfaceDir,
-      scalaInstance,
-      settings.zincVersion,
-      settings.zincClasspathForInterfaceJar,
-      activeTask.trace.reportProgress("compiling zinc interface")
-    )
-    val classpathOptions = ClasspathOptionsUtil.javac( /*compiler =*/ false)
-    val compilerInterfaceProvider = ZincCompilerUtil.constantBridgeProvider(scalaInstance, interfaceJar.path.toFile)
-    new AnalyzingCompiler(
-      scalaInstance,
-      compilerInterfaceProvider,
-      classpathOptions,
-      _ => (),
-      settings.classLoaderCaches.classLoaderCache
-    )
+    settings.scalacProvider.scalac(activeTask)
   }
 
   private def javac: JavaTools = {
@@ -344,7 +330,7 @@ class ZincInputs(
 
   private def scalacOptions(signatureJar: Option[PathPair]): Seq[String] = {
     val scalacArgsProvider =
-      if (settings.scalaConfig.scalaVersion.startsWith("2.11")) Scalac211ArgsProvider
+      if (settings.scalaConfig.scalaVersion.value.startsWith("2.11")) Scalac211ArgsProvider
       else DefaultScalaArgsProvider
 
     val scalacArgs = scalacArgsProvider.get(signatureJar)
@@ -417,6 +403,10 @@ class ZincInputs(
     // we pass the java -release parameter to scalac too so that scala code has the same restrictions on jdk api usage
     def release: Seq[String] = Seq("-release", obtInputs.javacConfig.release.toString)
 
+    override def mandatoryArgs: Seq[String] = super.mandatoryArgs ++
+      // we now require full jar compression returned by zinc since we no longer repack the jars
+      // note: Scala 2.11 does not have this option, but still outputs compressed jars
+      Seq("-Yjar-compression-level", Deflater.DEFAULT_COMPRESSION.toString)
   }
 
   // Generally java opts are to be set in workspace.obt.

@@ -17,7 +17,6 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
@@ -31,11 +30,11 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
+import optimus.platform.util.xml.XmlLoader
 
 @entity class JxbGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.Jxb
+  override val generatorType: String = "jxb"
 
   override type Inputs = JxbGenerator.Inputs
 
@@ -89,16 +88,17 @@ import scala.collection.immutable.SortedMap
           }
           val a = GeneratedSourceArtifact.create(
             scopeId,
+            tpe,
             generatorName,
-            artifactType,
             outputJar,
             SourcePath,
             messageBuilder.result()
           )
-          SourceGenerator.createJar(generatorName, SourcePath, a.messages, a.hasErrors, JarAsset(tmpJar)) { jarOut =>
-            infos.foreach { info =>
-              jarOut.writeFile(info.source, SourcePath resolvePath info.name)
-            }
+          SourceGenerator.createJar(tpe, generatorName, SourcePath, a.messages, a.hasErrors, JarAsset(tmpJar)) {
+            jarOut =>
+              infos.foreach { info =>
+                jarOut.writeFile(info.source, SourcePath resolvePath info.name)
+              }
           }
           a
         }
@@ -151,7 +151,7 @@ object JxbGenerator {
     }
 
     try {
-      val root = XML.load(content.contentAsInputStream)
+      val root = XmlLoader.load(content.contentAsInputStream)
       Right((root \ "MessageFlowDef" \ "Nodes" \ "Node").flatMap(parseNode))
     } catch {
       case e @ (_: IOException | _: SAXParseException) =>

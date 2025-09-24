@@ -13,7 +13,9 @@ package optimus.platform.storable
 
 import optimus.core.utils.RuntimeMirror
 import optimus.entity._
+import optimus.graph.Settings
 import optimus.platform.pickling.PicklingException
+import optimus.platform.pickling.StatsBasedInterner
 import optimus.platform.relational.tree.MemberDescriptor
 import optimus.platform.util.HierarchyManager.embeddableHierarchyManager
 import optimus.utils.CollectionUtils._
@@ -50,6 +52,9 @@ object EmbeddableCompanionBase {
 /** Companion objects of @embeddable case classes extend this (due to AdjustAST) */
 trait EmbeddableCompanionBase {
 
+  private lazy val propertyInterner =
+    StatsBasedInterner(primaryConstructorInfo.getParameterCount, Settings.InterningScope.UNPICKLED)
+
   private[optimus] final lazy val primaryConstructorInfo = EmbeddableCompanionBase.primaryConstructorInfoFor(getClass)
 
   final lazy val shapeName = {
@@ -59,7 +64,9 @@ trait EmbeddableCompanionBase {
   }
 
   def fromArray(a: Array[AnyRef]): Embeddable = {
-    val t = primaryConstructorInfo.newInstance(a: _*)
+    // We attempt to intern the fields of the embeddable we're about to create...
+    val t = primaryConstructorInfo.newInstance(propertyInterner.maybeIntern(a): _*)
+    // .. then do any interning of the embeddable itself if applicable.
     __intern(t).asInstanceOf[Embeddable]
   }
 
@@ -105,7 +112,7 @@ trait EmbeddableCompanionBase {
   }
 }
 
-//noinspection ScalaUnusedSymbol (entityplugin uses this to reduce the amount of code generated
+//noinspection ScalaUnusedSymbol (entityplugin uses this to reduce the amount of code generated)
 class EmbeddableCompanionBaseImpl extends EmbeddableCompanionBase
 
 /** Companion objects of @embeddable traits extend this trait (due to AdjustAST) */
@@ -118,10 +125,10 @@ trait EmbeddableTraitCompanionBase {
     meta.allChildren
       .map(m => Class.forName(m.fullClassName).asInstanceOf[Class[Embeddable]])
       // interfaces (traits) can't be directly instantiated so we'll never be pickling an instance of them, and so it's
-      // allowed for their simplenames to conflict with @embeddable object/class names, so we must remove them before
+      // allowed for their simple names to conflict with @embeddable object/class names, so we must remove them before
       // checking for conflicts
       .filterNot(_.isInterface)
-      // note that objects are referred to by their dollarless simple name
+      // note that objects are referred to by their dollar-less simple name
       .groupBy(_.getSimpleName.stripSuffix("$"))
       .map { case (simpleName, classes) =>
         val cls = classes.singleOr {

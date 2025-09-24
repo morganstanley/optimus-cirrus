@@ -247,7 +247,10 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
           val accessors = nodeParams.map { param =>
             // e.g. for a node param "x: String", we generate "def x: String = x"
             val accessorType = NullaryMethodType(param.tpe)
-            val accessorSym = nodeClass.newMethod(param.name.toTermName, pos, Flags.FINAL).setInfo(accessorType)
+            val accessorSym = nodeClass
+              .newMethod(param.name.toTermName, pos, Flags.FINAL)
+              .setInfo(accessorType)
+            markAsGenerated(accessorSym)
             nodeClass.info.decls enter accessorSym
             val body = gen.mkAttributedRef(param)
             DefDef(accessorSym, body)
@@ -360,19 +363,20 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
     // Package all arguments for the node into array and return ... see Node.args
     def addArgsMethod(nodeClass: ClassSymbol, pos: Position, nodeParams: List[Symbol]): DefDef = {
       val anyRefArrayType = appliedType(ArrayClass.tpe, List(AnyRefClass.tpe))
-      val dd = addNullarySynthMethod(names.args, nodeClass, pos, Flags.FINAL | Flags.OVERRIDE) { argsSym =>
-        val createArray = Apply(Select(New(TypeTree(anyRefArrayType)), nme.CONSTRUCTOR), List(LIT(nodeParams.size)))
-        val tmpArraySym = argsSym.newValue(names.tmp, pos).setInfo(anyRefArrayType)
-        val tmpArrayDef = ValDef(NoMods, names.tmp, TypeTree(anyRefArrayType), createArray).setSymbol(tmpArraySym)
-        val listOfArrayAssignment = for ((arg, idx) <- nodeParams.zipWithIndex) yield {
-          Apply(
-            Select(gen.mkAttributedRef(tmpArraySym), nme.update),
-            List(Literal(Constant(idx)), gen.mkAttributedCast(gen.mkAttributedRef(arg), definitions.ObjectTpe))
-          )
-        }
-        val rhs = Block(tmpArrayDef :: listOfArrayAssignment, gen.mkAttributedRef(tmpArraySym))
-        new ChangeOwnerTraverser(parentFunction, argsSym) traverse rhs
-        rhs
+      val dd = addNullarySynthMethod(names.args, nodeClass, pos, Flags.FINAL | Flags.OVERRIDE | Flags.SYNTHETIC) {
+        argsSym =>
+          val createArray = Apply(Select(New(TypeTree(anyRefArrayType)), nme.CONSTRUCTOR), List(LIT(nodeParams.size)))
+          val tmpArraySym = argsSym.newValue(names.tmp, pos).setInfo(anyRefArrayType)
+          val tmpArrayDef = ValDef(NoMods, names.tmp, TypeTree(anyRefArrayType), createArray).setSymbol(tmpArraySym)
+          val listOfArrayAssignment = for ((arg, idx) <- nodeParams.zipWithIndex) yield {
+            Apply(
+              Select(gen.mkAttributedRef(tmpArraySym), nme.update),
+              List(Literal(Constant(idx)), gen.mkAttributedCast(gen.mkAttributedRef(arg), definitions.ObjectTpe))
+            )
+          }
+          val rhs = Block(tmpArrayDef :: listOfArrayAssignment, gen.mkAttributedRef(tmpArraySym))
+          new ChangeOwnerTraverser(parentFunction, argsSym) traverse rhs
+          rhs
       }
       dd.symbol setInfo NullaryMethodType(anyRefArrayType)
       dd
@@ -385,7 +389,9 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
         pos: Position,
         nodeParams: List[Symbol],
         entityCall: Tree): DefDef = {
-      val argsCopySym = nodeClass.newMethod(names.argsCopy, pos).setFlag(Flags.OVERRIDE | Flags.FINAL)
+      val argsCopySym = nodeClass
+        .newMethod(names.argsCopy, pos)
+        .setFlag(Flags.OVERRIDE | Flags.FINAL | Flags.SYNTHETIC)
       val argSym = argsCopySym.newValueParameter(names.arg, pos).setInfo(AnyRefClass.tpe)
       val argVal =
         ValDef(NoMods, names.gen, TypeTree(AnyRefClass.tpe), EmptyTree) setType (AnyRefClass.tpe) setSymbol (argSym)
@@ -423,7 +429,9 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
         tweakHandler: Symbol,
         expectedTypes: List[Type]) = {
       // creates "def transformTweak(value: Any): Seq[Tweak] = entity.foo_:=(value, <node args>)"
-      val transTweakSym = nodeClass.newMethod(names.transformTweak, pos).setFlag(Flags.OVERRIDE | Flags.FINAL)
+      val transTweakSym = nodeClass
+        .newMethod(names.transformTweak, pos)
+        .setFlag(Flags.OVERRIDE | Flags.FINAL | Flags.SYNTHETIC)
       val inputSym = transTweakSym.newValueParameter(names.value, pos).setInfo(AnyClass.tpe)
       val seqOfTweakTpe = appliedType(CollectionSeqClass.tpe, Tweak.tpe :: Nil)
       transTweakSym.setInfo(MethodType(inputSym :: Nil, seqOfTweakTpe))

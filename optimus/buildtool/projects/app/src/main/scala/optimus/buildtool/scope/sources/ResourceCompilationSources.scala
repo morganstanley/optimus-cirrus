@@ -27,7 +27,6 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity trait ResourceCompilationSources extends CompilationSources {
@@ -52,10 +51,11 @@ import scala.collection.immutable.SortedMap
     } else Nil
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, fingerprintType)
 
-    HashedSourcesImpl(
+    SourceHashedSources(
       sourceContent.content,
       sourceContent.generatedSourceArtifacts,
-      fingerprintHash
+      fingerprintHash,
+      fingerprint
     )
   }
 
@@ -86,7 +86,7 @@ object ResourceCompilationSources {
     val generatedSources = sourceGeneration.generatedSources
     ObtTrace.traceTask(id, hashTask) {
       val generatedSourceContent = generatedSources.apar.collect { case s: GeneratedSourceArtifact =>
-        s"$Generated:${s.tpe.name}" -> s.hashedContent(isResourceFile)
+        s"$Generated:${s.generator}" -> s.hashedContent(isResourceFile)
       }
 
       SourceFileContent(staticContent +: generatedSourceContent, generatedSources)

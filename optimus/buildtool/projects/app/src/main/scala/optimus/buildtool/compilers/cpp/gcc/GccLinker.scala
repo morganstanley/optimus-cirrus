@@ -21,8 +21,6 @@ import optimus.buildtool.config.CppToolchain
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.TypeClasses._
 
-import scala.collection.immutable.Seq
-
 class GccLinker(scopeId: ScopeId, toolchain: CppToolchain) extends CppLinker {
   import CppLinker._
   import GccLinker._

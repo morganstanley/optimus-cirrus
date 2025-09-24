@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.runconf.plugins
 
-import scala.collection.immutable.Seq
-
 // Raw Jacoco opts from OBT files
 final case class JacocoOpts(
     minCoveragePct: Option[Int] = None,

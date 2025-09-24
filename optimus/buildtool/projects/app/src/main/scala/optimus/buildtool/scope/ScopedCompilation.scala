@@ -25,8 +25,9 @@ import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
-import optimus.buildtool.builders.postbuilders.metadata.{Compile, Runtime}
+import optimus.buildtool.builders.postbuilders.metadata.Compile
 import optimus.buildtool.builders.postbuilders.metadata.QualifierReport
+import optimus.buildtool.builders.postbuilders.metadata.Runtime
 import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.AsyncCppCompiler
 import optimus.buildtool.compilers.AsyncElectronCompiler
@@ -47,9 +48,9 @@ import optimus.buildtool.processors.ScopeProcessor
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.scope.partial.ArchivePackaging
+import optimus.buildtool.scope.partial.ConfigurationMessagesScopedCompilation
 import optimus.buildtool.scope.partial.CppScopedCompilation
 import optimus.buildtool.scope.partial.ElectronScopedCompilation
-import optimus.buildtool.scope.partial.ConfigurationMessagesScopedCompilation
 import optimus.buildtool.scope.partial.GenericFilesScopedCompilation
 import optimus.buildtool.scope.partial.JavaScopedCompilation
 import optimus.buildtool.scope.partial.JmhScopedCompilation
@@ -63,34 +64,40 @@ import optimus.buildtool.scope.partial.ScalaScopedCompilation
 import optimus.buildtool.scope.partial.SignatureScopedCompilation
 import optimus.buildtool.scope.partial.SourcePackaging
 import optimus.buildtool.scope.partial.WebResourcePackaging
+import optimus.buildtool.scope.sources.ArchivePackageSources
+import optimus.buildtool.scope.sources.CppCompilationSources
+import optimus.buildtool.scope.sources.ElectronCompilationSources
 import optimus.buildtool.scope.sources.GenericFilesCompilationSources
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
+import optimus.buildtool.scope.sources.PythonCompilationSources
 import optimus.buildtool.scope.sources.RegexMessagesCompilationSources
 import optimus.buildtool.scope.sources.ResourceCompilationSourcesImpl
 import optimus.buildtool.scope.sources.RunconfCompilationSources
 import optimus.buildtool.scope.sources.SourceCompilationSources
-import optimus.buildtool.scope.sources.ArchivePackageSources
-import optimus.buildtool.scope.sources.CppCompilationSources
-import optimus.buildtool.scope.sources.ElectronCompilationSources
-import optimus.buildtool.scope.sources.ConfigurationMessagesCompilationSources
-import optimus.buildtool.scope.sources.PythonCompilationSources
 import optimus.buildtool.scope.sources.WebCompilationSources
 import optimus.buildtool.trace.Validation
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils.distinctLast
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
-import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.compat._
+import scala.collection.immutable.IndexedSeq
 
 object ScopedCompilation {
-  private val artifactFilter: Option[Set[ArtifactType]] = sys.props.get("optimus.buildtool.artifacts").map { s =>
-    s.split(",").filter(_ != NoneArg).map(ArtifactType.parse).toSet
-  }
+  private def parseArtifactFilter(spec: String): Set[ArtifactType] =
+    spec.split(",").filter(_ != NoneArg).map(ArtifactType.parse).toSet
+
+  private val artifactIncludeFilter: Option[Set[ArtifactType]] =
+    OptimusBuildToolProperties.get("artifacts").map(parseArtifactFilter)
+
+  private val artifactExcludeFilter: Set[ArtifactType] =
+    OptimusBuildToolProperties.get("artifacts.exclude").map(parseArtifactFilter).getOrElse(Set.empty)
 
   // Default to true if artifactFilter is `None`
-  def generate(at: ArtifactType): Boolean = artifactFilter.forall(_.contains(at))
+  def generate(at: ArtifactType): Boolean =
+    artifactIncludeFilter.forall(_.contains(at)) && !artifactExcludeFilter.contains(at)
 }
 
 /**
@@ -289,17 +296,26 @@ trait CompilationNode extends ScopedCompilation {
 
   @node def bundlePathingArtifacts(compiledArtifacts: Seq[Artifact]): Seq[Artifact] = if (config.pathingBundle) {
     val scopesForBundle = upstream.runtimeDependencies.transitiveScopeDependencies.map(_.id).toSet + scope.id
-    val artifactsForBundle = compiledArtifacts.collect {
+    val classArtifactsForBundle = compiledArtifacts.collect {
       case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) => a
     }.toVector
-    PathingScopedCompilation.artifacts(manifestGenerator, scope, artifactsForBundle)
+
+    val agentScopesForBundle = compiledArtifacts.collect {
+      case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) && a.containsAgent => id.scopeId
+    }.toSet
+
+    val agentArtifactsForBundle = compiledArtifacts.collect {
+      case a: PathingArtifact if agentScopesForBundle.contains(a.scopeId) => a
+    }.toVector
+
+    PathingScopedCompilation.artifacts(manifestGenerator, scope, classArtifactsForBundle, agentArtifactsForBundle)
   } else Nil
 
   // noinspection ScalaUnusedSymbol
   @alwaysAutoAsyncArgs
   private def distinctArtifacts(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
       f: => (Seq[Artifact], Seq[Artifact])
-  ): IndexedSeq[Artifact] = needsPlugin
+  ): IndexedSeq[Artifact] = needsPluginAlwaysAutoAsyncArgs
   // noinspection ScalaUnusedSymbol
   @node private def distinctArtifacts$NF(
       artifactType: String,
@@ -321,7 +337,7 @@ trait CompilationNode extends ScopedCompilation {
   @alwaysAutoAsyncArgs
   private def distinct(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
       f: => (Seq[Artifact], Seq[Artifact])
-  ): Artifacts = needsPlugin
+  ): Artifacts = needsPluginAlwaysAutoAsyncArgs
   // noinspection ScalaUnusedSymbol
   @node private def distinct$NF(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
       f: NodeFunction0[(Seq[Artifact], Seq[Artifact])]
@@ -339,7 +355,7 @@ trait CompilationNode extends ScopedCompilation {
   // All artifact methods (directly or otherwise) depends on successful signatures, so short-circuit if we have
   // signature errors (which also includes errors from signature upstreams).
   @alwaysAutoAsyncArgs
-  private def signatureErrorsOr(res: => IndexedSeq[Artifact]): IndexedSeq[Artifact] = needsPlugin
+  private def signatureErrorsOr(res: => IndexedSeq[Artifact]): IndexedSeq[Artifact] = needsPluginAlwaysAutoAsyncArgs
   // noinspection ScalaUnusedSymbol
   @node private def signatureErrorsOr$NF(res: NodeFunction0[IndexedSeq[Artifact]]): IndexedSeq[Artifact] =
     if (config.usePipelining) Artifact.onlyErrors(signatures.messages) getOrElse res()
@@ -457,16 +473,10 @@ private[buildtool] object ScopedCompilationImpl {
 
     val forbiddenDependencies = scope.config.dependencies.forbiddenDependencies
     val allDependencies = scope.upstream.allCompileDependencies :+ scope.upstream.runtimeDependencies
-    val configurationSources =
-      ConfigurationMessagesCompilationSources(
-        scope,
-        allDependencies,
-        forbiddenDependencies,
-        scope.externalDependencyResolver)
-    val configurationMessages =
-      ConfigurationMessagesScopedCompilation(scope, configurationSources, forbiddenDependencies, allDependencies)
 
-    val pathing = PathingScopedCompilation(scope, manifestGenerator, scala, java, resources, jmh, cppFallback)
+    val configurationMessages = ConfigurationMessagesScopedCompilation(scope, forbiddenDependencies, allDependencies)
+
+    val pathing = PathingScopedCompilation(scope, manifestGenerator, scala, java, resources, jmh)
 
     val runconfSources = RunconfCompilationSources(
       runconfc.obtWorkspaceProperties,

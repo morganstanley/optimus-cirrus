@@ -16,6 +16,7 @@ import static optimus.graph.OGScheduler.schedulerVersion;
 import static optimus.graph.OGTrace.ApSuffix;
 import static optimus.graph.OGTrace.AsyncPrefix;
 import static optimus.graph.OGTrace.CachedSuffix;
+import static optimus.graph.Settings.fullTraceOnExceptionLimit;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
 import static optimus.graph.cache.NCSupport.isProxy;
 import java.io.IOException;
@@ -43,6 +44,7 @@ import optimus.core.ArrayListWithMarker;
 import optimus.core.CoreHelpers;
 import optimus.core.EdgeList;
 import optimus.core.MonitoringBreadcrumbs$;
+import optimus.core.RateLimiter;
 import optimus.core.SparseBitSet;
 import optimus.core.TPDMask;
 import optimus.exceptions.RTList;
@@ -145,7 +147,8 @@ public abstract class NodeTask extends NodeAwaiter
   private static final int STATE_TRACKING_VALUE = 0x80;
   private static final int STATE_TWEAKABLE_OWNER = 0x100; // Owner of tweakable listener
   private static final int STATE_XSCENARIO_OWNER = 0x200 | STATE_TWEAKABLE_OWNER; // Owns x-scenario
-  private static final int ACCESSED_DAL = 0x400; // Accessed DAL in this node
+  private static final int STATE_ACCESSED_ENV = 0x400; // Accessed RuntimeEnvironment in this node
+
   // Currently used by remoting plugin in-proc test code
   private static final int STATE_REMOTED = 0x1000;
   private static final int STATE_ADAPTED = 0x2000; // Marks nodes as adapted,
@@ -165,6 +168,9 @@ public abstract class NodeTask extends NodeAwaiter
   private static final int STATE_PLUGIN_FIRED = 0x200000;
   // Distinct from STATE_ADAPTED, as it is not set pre-emptively:
   private static final int STATE_PLUGIN_TRACKED = 0x400000;
+
+  // flags which should propagate transitively from children to parents in combineInfo
+  private static final int COMBINE_INFO_FLAGS = STATE_ACCESSED_ENV | STATE_SCENARIO_DEPENDENT;
 
   // Only one walker is allowed at a time
   private static final ReentrantLock _visitLock = new ReentrantLock();
@@ -288,10 +294,6 @@ public abstract class NodeTask extends NodeAwaiter
     return (_state & (STATE_DEBUG_ENQUEUED | STATE_RUN_MASK)) == 0;
   }
 
-  public final boolean isDoneAndIsScenarioIndependent() {
-    return (_state & (STATE_DONE | STATE_SCENARIO_DEPENDENT)) == STATE_DONE;
-  }
-
   private static boolean isDone(int state) {
     return (state & STATE_DONE) == STATE_DONE;
   }
@@ -411,39 +413,80 @@ public abstract class NodeTask extends NodeAwaiter
     return sb;
   }
 
-  private static PrettyStringBuilder stateAsString(int state) {
+  /**
+   * Converts the internal state flags to a human-readable string representation.
+   *
+   * @param state The internal state flags to convert
+   * @param detailsBuilder A StringBuilder for additional details (unused in this implementation)
+   * @return A PrettyStringBuilder containing the string representation of the state
+   */
+  private static PrettyStringBuilder stateAsString(int state, PrettyStringBuilder detailsBuilder) {
     PrettyStringBuilder sb = new PrettyStringBuilder();
-    if (isNew(state)) sb.append("N");
+    if (isNew(state)) appendState(sb, detailsBuilder, "N", "New");
     else {
-      if ((state & STATE_STARTED) == STATE_STARTED) sb.append("S");
-      if ((state & STATE_NOT_RUNNABLE) == STATE_NOT_RUNNABLE) sb.append("R");
-      if ((state & STATE_DONE_FAILED) == STATE_DONE_FAILED) sb.append("C[EX]");
-      else if ((state & STATE_DONE) == STATE_DONE) sb.append("C");
+      if ((state & STATE_STARTED) == STATE_STARTED) appendState(sb, detailsBuilder, "S", "Started");
 
-      if ((state & STATE_SCENARIO_DEPENDENT) != STATE_SCENARIO_DEPENDENT) sb.append("i");
-      if ((state & STATE_ADAPTED) == STATE_ADAPTED) sb.append("a");
+      if ((state & STATE_NOT_RUNNABLE) == STATE_NOT_RUNNABLE)
+        appendState(sb, detailsBuilder, "R", "Not Runnable");
+
+      if ((state & STATE_DONE_FAILED) == STATE_DONE_FAILED)
+        appendState(sb, detailsBuilder, "C[EX]", "Completed with Exception");
+      else if ((state & STATE_DONE) == STATE_DONE)
+        appendState(sb, detailsBuilder, "C", "Completed");
+
+      if ((state & STATE_SCENARIO_DEPENDENT) != STATE_SCENARIO_DEPENDENT)
+        appendState(sb, detailsBuilder, "i", "Scenario Independent");
+
+      if ((state & STATE_ADAPTED) == STATE_ADAPTED)
+        appendState(sb, detailsBuilder, "a", "Adapted (by plugin)");
+
+      if ((state & STATE_ACCESSED_ENV) == STATE_ACCESSED_ENV)
+        appendState(sb, detailsBuilder, "e", "Accessed Environment (e.g. DAL)");
     }
     // note that this flag only get set if you have Settings.schedulerAsserts enabled - in normal
     // apps it's always false
-    if ((state & STATE_DEBUG_ENQUEUED) == STATE_DEBUG_ENQUEUED) sb.append("q");
-    if ((state & STATE_REMOTED) == STATE_REMOTED) sb.append("r");
-    if ((state & STATE_TRACKING_VALUE) != 0) sb.append("T");
-    if ((state & STATE_XSCENARIO_OWNER) != 0) sb.append("_X");
-    if ((state & STATE_INVALID_CACHE) != 0) sb.append("#");
+    if ((state & STATE_DEBUG_ENQUEUED) == STATE_DEBUG_ENQUEUED)
+      appendState(sb, detailsBuilder, "q", "Debug Enqueued");
 
-    if ((state & STATE_WAITING_FOR_CANCELLED_NODES) != 0) sb.append("W");
+    if ((state & STATE_REMOTED) == STATE_REMOTED) appendState(sb, detailsBuilder, "r", "Remoted");
+
+    if ((state & STATE_TRACKING_VALUE) != 0) appendState(sb, detailsBuilder, "T", "Tracking Value");
+
+    if ((state & STATE_XSCENARIO_OWNER) != 0)
+      appendState(sb, detailsBuilder, "_X", "Cross-Scenario Owner");
+
+    if ((state & STATE_INVALID_CACHE) != 0) appendState(sb, detailsBuilder, "#", "Invalid Cache");
+
+    if ((state & STATE_WAITING_FOR_CANCELLED_NODES) != 0)
+      appendState(sb, detailsBuilder, "W", "Waiting for Cancelled Nodes");
 
     return sb;
   }
 
-  public final String stateAsString() {
-    PrettyStringBuilder sb = stateAsString(_state);
-    return stateAsString(sb);
+  private static void appendState(
+      PrettyStringBuilder shortBuilder,
+      PrettyStringBuilder detailsBuilder,
+      String shortCode,
+      String description) {
+    shortBuilder.append(shortCode);
+    if (detailsBuilder != null)
+      detailsBuilder.bold(shortCode).append(" - ").append(description).endln();
   }
 
-  private String stateAsString(PrettyStringBuilder sb) {
+  public final String stateAsString() {
+    return stateAsString(null);
+  }
+
+  public final String stateAsString(PrettyStringBuilder detailsBuilder) {
+    if (detailsBuilder != null) detailsBuilder.bold("Node Flags:").endln();
+
+    PrettyStringBuilder sb = stateAsString(_state, detailsBuilder);
     sb.append(':');
     sb.append(executionInfo().flagsAsString());
+    if (detailsBuilder != null) {
+      detailsBuilder.endln().bold("Property Flags:").endln();
+      executionInfo().flagsAsStringVerbose(detailsBuilder);
+    }
     if (sb.showCausalityID() && !isDone() && !isNew()) {
       sb.append(':');
       sb.append(causalityID());
@@ -456,7 +499,7 @@ public abstract class NodeTask extends NodeAwaiter
   public String flameFrameName(String extraMods) {
     var prefix = AsyncPrefix; // for optimus-attuned eyes
     var suffix = ApSuffix; // for categorization by async-profiler
-    var pname = NodeName.profileFrom(this).toString();
+    var pname = NodeName.profileFrom(this).toString(true); // true => abbreviate package
     var info = executionInfo();
     // proxies already end in "~$"
     var modifiers = (info.getCacheable() && !info.isProxy()) ? CachedSuffix : "";
@@ -531,7 +574,7 @@ public abstract class NodeTask extends NodeAwaiter
     initAsFailed(ex, ScenarioStack$.MODULE$.constant());
   }
 
-  private final void initAsDone(ScenarioStack ss, int flags) {
+  private void initAsDone(ScenarioStack ss, int flags) {
     state_h.setOpaque(this, flags);
     _scenarioStack = ss;
     setLauncherRef(null);
@@ -615,20 +658,16 @@ public abstract class NodeTask extends NodeAwaiter
     return (_state & STATE_WAITING_FOR_CANCELLED_NODES) == 0;
   }
 
-  public boolean accessedDAL() {
-    return (_state & ACCESSED_DAL) != 0;
+  public boolean accessedRuntimeEnv() {
+    return (_state & STATE_ACCESSED_ENV) != 0;
   }
 
-  public void markAccessedDAL() {
-    updateState(ACCESSED_DAL, 0);
+  public void markAccessedRuntimeEnv() {
+    updateState(STATE_ACCESSED_ENV, 0);
   }
 
-  public void removeAccessDALFlag() {
-    updateState(0, ACCESSED_DAL);
-  }
-
-  private static boolean isScenarioDependent(int state) {
-    return (state & STATE_SCENARIO_DEPENDENT) != 0;
+  public void removeAccessedRuntimeEnvFlag() {
+    updateState(0, STATE_ACCESSED_ENV);
   }
 
   private static boolean isAdapted(int state) {
@@ -1217,7 +1256,7 @@ public abstract class NodeTask extends NodeAwaiter
       if (isTweakableListenerOwner()) _scenarioStack.tweakableListener().onOwnerCompleted(this);
 
       // Reset to the stable SS to save memory, UNLESS doing so would lose the CancellationScope in
-      // a case where it matters for caching (see NCSupport.isUsableWRTCancellationScope)
+      // a case where it matters for caching (see NCSupport.isUsableWRTCancelScopeAndEnv)
       if (DiagnosticSettings.resetScenarioStackOnCompletion) {
         var stableSS = _scenarioStack._stableSS();
         if (isDoneWithUsableResult() || (_scenarioStack.cancelScope() == stableSS.cancelScope()))
@@ -1292,12 +1331,11 @@ public abstract class NodeTask extends NodeAwaiter
 
     OGTrace.dependency(this, child, eq);
 
-    // If child took scenario dependency so this node must too
-    int state = _state;
     int childState = child._state;
-    if (!isScenarioDependent(state) && isScenarioDependent(childState)) markScenarioDependent();
 
-    if (!accessedDAL() && child.accessedDAL()) markAccessedDAL();
+    // If child took scenario or runtime env dependency then this node must too
+    int childFlagsToCombine = childState & COMBINE_INFO_FLAGS;
+    if ((_state & COMBINE_INFO_FLAGS) != childFlagsToCombine) updateState(childFlagsToCombine, 0);
 
     if (DiagnosticSettings.traceTweaksEnabled) combineDebugInfo(child);
 
@@ -1628,41 +1666,13 @@ public abstract class NodeTask extends NodeAwaiter
     return NodeName.nameAndSource(this);
   }
 
-  /********************************************************************************
-   * Set of dependency walkers
-   * Basic visitor callback
-   */
-  public static class Visitor {
-    public ArrayList<NodeTask> path;
-
-    /** Return true to continue walk, false to stop */
-    protected boolean visit(NodeTask ntsk, int depth) {
-      return true; // Continue the walk
-    }
-
-    protected void visit(NodeCauseInfo info, int depth) {}
-
-    protected boolean stopOnAnyFullStack() {
-      return false;
-    }
-
-    protected boolean includeProxies() {
-      return DiagnosticSettings.proxyInWaitChain;
-    }
-
-    protected boolean useLauncher() {
-      return DiagnosticSettings.awaitStacks;
-    }
-
-    void reportCycle() {}
-  }
-
   /** A classical DFS */
-  public void forAllWaiters(Visitor vtor) {
+  public void forAllWaiters(NodeTaskVisitor vtor) {
     forAllWaiters(vtor, this);
   }
 
   /** Interprets the object 'o' as a waiter list and adds the waiters to the list 'q' */
+  @SuppressWarnings("StatementWithEmptyBody")
   private static void unpackAndAdd(ArrayList<NodeCause> q, Object o) {
     if (o == null || o == completed) return;
     if (o instanceof NodeAwaiter nodeAwaiter) {
@@ -1674,11 +1684,13 @@ public abstract class NodeTask extends NodeAwaiter
         if (cause != null) q.add(cause);
         wl = wl.prev;
       }
+    } else if (o instanceof Awaitable) {
+      /* this is some other awaitable and we don't care */
     } else if (Settings.schedulerAsserts)
       throw new GraphInInvalidState(); // This is just an integrity check
   }
 
-  private static void forAllWaiters(Visitor vtor, NodeTask awaitedTask) {
+  private static void forAllWaiters(NodeTaskVisitor vtor, NodeTask awaitedTask) {
     // In q we re-insert task and 'null' guard to mark 'back visit' [BACK_VISIT]
     // Visited list. In order to clean up the walking state. We can't walk again as the tree could
     // change under us
@@ -1692,9 +1704,9 @@ public abstract class NodeTask extends NodeAwaiter
     try {
       int depth = 0;
       while (!q.isEmpty()) {
-        NodeCause cause = q.remove(q.size() - 1); // pop()
+        NodeCause cause = q.removeLast(); // pop()
         if (cause == null) { // [BACK_VISIT]
-          NodeTask pv = stack.remove(stack.size() - 1);
+          NodeTask pv = stack.removeLast();
           pv.updateState(STATE_VISITED_BLACK, 0);
           depth--;
           continue;
@@ -1730,6 +1742,7 @@ public abstract class NodeTask extends NodeAwaiter
       for (NodeTask t : v) t.updateState(0, STATE_VISITED_BLACK | STATE_VISITED_GRAY);
       _visitLock.unlock();
     }
+    vtor.visitEnd();
   }
 
   /** Find and return any path to SI node */
@@ -1743,13 +1756,13 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   public ArrayList<NodeTask> nodeStackToNode() {
-    Visitor v =
-        new Visitor() {
+    NodeTaskVisitor v =
+        new NodeTaskVisitor() {
           @Override
-          public boolean visit(NodeTask ntsk, int depth) {
-            long flags = ntsk.executionInfo().snapFlags();
-            if (((flags & NodeTaskInfo.NOTNODE) == 0) && !(ntsk instanceof TweakNode)) {
-              path.add(ntsk);
+          public boolean visit(NodeTask task, int depth) {
+            long flags = task.executionInfo().snapFlags();
+            if (((flags & NodeTaskInfo.NOTNODE) == 0) && !(task instanceof TweakNode)) {
+              path.add(task);
               return false;
             }
             return true;
@@ -1760,13 +1773,13 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   private ArrayList<NodeTask> nodeStackToPropertyFlags(final long setFlags, final long clearFlags) {
-    Visitor v =
-        new Visitor() {
+    NodeTaskVisitor v =
+        new NodeTaskVisitor() {
           @Override
-          public boolean visit(NodeTask ntsk, int depth) {
-            long flags = ntsk.executionInfo().snapFlags();
+          public boolean visit(NodeTask task, int depth) {
+            long flags = task.executionInfo().snapFlags();
             if (((flags & setFlags) == setFlags) && ((flags & clearFlags) == 0)) {
-              path.add(ntsk);
+              path.add(task);
               return false;
             }
             return true;
@@ -1786,16 +1799,16 @@ public abstract class NodeTask extends NodeAwaiter
    * node task
    */
   public ArrayList<NodeTask> nodeStackAny(boolean proxyInWaitChain, NodeTask upTo) {
-    Visitor v =
-        new Visitor() {
+    NodeTaskVisitor v =
+        new NodeTaskVisitor() {
           @Override
           protected boolean stopOnAnyFullStack() {
             return true;
           }
 
           @Override
-          protected boolean visit(NodeTask ntsk, int depth) {
-            return upTo == null || ntsk.cacheUnderlyingNode() != upTo.cacheUnderlyingNode();
+          protected boolean visit(NodeTask task, int depth) {
+            return upTo == null || task.cacheUnderlyingNode() != upTo.cacheUnderlyingNode();
           }
         };
     forAllWaiters(v);
@@ -1820,16 +1833,17 @@ public abstract class NodeTask extends NodeAwaiter
    */
   @Override
   public final void addToWaitChain(ArrayList<DebugWaitChainItem> appendTo, boolean includeProxies) {
-    if (includeProxies
-        || appendTo.isEmpty()
-        || cacheUnderlyingNode() != appendTo.get(appendTo.size() - 1)) appendTo.add(this);
+    if (includeProxies || appendTo.isEmpty() || cacheUnderlyingNode() != appendTo.getLast())
+      appendTo.add(this);
 
     Object o = _waiters;
     if (o instanceof DebugWaitChainItem dwci) dwci.addToWaitChain(appendTo, includeProxies);
     else if (o instanceof NWList olist && olist.waiter instanceof DebugWaitChainItem dwci)
       dwci.addToWaitChain(appendTo, includeProxies);
-    else if (getLauncher() instanceof DebugWaitChainItem dwci)
-      dwci.addToWaitChain(appendTo, includeProxies);
+    else {
+      var dwci = getLauncher();
+      if (dwci != null) dwci.addToWaitChain(appendTo, includeProxies);
+    }
   }
 
   /**
@@ -1897,7 +1911,7 @@ public abstract class NodeTask extends NodeAwaiter
     final boolean[] rerunProxy = {false};
 
     forAllWaiters(
-        new Visitor() {
+        new NodeTaskVisitor() {
           @Override
           protected boolean includeProxies() {
             return true;
@@ -1909,8 +1923,8 @@ public abstract class NodeTask extends NodeAwaiter
           }
 
           @Override
-          protected boolean visit(NodeTask ntsk, int depth) {
-            rerunProxy[0] |= ntsk.breakProxyChains(eq);
+          protected boolean visit(NodeTask task, int depth) {
+            rerunProxy[0] |= task.breakProxyChains(eq);
             return true;
           }
         });
@@ -1975,15 +1989,18 @@ public abstract class NodeTask extends NodeAwaiter
     }
   }
 
+  private static final RateLimiter nodeTraceLimiter = new RateLimiter(fullTraceOnExceptionLimit);
+
   private void waitersToNodeStackPossiblyReducedFlag(final PrettyStringBuilder sb) {
-    if (Settings.fullNodeTraceOnException) {
+    if (fullTraceOnExceptionLimit != 0
+        && (fullTraceOnExceptionLimit < 0 || nodeTraceLimiter.allow())) {
       waitersToFullMultilineNodeStack(false, sb);
     } else {
       PrettyStringBuilder psb = new PrettyStringBuilder();
-      NodeStackVisitor nsv = waitersToNodeStack(false, psb, false, -1);
+      NodeTaskVisitor.CommonVisitor nsv = waitersToNodeStack(false, psb, false, -1);
       sb.appendln(
           "Reduced Node Stack (single path shown - log full paths with -Doptimus.scheduler"
-              + ".fullNodeTraceOnException=true) total nodes awaiting="
+              + ".fullTraceOnExceptionLimit=N) total nodes awaiting="
               + nsv.nodes
               + ", distinct paths="
               + nsv.paths
@@ -2047,14 +2064,14 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   void appendNodeStack(final ArrayList<NodeTask> list) {
-    NodeStackVisitor nsv = new NodeStackVisitor(false, null, list, null, false, 50);
+    var nsv = new NodeTaskVisitor.CommonVisitor(false, null, list, null, false, 50);
     forAllWaiters(nsv);
   }
 
   private void waitersToNodeStack(Function<NodeTask, Boolean> consumeAndContinue) {
-    NodeStackVisitor nsv =
-        new NodeStackVisitor(
-            false, null, null, consumeAndContinue, Settings.fullNodeTraceOnException, -1);
+    var nsv =
+        new NodeTaskVisitor.CommonVisitor(
+            false, null, null, consumeAndContinue, fullTraceOnExceptionLimit > 0, -1);
     forAllWaiters(nsv);
   }
 
@@ -2082,111 +2099,13 @@ public abstract class NodeTask extends NodeAwaiter
     return ret;
   }
 
-  static class NodeStackVisitor extends Visitor {
-    final boolean enableDangerousParamPrinting;
-    final PrettyStringBuilder sb;
-    final boolean fullNodeStack;
-    ArrayList<NodeTask> list;
-    Function<NodeTask, Boolean> consumeAndContinue;
-
-    int expectedDepth = 0;
-    int maxDepth = 0;
-    int paths = 1;
-    int nodes = 0;
-    int maxLength;
-
-    boolean skipRest = false;
-
-    private NodeStackVisitor(
-        boolean enableDangerousParamPrinting,
-        PrettyStringBuilder sb,
-        ArrayList<NodeTask> list,
-        Function<NodeTask, Boolean> consumeAndContinue,
-        boolean fullNodeStack,
-        int maxLength) {
-      this.maxLength = maxLength;
-      this.enableDangerousParamPrinting = enableDangerousParamPrinting;
-      this.sb = sb;
-      this.list = list;
-      this.consumeAndContinue = consumeAndContinue;
-      this.fullNodeStack = fullNodeStack;
-    }
-
-    @Override
-    public boolean visit(NodeTask ntsk, int depth) {
-      if (expectedDepth != depth) {
-        paths++;
-        skipRest = true;
-      }
-      expectedDepth = depth + 1;
-      if (depth > maxDepth) maxDepth = depth;
-
-      if (!fullNodeStack && skipRest) return true;
-
-      nodes++;
-      if (maxLength > 0 && nodes > maxLength) return false;
-
-      if (list != null) {
-        list.add(ntsk);
-      }
-
-      if (sb != null) {
-        scala.collection.Iterator<optimus.platform.PluginTagKeyValue<?>> pluginTags =
-            ntsk.scenarioStack().pluginTags().iterator();
-
-        String postfix = "";
-
-        while (pluginTags.hasNext()) {
-          Object pluginInfo = pluginTags.next().value();
-          if (pluginInfo instanceof PluginNodeTraceInfo info) {
-            if (info.node() == ntsk) {
-              postfix = " :: " + info.info();
-              break;
-            }
-          }
-        }
-        postfix = postfix.replace(System.lineSeparator(), System.lineSeparator() + '\t');
-
-        sb.append(String.format("%3d. ", depth));
-        sb.appendln(ntsk.stackLine(false) + ntsk.stateAsString() + postfix);
-
-        if (enableDangerousParamPrinting) {
-          Object[] cargs = ntsk.args();
-          if (cargs != null) {
-            for (Object arg : cargs) {
-              sb.append("      ");
-              sb.appendln(arg);
-            }
-          }
-        }
-      }
-
-      if (consumeAndContinue != null) return consumeAndContinue.apply(ntsk);
-      return true; // Continue
-    }
-
-    @Override
-    protected void visit(NodeCauseInfo info, int depth) {
-      if (!skipRest) {
-        if (sb != null) {
-          var details = info.details();
-          if (!details.isEmpty()) {
-            sb.indent();
-            sb.appendln(details);
-            sb.unIndent();
-          }
-        }
-      }
-    }
-  }
-
-  NodeStackVisitor waitersToNodeStack(
+  NodeTaskVisitor.CommonVisitor waitersToNodeStack(
       final boolean enableDangerousParamPrinting,
       final PrettyStringBuilder sb,
       final boolean fullNodeStack,
       int maxLength) {
-    NodeStackVisitor nsv =
-        new NodeStackVisitor(
+    var nsv =
+        new NodeTaskVisitor.CommonVisitor(
             enableDangerousParamPrinting, sb, null, null, fullNodeStack, maxLength);
     forAllWaiters(nsv);
     return nsv;

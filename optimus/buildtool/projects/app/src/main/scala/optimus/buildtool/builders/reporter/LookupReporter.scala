@@ -20,8 +20,6 @@ import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 object LookupReporter {
   type Discrepancies = Map[ScopeId, Seq[LookupDiscrepancy]]
 }

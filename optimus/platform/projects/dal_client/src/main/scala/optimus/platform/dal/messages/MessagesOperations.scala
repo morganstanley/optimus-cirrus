@@ -69,7 +69,8 @@ trait MessagesOperations { this: DSIResolver =>
   }
 
   @async def publishTransaction(
-      transaction: Transaction
+      transaction: Transaction,
+      waitForAck: Boolean = true
   ): Unit = {
     val serializedMsg = UpsertableTransactionSerializer.serialize(transaction)
 
@@ -79,7 +80,7 @@ trait MessagesOperations { this: DSIResolver =>
 
     // 2) txn content (writes/upserts) must goto the same DAL partition - must be enforced before publish
     // for now this is only done on dal broker side - there is no fail-fast client side check to do same
-    val command = MessagesPublishTransactionCommand(serializedMsg)
+    val command = MessagesPublishTransactionCommand(serializedMsg, waitForAck)
     val result = executeMessagesCommand(command)
 
     result match {

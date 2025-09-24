@@ -543,7 +543,7 @@ object ASMGeneratorUtils {
   /**
    * Please do not move or change the name of this method, used by ASMDynamicObjectGenerator
    */
-  final def zipWithIndex(properties: Seq[String]): Map[String, Int] = {
+  final def zipWithIndex(properties: collection.Seq[String]): Map[String, Int] = {
     properties.iterator.zipWithIndex.toMap
   }
 

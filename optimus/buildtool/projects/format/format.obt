@@ -21,6 +21,7 @@ main {
       ossjava.jackson2.module-scala,
       ossjava.jgit,
       ossjava.jib-core,
+      ossjava.opencsv,
       ossjava.typesafeconfig,
       ossjava.zstd-jni,
       ossscala.scala,

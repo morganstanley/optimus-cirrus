@@ -11,22 +11,30 @@
  */
 package optimus.graph.diagnostics.ap
 
+import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.common.annotations.VisibleForTesting
 import com.google.common.hash.Hashing
+import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.Elems
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.AwaitStackManagement
 import optimus.graph.DiagnosticSettings
+import optimus.graph.Exceptions
 import optimus.graph.diagnostics.ap.StackType._
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
+import optimus.graph.diagnostics.sampling.BaseSamplers
+import optimus.graph.diagnostics.sampling.ForensicSource
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.sampling.TimedStack
 import optimus.platform.util.Log
+import optimus.utils.CollectionUtils._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
@@ -36,6 +44,7 @@ import optimus.utils.PropertyUtils
 import optimus.utils.MiscUtils.Endoish._
 import optimus.utils.OptimusStringUtils
 
+import java.lang.reflect.Method
 import java.util.Objects
 import scala.annotation.tailrec
 import scala.util.Random
@@ -45,6 +54,7 @@ import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.lang.{StringBuilder => JStringBuilder}
 
 object StackType {
   val Alloc = "Alloc"
@@ -55,34 +65,18 @@ object StackType {
   val LiveNative = "LiveNative"
   val Free = "Free"
   val FreeNative = "FreeNative"
-  val RevCpu = "RevCpu"
-  val RevAlloc = "RevAlloc"
-  val RevAllocNative = "RevAllocNative"
-  val RevCacheHit = "RevCacheHit"
-  val RevLive = "RevLive"
-  val RevLiveNative = "RevLiveNative"
-  val RevFree = "RevFree"
-  val RevFreeNative = "RevFreeNative"
   val Adapted_DAL = "Adapted_DAL"
-  val RevAdapted_DAL = "RevAdapted_DAL"
   val Lock = "Lock"
-  val RevLock = "RevLock"
   val Wait = "Wait"
-  val RevWait = "RevWait"
   val Unfired_DAL = "Unfired_DAL"
-  val RevUnfired_DAL = "RevUnfired_DAL"
   val FullWait_NS_None = "FullWait.NS.None"
-  val RevFullWait_NS_None = "RevFullWait.NS.None"
 }
 
-object StackAnalysis {
+object StackAnalysis extends Log {
   val AppName = "App"
   val TotalName = "total"
   val GCName = "GC"
   val CompilerName = "Compiler"
-  val PrunedName = "Pruned"
-  val ReveredTotalName = s"$TotalName[without-$GCName-$CompilerName-$PrunedName]"
-  val HideInReverseView = Seq(GCName, CompilerName)
 
   import mutable.{LongMap => LM}
 
@@ -103,14 +97,12 @@ object StackAnalysis {
   private[diagnostics] def numStacksNonDeduped: Long = unDedupedStackCrumbCount.get()
   // Fully qualified class names are abbreviated to a maximum of N successive lower-case letters:
   val camelHumpWidth: Int = PropertyUtils.get("optimus.async.profiler.hump.width", 2)
+  val camelHumpWidthExpand: Int = PropertyUtils.get("optimus.async.profiler.hump.width", 10)
   val frameNameCacheSize: Int = PropertyUtils.get("optimus.async.profiler.frame.cache.size", 1000000)
   val doAbbreviateFrames: Boolean = PropertyUtils.get("optimus.async.profiler.abbreviate", true)
   val stackPathPublishStackSize = PropertyUtils.get("optimus.async.profiler.substack.cache.size", 1000 * 1000)
   val stackCacheExpireAfterSec = PropertyUtils.get("optimus.async.profiler.stack.cache.expire.sec", 3600)
   val maxStackPathCrumbLength = PropertyUtils.get("optimus.async.profiler.substack.max.strlen", 5000)
-
-  private val frameStringInterner = Caffeine.newBuilder().maximumSize(frameNameCacheSize).build[String, String]()
-  private def intern(s: String): String = frameStringInterner.get(s, _ => s)
 
   private val hashing = Hashing.murmur3_128()
   private def hashString(s: String) = Math.abs(hashing.hashUnencodedChars(s).asLong())
@@ -258,10 +250,10 @@ object StackAnalysis {
 
     // remove spaces
     i = 0
-    val sb = new StringBuilder()
+    val sb = new JStringBuilder()
     while (i < endStack) {
       val c = stackLine.charAt(i)
-      if (c != ' ') sb += c
+      if (c != ' ') sb.append(c)
       i += 1
     }
     val stack = sb.toString()
@@ -282,14 +274,22 @@ object StackAnalysis {
       dtStopped: Long = 0L)
   object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording, Map.empty) }
 
-  // Java20 likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
+  // Java20+ likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
   val lambdaRe = "[\\$\\d\\.]*0x\\w+\\.".r
-  val lambdaPrefixSearch = ".0x"
-  val lambdaSubstitute = "\\$0x1a3bda\\." // escapes, since will be used in regex method
+  val lambdaPrefixSearch = ".0x0"
+  val lambdaSubstitute = "\\$0x1a3bda" // escapes, since will be used in regex method
+  val fullLambdaRe = "\\$+([A-Z]\\w)\\w*[\\$\\d\\.]*0x[\\dabcdef]{5,}\\.(\\w+)".r
+  // Really long and plausibly a hex number.  These are inserted by the scala compiler, so we'll only have
+  // to search for them once before the frame is memoized.
+  private val longHexRe = "\\.[\\dabcdef]{10,}\\.".r
+
+  // By contrast, java lambdas might be synthesized in their multitudes, so we want to remove them before
+  // memoizing.
   def undisambiguateLambda(frame0: String): String =
-    if (frame0.contains(lambdaPrefixSearch))
-      lambdaRe.replaceAllIn(frame0, lambdaSubstitute)
-    else frame0
+    if (frame0.contains(lambdaPrefixSearch)) {
+      val ret = fullLambdaRe.replaceAllIn(frame0, m => "." + m.group(1) + lambdaSubstitute + "_" + m.group(2))
+      ret
+    } else frame0
 
   private val CUSTOM_EVENT_PREFIX = "[custom="
   private val STACK_ID_PREFIX = "[sid="
@@ -301,10 +301,15 @@ object StackAnalysis {
     ignoredPrefixes.exists(frame.startsWith(_))
   }
 
-  val GCPredicate =
+  val GCPredicate: Long =
     (StringPredicate.contains("GCTaskThr") or StringPredicate.contains("__clone") or StringPredicate.contains(
       "thread_native_entry")).assignMask()
-  val JITPredicate = (StringPredicate.contains("Compile:") or StringPredicate.contains("CompileBroker::")).assignMask()
+  val JITPredicate: Long =
+    (StringPredicate.contains("Compile:") or StringPredicate.contains("CompileBroker::")).assignMask()
+
+  val DefaultFlameExclusions: Long =
+    (StringPredicate.startsWith("je_prof") or StringPredicate.startsWith("je_malloc") or StringPredicate.startsWith(
+      "Profiler::") or StringPredicate.contains(".runAndWait") or StringPredicate.startsWith("sampleHook")).assignMask()
 
   private def looksLikeGCStack(stack: BackedArray[CleanName]) = stack.exists(_.matches(GCPredicate))
 
@@ -343,7 +348,7 @@ object StackAnalysis {
       .mkString("\n")
   }
 
-  final class CleanName private (
+  final class CleanName private[optimus] (
       val name: String,
       val orig: String,
       val id: Long,
@@ -359,10 +364,16 @@ object StackAnalysis {
 
     override def toString: String = s"($name, $id)"
 
-    def rootNode = new StackNode(this, 0, hash)
+    override def hashCode(): Int = id.hashCode()
+    override def equals(obj: Any): Boolean = obj match {
+      case cn: CleanName => id == cn.id
+      case _             => false
+    }
+
+    def rootNode = new StackNode(this, 0, hash, NoNode)
   }
 
-  def dromedize(frame: String): String = CleanName.dromedize(0, frame.size, frame)
+  def prettyFrameName(frame: String): String = CleanName.prettyFrameName(0, frame.size, frame, false)
 
   object CleanName {
     val FREE = 1
@@ -387,53 +398,231 @@ object StackAnalysis {
       frameNameCache.get(frame, frame => CleanName(frame, frame, 0, 0, hashString(frame)))
     }
 
-    def dromedize(start: Int, methodEnd: Int, frame: String): String = {
+    def shortPackageName(pkgName: String): String = {
+      if (pkgName == null || pkgName.length < 2) ""
+      else {
+        val prefix = new JStringBuilder
+        prefix.append(pkgName.charAt(0))
+        var i: Int = 1
+        while (i < pkgName.length - 1) {
+          if (pkgName.charAt(i) == '.') {
+            prefix.append('.').append(pkgName.charAt(i + 1))
+            i += 1 // eat next char
+          }
+          i += 1
+        }
+        prefix.append('.')
+        prefix.toString
+      }
+    }
+
+    private val trailingDollarStuff = "[\\d\\$]+$".r
+
+    private def dedollarize(s: String): String =
+      if (!s.contains('$')) s else trailingDollarStuff.replaceFirstIn(s, "")
+
+    private def tryOrNull[T <: AnyRef](o: AnyRef, f: => T): T =
+      try { f }
+      catch {
+        // Yes, Throwable, because Class methods sometimes, inexplicably, throw InternalError
+        case t: Throwable =>
+          whine(o, t)
+          null.asInstanceOf[T]
+      }
+
+    private var complaintProbability = 1.0
+    var numComplaints = 0
+    def whine(o: Object, t: Throwable): Unit = {
+      BaseSamplers.increment(Properties.numStackProblems, 1)
+      // Always report the first.  Every time we report reduce chance of reporting by factor of 10.
+      val (doit, n) = synchronized {
+        numComplaints += 1
+        val doit = Random.nextDouble() < complaintProbability
+        if (doit) complaintProbability /= 10
+        (doit, numComplaints)
+      }
+      if (doit) {
+        val s =
+          try { o.toString }
+          catch { case _: Throwable => "???" }
+        log.warn(s"Ignoring exception $numComplaints prettifying $s", t)
+        Breadcrumbs.warn(
+          ChainedID.root,
+          PropertiesCrumb(
+            _,
+            ForensicSource,
+            Properties.logMsg -> s"Ignoring exception prettifying $s",
+            Properties.countNum -> n,
+            Properties.exception -> t,
+            Properties.stackTrace -> Exceptions.minimizeTrace(t, maxDepth = 20)
+          )
+        )
+      }
+    }
+
+    private def cleanClass(clz: Class[_]): String = {
+      // This can be called recursively, so we can't use Cache#get.
+      val cached = clzPrettyNameCache.getIfPresent(clz)
+      if (Objects.nonNull(cached)) cached
+      else {
+        val ret = {
+          val sn = dedollarize(clz.getSimpleName)
+          // These methods are supposed to return null when there is no encloser, but apparently
+          // they sometimes throw.  In any case, avoid heavy Try/Option wrappers.
+          val em = tryOrNull(clz, clz.getEnclosingMethod)
+          if (Objects.nonNull(em)) cleanMethod(em) + "." + sn
+          else {
+            val ec = tryOrNull(clz, clz.getEnclosingClass)
+            if (Objects.isNull(ec)) {
+              val pkg = tryOrNull(clz, clz.getPackageName)
+              if (Objects.isNull(pkg) || pkg.isEmpty) sn
+              else shortPackageName(pkg) + sn
+            } else
+              cleanClass(ec) + "." + sn
+          }
+        }
+        clzPrettyNameCache.put(clz, ret)
+        ret
+      }
+    }
+    private def cleanMethod(method: Method): String = {
+      val ec = tryOrNull(method, method.getDeclaringClass)
+      val m = method.getName
+      if (Objects.isNull(ec)) m
+      else {
+        SamplingProfiler.classToFrame(ec, m).getOrElse(cleanClass(ec) + "." + m)
+      }
+    }
+
+    // Every class we encounter in the stack trace should have been loaded already, so we want to avoid searching the classpath.
+    private val flcm = classOf[ClassLoader].getDeclaredMethod("findLoadedClass", classOf[String])
+    flcm.setAccessible(true)
+    private val cl = classOf[StackAnalysis].getClassLoader
+    private def findLoadedClass(name: String): Class[_] = cl.synchronized {
+      flcm.invoke(cl, name).asInstanceOf[Class[_]]
+    }
+
+    private val clzCache: Cache[String, Class[_]] =
+      Caffeine.newBuilder().maximumSize(100000).weakValues().build[String, Class[_]]
+    private val clzPrettyNameCache = Caffeine.newBuilder().maximumSize(100000).weakKeys().build[Class[_], String]
+    private val specialClzPrettyNameCache =
+      Caffeine.newBuilder().maximumSize(100000).weakKeys().build[Class[_], Option[String]]
+
+    private class NoClassClass
+    private val NoClass = classOf[NoClassClass]
+
+    private def forName(name: String): Class[_] = clzCache.get(
+      name,
+      name =>
+        try {
+          val c = findLoadedClass(name)
+          if (Objects.nonNull(c)) c else NoClass
+        } catch {
+          case t: Throwable => NoClass
+        })
+
+    private val breakOn = System.getProperty("optimus.sampling.debug.frame.name", "")
+
+    def prettyFrameName(start: Int, methodEnd: Int, frame: String, hadLambda: Boolean): String = {
+
+      if (breakOn.nonEmpty && frame.contains(breakOn))
+        log.info(s"Prettifying $frame")
+
       var i = start
-      var methodStart = methodEnd - 1
-      while (methodStart >= i && frame(methodStart) != '.' && frame(methodStart) != '/') { methodStart -= 1 }
+      val methodStart = {
+        var m = methodEnd - 1
+        while (m >= i && frame(m) != '.' && frame(m) != '/') { m -= 1 }
+        m
+      }
 
       if (methodStart < i)
         return frame.substring(i, methodEnd)
 
       val method = {
-        if (methodStart == methodEnd - 1) ""
-        else frame.substring(methodStart, methodEnd)
+        val m = if (methodStart + 1 >= methodEnd) "" else frame.substring(methodStart + 1, methodEnd)
+        // Clean up methods like scala/reflect/runtime/SynchronizedSymbols$SynchronizedSymbol$$anon$9.scala$reflect$runtime$SynchronizedSymbols$SynchronizedSymbol$$super$info
+        // by removing the part of the method that parallels the fqcn
+        if (!hadLambda && m.contains('$')) {
+          var methodStart = 0
+          var lastDollar = -1
+          var i = 0
+          while (i < frame.size - start && i < m.size) {
+            if (m(i) == '$') lastDollar = i
+            else if (m(i) != frame(start + i)) i = m.size
+            else methodStart = lastDollar + 1
+            i += 1
+          }
+          if (methodStart > 0)
+            m.substring(methodStart)
+          else m
+        } else m
       }
 
-      val pack = if (methodStart > 0) {
-        // construct op.gr.OGSchCon, e.g.
-        val sb = new StringBuilder()
-        var charsToKeep = camelHumpWidth
-        while (i < methodStart) {
-          val c = frame(i)
-          i += 1
-          if (c == '.' || c == '/') {
-            charsToKeep = camelHumpWidth
-            sb += '.'
-          } else if (c.isUpper || c == '$' || c == '@' || (c >= '0' && c <= '9')) {
-            charsToKeep = camelHumpWidth
-            sb += c
-          } else if (charsToKeep > 0) {
-            charsToKeep -= 1
-            sb += c
+      def fallbackAbbreviation(): String = {
+        // Try to extract and clean a valid class
+        val stuff = if (methodStart > 0) {
+          // construct op.gr.OGSchCon, e.g.
+          val sb = new JStringBuilder()
+          var charsToKeep = camelHumpWidth
+          while (i < methodStart) {
+            val c = frame(i)
+            i += 1
+            if (c == '.' || c == '/') {
+              charsToKeep = camelHumpWidth
+              sb.append('.')
+            } else if (c.isUpper || c == '$' || c == '@' || (c >= '0' && c <= '9')) {
+              charsToKeep = camelHumpWidthExpand
+              sb.append(c)
+            } else if (charsToKeep > 0) {
+              charsToKeep -= 1
+              sb.append(c)
+            }
           }
-        }
-        sb.toString
-      } else ""
+          sb.toString
+        } else ""
+        s"$stuff.$method"
+      }
 
-      pack + method
+      var pretty = {
+        val possibleClassName = frame.substring(i, methodStart).replace('/', '.')
+        val clz = {
+          var clz = forName(possibleClassName)
+          // Lambda disambiguation might eat too many dollar signs
+          if ((clz eq NoClass) && hadLambda) clz = forName(possibleClassName + "$")
+          clz
+        }
+        if (clz ne NoClass) {
+          try {
+            val classFrame = specialClzPrettyNameCache.get(clz, clz => SamplingProfiler.classToFrame(clz, method))
+            classFrame.getOrElse {
+              val clzName = cleanClass(clz)
+              s"$clzName.$method"
+            }
+          } catch {
+            case t: Throwable =>
+              whine(possibleClassName, t)
+              s"$possibleClassName.$method"
+          }
+        } else
+          fallbackAbbreviation()
+      }
+
+      // If we still random looking hex strings, get rid of them.
+      pretty = longHexRe.replaceAllIn(pretty, "_")
+
+      pretty
     }
 
     def cleanName(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, flags: Int): CleanName = {
-      def clean(frame0: String, hasFrameNum: Boolean, abbreviate: Boolean): CleanName = {
-        val predMask: Long = StringPredicate.getMaskForAllPredicates(frame0)
+      def clean(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, hadLambda: Boolean): CleanName = {
+        val predMask: Long = StringPredicate.getMaskForAllPredicates(frame)
 
         var i = 0
-        val frame = undisambiguateLambda(frame0)
+
         val hash = hashString(frame)
 
-        val length = frame.size
         if (hasFrameNum) {
+          val length = frame.size
           // Step forward past the frame number
           while (i < length && frame(i) != ']') { i += 1 }
           i += 1
@@ -442,29 +631,34 @@ object StackAnalysis {
             return abbreviateError
         }
 
+        val f = if (i > 0) frame.substring(i) else frame
+
         // async methods end with "_[a]" (see optimus.graph.AwaitStackManagment.StringPointers.getName where we add this); in any case, remove args
         val methodEnd = {
-          var j = frame.indexOf("_[a]")
-          if (j < 0) j = frame.indexOf('(')
-          if (j < 0) length else j
+          var j = f.indexOf("_[a]")
+          if (j < 0) j = f.indexOf('(')
+          if (j < 0) f.size else j
         }
 
-        if (!abbreviate)
-          CleanName(frame.substring(i, methodEnd).replaceAllLiterally("/", "."), frame, flags, predMask, hash)
-        else {
-          val shortened = dromedize(i, methodEnd, frame)
-          CleanName(shortened, frame, flags, predMask, hash)
+        if (!abbreviate || f.contains("::") || f.startsWith("[") || f.startsWith("@")) {
+          var cleaned = frame.substring(i, methodEnd).replace('/', '.')
+          cleaned = longHexRe.replaceAllIn(cleaned, "_")
+          CleanName(cleaned, f, flags, predMask, hash)
+        } else {
+          val pretty = prettyFrameName(0, methodEnd, f, hadLambda)
+          CleanName(pretty, f, flags, predMask, hash)
         }
       }
 
-      frameNameCache.get(frame, frame => clean(frame, hasFrameNum, abbreviate))
+      val lambdaLess = undisambiguateLambda(frame)
+      frameNameCache.get(lambdaLess, f => clean(f, hasFrameNum, abbreviate, (frame ne lambdaLess)))
     }
 
   }
 
   def rootStackNode(name: String, flags: Int = 0) = {
     val cn = CleanName.cleanName(name)
-    new StackNode(cn, flags, cn.hash)
+    new StackNode(cn, flags, cn.hash, NoNode)
   }
 
   private final case class BackupStackNodeState(kids: AnyRef, var total: Long, var self: Long)
@@ -473,19 +667,31 @@ object StackAnalysis {
   // of a possibly partial stack).  The value here is irrelevant but should be shared across jvms.
   private val stackHashTerminator: Long = hashString("this is the way the stack ends")
 
+  val NoNode: StackNode = null
+
   // Each node is identified by an id unique to the frame name, plus a link to its
   // parent on the tree.  This is a conventional approach for representing flame graphs.
-  final class StackNode(val cn: CleanName, val depth: Int, val pathHash: Long) {
+  final class StackNode(val cn: CleanName, val depth: Int, val pathHash: Long, val parent: StackNode) {
     def nameId: Long = cn.id
     def name: String = cn.name
     def getTotal: Long = total
     def getSelf: Long = self
 
-    def updateForReverseStacksDisplay(): Unit = if (name == ReveredTotalName) {
-      // trim Compiler & GC
-      HideInReverseView.foreach(n => dropKid(CleanName.cleanName(n).id))
-      total = kiderator.map(_.getTotal).sum
-      self = total
+    def nonEmpty: Boolean = this ne NoNode
+
+    // be used by Profire tree builder
+    private[optimus] def setTotal(samples: Long): Unit = total = samples
+    private[optimus] def addTotal(samples: Long): Unit = total += samples
+    private[optimus] def addSelf(samples: Long): Unit = self += samples
+    private[optimus] def merge(other: StackNode): Int = {
+      this.total += other.total
+      this.self += other.self
+      var childCount = 0
+      for (otherChild <- other.kiderator) {
+        val child = this.getOrCreateChildNode(otherChild.cn, () => childCount += 1)
+        childCount += child.merge(otherChild)
+      }
+      childCount
     }
 
     def terminalHash: Long = combineHashes(pathHash, stackHashTerminator)
@@ -516,8 +722,13 @@ object StackAnalysis {
     // as well.
     private[StackAnalysis] val apsids = mutable.TreeSet.empty[Long]
 
-    private[StackAnalysis] var parent: StackNode = null
     override def toString: String = s"[$nameId, $name, $total, $self]"
+
+    def isLeaf: Boolean = kids match {
+      case null                      => true
+      case map: LM[_] if map.isEmpty => true
+      case _                         => false
+    }
 
     def kiderator: Iterator[StackNode] =
       kids match {
@@ -526,48 +737,56 @@ object StackAnalysis {
         case map: LM[_]      => map.cast.valuesIterator
       }
 
-    def sortedKiderator: Iterator[StackNode] =
+    def sortedKids[B](sort: StackNode => B)(implicit ord: Ordering[B]): Seq[StackNode] =
       kids match {
-        case null            => Iterator.empty
-        case only: StackNode => Iterator(only)
-        case map: LM[_]      => map.cast.values.toSeq.sortBy(_.name).iterator
+        case null            => Seq.empty
+        case only: StackNode => Seq(only)
+        case map: LM[_]      => map.cast.values.toSeq.sortBy(sort)
       }
 
-    def getOrUpdateChildNode(childId: Long, newChildNode: () => StackNode): StackNode = {
+    private def updateChild(childId: Long, birth: () => StackNode): StackNode = {
       kids match {
         case null =>
-          val ret = newChildNode()
+          val ret = birth()
           kids = ret
           ret
         case only: StackNode =>
           if (only.nameId == childId) only
           else {
-            val ret = newChildNode()
+            val ret = birth()
             kids = LM(only.nameId -> only, ret.nameId -> ret)
             ret
           }
         case map: LM[_] =>
-          map.cast.getOrElseUpdate(childId, newChildNode())
+          map.cast.getOrElseUpdate(childId, birth())
       }
     }
 
-    def dropKid(childId: Long): Unit = kids match {
+    def getOrCreateChildNode(childName: CleanName): StackNode = {
+      def newChildNode(): StackNode =
+        new StackNode(childName, depth + 1, combineHashes(this.pathHash, childName.hash), this)
+      updateChild(childName.id, newChildNode)
+    }
+
+    def getOrCreateChildNode(childName: CleanName, onAdd: () => Unit): StackNode = {
+      def newChildNode(): StackNode = {
+        onAdd()
+        new StackNode(childName, depth + 1, combineHashes(this.pathHash, childName.hash), this)
+      }
+      updateChild(childName.id, newChildNode)
+    }
+
+    def dropKid(childId: Long): StackNode = kids match {
       case null =>
+        null
       case only: StackNode =>
         if (only.nameId == childId) kids = null
+        only
       case map: LM[_] =>
+        val ret = map.remove(childId).getOrElse(null).asInstanceOf[StackNode]
         map -= childId
         if (map.isEmpty) kids = null
-    }
-
-    private[StackAnalysis] def getOrCreateChildNode(childName: CleanName): StackNode = {
-      def newChildNode(): StackNode = {
-        val kidHash = combineHashes(this.pathHash, childName.hash)
-        val kid = new StackNode(childName, depth + 1, kidHash)
-        kid.parent = this
-        kid
-      }
-      getOrUpdateChildNode(childName.id, newChildNode)
+        ret
     }
 
     def addPath(names: Iterable[CleanName], count: Long): StackNode = {
@@ -583,9 +802,6 @@ object StackAnalysis {
       val names = splitInto(folded, ';', backer, 0, CleanName.internOnly(_))
       addPath(names, count)
     }
-
-    def addFrames(frames: Iterable[String], count: Long): StackNode =
-      addPath(frames.map(CleanName.internOnly), count)
 
     // Add self time to this node, and total time to all nodes back to root
     def add(t: Long, apsid: Long): StackNode = {
@@ -686,51 +902,124 @@ object StackAnalysis {
     def assertConsistentTimes(): Unit = {
       def times =
         s"\n$cn TIMES: self: ${self}, total ${total}, children: [${kiderator.map(_.total).mkString(", ")}]"
+      assert(total == self + kiderator.map(_.total).sum, s"total time inconsistent ${times}")
       assert(self >= 0L, s"negative self time ${times}")
       assert(total >= 0L, s"negative total time ${times}")
-      assert(total == self + kiderator.map(_.total).sum, s"total time inconsistent ${times}")
+    }
+
+    def traverse[P](p: P, f: (P, StackNode) => P): Unit = {
+      @tailrec def traverseImpl(stack: List[(P, StackNode)], f: (P, StackNode) => P): Unit = stack match {
+        case Nil =>
+        case (parentContext, node) :: rest =>
+          val childContext = f(parentContext, node)
+          val stack = node.kids match {
+            case only: StackNode =>
+              (childContext, only) :: rest
+            case map: LM[_] =>
+              map.cast.values.toSeq.sortBy(_.name).map((childContext, _)).toList ::: rest
+            case null => rest
+          }
+          traverseImpl(stack, f)
+      }
+      traverseImpl(List((p, this)), f)
     }
 
     def traverse(f: StackNode => Unit): Unit = {
-      @tailrec def traverseImpl(stack: mutable.Stack[StackNode], f: StackNode => Unit): Unit = {
-        if (stack.isEmpty) return
-        val n = stack.pop()
-        f(n)
-        n.kids match {
-          case only: StackNode =>
-            stack += only
-          case map: LM[_] =>
-            stack ++= map.cast.valuesIterator
-          case null =>
-        }
-        traverseImpl(stack, f)
+      @tailrec def traverseImpl(stack: List[StackNode], f: StackNode => Unit): Unit = stack match {
+        case Nil =>
+        case node :: rest =>
+          f(node)
+          val stack = node.kids match {
+            case only: StackNode =>
+              only :: rest
+            case map: LM[_] =>
+              map.cast.valuesIterator.toList ::: rest
+            case null =>
+              rest
+          }
+          traverseImpl(stack, f)
       }
-      traverseImpl(mutable.Stack(this), f)
+      traverseImpl(List(this), f)
     }
 
     def backupLinks(): Unit = traverse { sn => sn.backup() }
 
     def restoreLinks(): Unit = traverse { sn => sn.restore() }
 
+    def treeFormat(append: String => Unit): Unit = {
+      this.traverse(
+        0,
+        (depth: Int, n) => {
+          append(" " * depth + s"${n.name} ${n.total} ${n.self}")
+          depth + 2
+        })
+    }
+
     def treeString: String = {
       val sb = ArrayBuffer.empty[String]
-      def traverse(n: StackNode, depth: Int): Unit = {
-        sb += " " * depth + s"${n.name} ${n.total} ${n.self}"
-        n.kids match {
-          case null            =>
-          case only: StackNode => traverse(only, depth + 2)
-          case map: LM[_] =>
-            map.cast.toSeq.sortBy(_._2.name).foreach(k => traverse(k._2, depth + 2))
-        }
-      }
-      traverse(this, 0)
+      treeFormat(sb += _)
       sb.mkString("\n")
     }
 
-    // for debugging most
+    def dotFormat(append: String => Unit): Unit = {
+      append("digraph StackTree {\n")
+      append("  rankdir=TB;\n")
+      append("  node [shape=box];\n\n")
+      var id = 0
+
+      traverse(
+        0,
+        (parentId: Int, node: StackNode) => {
+          id += 1
+          if (parentId > 0) append(s"  node${parentId} -> node${id};\n")
+          append(s"""  node${id} [label="${node.name} total=${node.total} self=${node.self}"];\n""")
+          id
+        }
+      )
+      append("}\n")
+    }
+
+    def dotString: String = {
+      val sb = new JStringBuilder()
+      dotFormat(sb.append(_))
+      sb.toString
+    }
+
+    def csvFormat(append: String => Unit): Unit = {
+      append("Frame,Caller,Method,Total,Self\n")
+      var id = 0
+      def traverse(parentId: Int, node: StackNode): Unit = {
+        id += 1
+        append(s"$id,$parentId,\"${node.name}\",${node.total},${node.self}\n")
+        node.kiderator.foreach(traverse(id, _))
+      }
+      traverse(0, this)
+      toString
+    }
+
+    def csvString: String = {
+      val sb = new JStringBuilder()
+      csvFormat(sb.append(_))
+      sb.toString
+    }
+
+    def foldedFormat(append: String => Unit): Unit = {
+      this.traverse { node =>
+        if (node.isLeaf)
+          append(node.frames.mkString(";") + " " + node.total + "/n")
+      }
+    }
+
+    def foldedString: String = {
+      val sb = new JStringBuilder()
+      foldedFormat(sb.append(_))
+      sb.toString
+    }
+
+    // for debugging mostly
     def root: StackNode = {
       var node = this
-      while (node.parent ne null)
+      while (node.parent ne NoNode)
         node = node.parent
       node
     }
@@ -738,7 +1027,7 @@ object StackAnalysis {
     def frames: Seq[String] = {
       var fromRoot: List[StackNode] = Nil
       var node = this
-      while (node.parent ne null) { // i.e. don't print root itself
+      while (node.parent ne NoNode) { // i.e. don't print root itself
         if (node.name.nonEmpty)
           fromRoot = node :: fromRoot
         node = node.parent
@@ -747,7 +1036,7 @@ object StackAnalysis {
     }
 
     def pathMemoizedStackString(abbrevCache: PublishedPathHashes): Seq[(Long, String)] = {
-      var sb = new StringBuilder
+      var sb = new JStringBuilder
       var paths: Seq[(Long, String)] = Seq.empty
       // Work backwards from leaf
       var node = this
@@ -764,10 +1053,10 @@ object StackAnalysis {
         return Seq.empty
       val hash = fromRoot.head.pathHash
       if (known) {
-        sb ++= longAbbrev(hash, "==")
+        sb.append(longAbbrev(hash, "=="))
       } else {
         abbrevCache += hash
-        sb ++= s"${longAbbrev(hash, "=")}=${fromRoot.head.cn.name}"
+        sb.append(s"${longAbbrev(hash, "=")}=${fromRoot.head.cn.name}")
       }
 
       val it = fromRoot.tail.iterator
@@ -775,13 +1064,13 @@ object StackAnalysis {
         node = it.next()
         abbrevCache += node.pathHash
         val w = s";${longAbbrev(node.pathHash, "=")}=${node.cn.name}"
-        sb ++= w
-        if (sb.size > maxStackPathCrumbLength && it.hasNext) {
+        sb.append(w)
+        if (sb.length() > maxStackPathCrumbLength && it.hasNext) {
           // This shouldn't happen often, but if it does, we'll break up the stacks.
           paths = paths :+ (node.terminalHash, sb.toString())
-          sb = new StringBuilder
+          sb = new JStringBuilder
           // Next segment starts with the frame we just published
-          sb ++= longAbbrev(node.pathHash, "==")
+          sb.append(longAbbrev(node.pathHash, "=="))
         }
       }
       paths = paths :+ ((node.terminalHash, sb.toString))
@@ -818,6 +1107,7 @@ class StackAnalysis(
   val trackLiveMemory = propertyUtils.get("optimus.async.profiler.track.live.memory", true)
   val publishFullStacks = propertyUtils.get("optimus.sampling.stacks.full", true)
   val publishStackPaths = propertyUtils.get("optimus.sampling.stacks.paths", false)
+  val aggressiveElision = propertyUtils.get("optimus.sampling.elide.frames", false)
 
   private val stackPublicationTime =
     Caffeine
@@ -916,13 +1206,11 @@ class StackAnalysis(
     walk(Set.empty, List(root))
   }
 
-  // Skip over a series of OGScheduler threads ending in a .run
+  // Skip over "boring" frames
   private def firstUserFrame(frames: BackedArray[CleanName]): Int = {
-    val length = frames.length
-    var i = 0
-    while (i < length && frames(i).orig.startsWith("optimus/graph")) { i += 1 }
-    if (i == 0 || !frames(i - 1).orig.contains(".run")) 0
-    else i
+    if (aggressiveElision)
+      Math.max(0, frames.indexOf(_.matches(StringPredicate.rootMask)))
+    else 0
   }
 
   private val cleanNameBacker = new Array[CleanName](1000)
@@ -1053,7 +1341,7 @@ class StackAnalysis(
     // Resolve ambiguity in favor of pruning longer stack
     if (ret == 0) ret = JInteger.compare(x.depth, y.depth)
     // If still equivalent compare the name - this is really only useful for test stability.
-    if (ret == 0) ret = x.name.compareTo(y.name)
+    if (ret == 0) ret = JLong.compare(x.pathHash, y.pathHash)
     ret
   })
 
@@ -1088,7 +1376,7 @@ class StackAnalysis(
         while (leafQueue.size > n) {
           val leaf = leafQueue.dequeue()
           val parent = leaf.pruneFromParent()
-          if (parent ne null)
+          if (parent ne NoNode)
             leafQueue.enqueue(parent)
         }
         root.pushSelfTimesToLeaves()
@@ -1134,9 +1422,9 @@ class StackAnalysis(
   private def mergeAllocationsIntoLive(liveTracking: LiveTracking, allocRoot: StackNode): Unit = {
     val liveRoot = liveTracking.root
     val liveNodes = liveTracking.nodes
-    var added = 0
     var merged = 0
     var truncated = 0
+    var added = 0
     var alloc = 0L
     val errors = ArrayBuffer.empty[String]
     // Merge allocations into live, depth first.
@@ -1162,23 +1450,14 @@ class StackAnalysis(
           liveNode.apsids ++= allocNode.apsids
         } else {
           allocNode.kiderator.foreach { allocChild =>
-            val liveChild = liveNode.getOrUpdateChildNode(
-              allocChild.nameId,
-              () => {
-                val kidHash = combineHashes(liveNode.pathHash, allocChild.cn.hash)
-                val kid = new StackNode(allocChild.cn, liveNode.depth + 1, kidHash)
-                added += 1
-                kid.parent = liveNode
-                kid
-              }
-            )
+            val liveChild = liveNode.getOrCreateChildNode(allocChild.cn, () => added += 1)
             mergeStack = (liveChild, allocChild, depth + 1) :: mergeStack
           }
         }
       }
     }
     log.debug(
-      s"Merged $merged allocations, truncated $truncated, added $added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
+      s"Merged $merged allocations, truncated $truncated, added=$added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
   }
 
   private def mergeFreesIntoLive(liveTracking: LiveTracking, freeRoot: StackNode): Unit = {
@@ -1209,7 +1488,12 @@ class StackAnalysis(
     def cleanDfs(liveNode: StackNode): Long = {
       // toDrop elements will either be 0 or a kid id to drop
       val toDrop: Iterator[Long] = liveNode.kiderator.map(cleanDfs)
-      toDrop.foreach { id => if (id != 0) liveNode.dropKid(id) }
+      toDrop.foreach { id =>
+        if (id != 0) {
+          val dropped = liveNode.dropKid(id)
+          if (Objects.nonNull(dropped)) liveNode.add(-dropped.total)
+        }
+      }
       if (liveNode.total < memEpsilon) {
         dropped += 1
         liveNode.apsids.foreach(liveNodes -= _)
@@ -1242,7 +1526,7 @@ class StackAnalysis(
         do {
           newN = newN.getOrCreateChildNode(oldN.cn)
           oldN = oldN.parent
-        } while (oldN.parent ne null)
+        } while (oldN.parent ne NoNode)
         newN.add(currentOldNode.self)
       }
 
@@ -1275,7 +1559,7 @@ class StackAnalysis(
       collapsedFormatDump: String,
       preSplitStacks: Iterable[TimedStack],
       nmax: Int,
-      generateFolded: Boolean
+      generateFolded: Boolean = false
   ): StacksAndTimers = try {
     if (collapsedFormatDump.isEmpty && preSplitStacks.isEmpty) StacksAndTimers.empty
     else {
@@ -1283,8 +1567,8 @@ class StackAnalysis(
 
       // Update live view
       if (trackLiveMemory) {
-        roots0.get(Alloc).foreach(mergeAllocationsIntoLive(heapTracking, _))
-        roots0.get(AllocNative).foreach(mergeAllocationsIntoLive(nativeTracking, _))
+        roots0.get(Live).foreach(mergeAllocationsIntoLive(heapTracking, _))
+        roots0.get(LiveNative).foreach(mergeAllocationsIntoLive(nativeTracking, _))
         roots0.get(Free).foreach(mergeFreesIntoLive(heapTracking, _))
         roots0.get(FreeNative).foreach(mergeFreesIntoLive(nativeTracking, _))
         cleanLive(heapTracking)
@@ -1293,32 +1577,17 @@ class StackAnalysis(
         nativeTracking.backup()
       }
 
-      // Adapted_DAL, Lock, Wait, Unfired_DAL, FullWait.NS.None,
-
       // Add live view to roots, and remove Free stub
-      val roots = {
-        val withLiveMemory =
-          roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - Free - FreeNative)
-        val revCpu = addReversed(Cpu, roots0, RevCpu).fold(withLiveMemory)(r => withLiveMemory + (RevCpu -> r))
-        val revAlloc = addReversed(Alloc, roots0, RevAlloc).fold(revCpu)(r => revCpu + (RevAlloc -> r))
-        val revAllocNative =
-          addReversed(AllocNative, roots0, RevAllocNative).fold(revAlloc)(r => revAlloc + (RevAllocNative -> r))
-        val revFree = addReversed(Free, roots0, RevFree).fold(revAllocNative)(r => revAllocNative + (RevFree -> r))
-        val revFreeNative =
-          addReversed(FreeNative, roots0, RevFreeNative).fold(revFree)(r => revFree + (RevFreeNative -> r))
-        val revAdapted_DAL =
-          addReversed(Adapted_DAL, roots0, RevAdapted_DAL).fold(revFreeNative)(r => revFree + (RevAdapted_DAL -> r))
-        val revLock =
-          addReversed(Lock, roots0, RevLock).fold(revFreeNative)(r => revAdapted_DAL + (RevLock -> r))
-        val revWait =
-          addReversed(Wait, roots0, RevWait).fold(revFreeNative)(r => revLock + (RevWait -> r))
-        val revUnfired_DAL =
-          addReversed(Unfired_DAL, roots0, RevUnfired_DAL).fold(revFreeNative)(r => revWait + (RevUnfired_DAL -> r))
-        val revFullWait =
-          addReversed(FullWait_NS_None, roots0, RevFullWait_NS_None).fold(revFreeNative)(r =>
-            revUnfired_DAL + (RevFullWait_NS_None -> r))
-        revFullWait
-      }
+      val origNames =
+        Seq(Cpu, Alloc, AllocNative, Adapted_DAL, Lock, Wait, Unfired_DAL, FullWait_NS_None)
+      val newTrees: Seq[(String, StackNode)] = for {
+        origName <- origNames
+        reversed <- addReversed(origName, roots0, s"Rev$origName")
+      } yield s"Rev$origName" -> reversed
+
+      val roots =
+        roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - Free - FreeNative) ++ newTrees
+
       if (DiagnosticSettings.samplingAsserts) roots.valuesIterator.foreach(assertTreesAreConsistent)
 
       // Post process trees, prune leaves etc

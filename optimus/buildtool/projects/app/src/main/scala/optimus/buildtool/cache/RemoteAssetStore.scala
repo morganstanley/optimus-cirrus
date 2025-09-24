@@ -12,6 +12,7 @@
 package optimus.buildtool.cache
 
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.platform._
 
 import java.net.URL
@@ -25,7 +26,7 @@ trait RemoteAssetStore {
 }
 object RemoteAssetStore {
   lazy val externalArtifactVersion: String =
-    sys.props.get("optimus.buildtool.cache.externalArtifactVersion").getOrElse("external-1.1")
+    OptimusBuildToolProperties.get("cache.externalArtifactVersion").getOrElse("external-1.1")
 }
 
 object NoOpRemoteAssetStore extends RemoteAssetStore {

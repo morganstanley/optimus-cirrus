@@ -234,7 +234,7 @@ final class ResultTableCreator(fileChooserPanel: FileChooserPanel, fileChooserDi
 
   private def getFileBarText(fileSelectionBar: FileSelectionBar): String = fileSelectionBar.filePathField.getText
 
-  private def splitFilePaths(unEditedPaths: String): ArrayBuffer[String] = ArrayBuffer(unEditedPaths.split(","): _*)
+  private def splitFilePaths(unEditedPaths: String): ArrayBuffer[String] = ArrayBuffer.from(unEditedPaths.split(","))
 }
 
 object ComparisonPanel {

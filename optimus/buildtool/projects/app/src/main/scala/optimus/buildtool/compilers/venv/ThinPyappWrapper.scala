@@ -26,12 +26,12 @@ import optimus.platform.async
 import optimus.platform.entity
 import optimus.platform.node
 import optimus.platform.util.Log
-import optimus.stratosphere.artifactory.ArtifactoryToolDownloader
+import optimus.stratosphere.artifactory.ArtifactoryToolInstaller
 
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
@@ -66,16 +66,13 @@ object ThinPyappWrapper extends Log {
   }
 
   @async def createTpa(
+      venv: Path,
       artifact: Path,
       pythonConfig: PythonConfiguration,
       sandbox: Sandbox,
       pythonEnvironment: PythonEnvironment,
       buildAfsMapping: Boolean): Seq[CompilationMessage] = {
-    import VenvProvider._
     import VenvUtils._
-
-    val (venv, cacheMessages) =
-      ensureVenvExists(pythonConfig.overriddenCommands, pythonConfig.python, pythonEnvironment)
 
     val thinPyappCommand = {
       def injectVars(cmd: String): String = cmd
@@ -107,7 +104,7 @@ object ThinPyappWrapper extends Log {
     PythonLauncher.launchCompilation("ThinPyappLaunch", cmds.mkString(" && "), Some(sandbox.buildDir)) {
       case out if out.contains("ERROR") =>
         CompilationMessage(None, out, Severity.Error)
-    } ++ cacheMessages
+    }
   }
 }
 
@@ -139,7 +136,8 @@ object VenvUtils extends Log {
   private def pythonVenv(venvName: String, python: PythonDefinition): String =
     Seq(
       s"python -m venv --system-site-packages $venvName",
-      s"${scripts(venvName)}python -m pip --disable-pip-version-check install morganstanley-optimus-thin-pyapp==${python.thinPyapp}"
+      s"${scripts(venvName)}python -m pip --disable-pip-version-check install morganstanley-optimus-thin-pyapp==${python.thinPyapp}",
+      s"${scripts(venvName)}python -m pip --disable-pip-version-check install ruff==${python.ruffVersion}"
     ).mkString("&&")
 
   private def cacheName(python: PythonDefinition): String = python.hash
@@ -177,8 +175,14 @@ object VenvUtils extends Log {
     val result = PythonLauncher.launchWithPython(python, "Venv", cmds, Some(venvCache))
 
     val cacheDir = cachePath(python, venvCache)
-    Files.createFile(cacheDir.resolve(ValidCacheMarker))
-    (cacheDir, result)
+    val compilationMessages =
+      try { // if there is fatal error in launchWithPython, fingerprint dir is not created and line below crashes
+        Files.createFile(cacheDir.resolve(ValidCacheMarker))
+        result
+      } catch {
+        case e: IOException => result :+ CompilationMessage.error(s"Could not create $ValidCacheMarker", e)
+      }
+    (cacheDir, compilationMessages)
   }
 
   @async private def recreate(
@@ -219,8 +223,8 @@ object PythonLauncher extends Log {
           Seq.empty
       }
 
-    set(ArtifactoryToolDownloader.PipConfigFile, pythonEnvironment.pipCredentialFile.map(_.pathString)) ++
-      set(ArtifactoryToolDownloader.UvConfigFile, pythonEnvironment.pypiUvCredentialFile.map(_.pathString))
+    set(ArtifactoryToolInstaller.PipConfigFile, pythonEnvironment.pipCredentialFile.map(_.pathString)) ++
+      set(ArtifactoryToolInstaller.UvConfigFile, pythonEnvironment.pypiUvCredentialFile.map(_.pathString))
   }
 
   @async def launchWithPython(

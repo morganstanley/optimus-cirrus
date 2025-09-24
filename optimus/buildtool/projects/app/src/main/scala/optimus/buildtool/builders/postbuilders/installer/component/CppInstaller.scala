@@ -27,8 +27,6 @@ import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class CppInstaller(
     pathBuilder: InstallPathBuilder,
     bundleFingerprintsCache: BundleFingerprintsCache

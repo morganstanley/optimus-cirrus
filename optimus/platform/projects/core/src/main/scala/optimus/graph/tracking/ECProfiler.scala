@@ -110,10 +110,7 @@ class ECProfiler(root: RootEventCause) { handler =>
         totalDurationMs = duration / NanosPerMillis,
         actionSelfTimeMs = actionSelfTimeNs / NanosPerMillis,
         // this shouldn't recurse too deep, otherwise we got other problems.
-        childEvents =
-          if (includeChildren)
-            children.map(_.snap(includeChildren))
-          else Nil,
+        childEvents = if (includeChildren) children.map(_.snap(includeChildren)) ++ externalProfiledChildren else Nil,
       )
     }
 
@@ -123,13 +120,20 @@ class ECProfiler(root: RootEventCause) { handler =>
       out
     }
 
+    override def addExternalProfiledChildren(children: Seq[ProfiledEventCause]): Unit =
+      if (children.nonEmpty) {
+        synchronized { _externalProfiledChildren ++= children }
+      }
+
     // last update time if the event has been updated, or now
-    def duration: Long = {
+    private def duration: Long = {
       val end = eventEndTimeNs
       (if (end > 0L) end else OGTrace.nanoTime()) - eventStartTimeNs
     }
 
-    def children: List[LeafImpl] = _children
+    private def children: List[LeafImpl] = _children
+
+    private def externalProfiledChildren: List[ProfiledEventCause] = _externalProfiledChildren
 
     override def update(
         incrSelfTimeNs: Long = 0L,
@@ -165,6 +169,7 @@ class ECProfiler(root: RootEventCause) { handler =>
     private var actionSelfTimeNs: Long = _
     private var profilingMetadata: Map[String, String] = Map.empty
     private var _children: List[LeafImpl] = Nil
+    private var _externalProfiledChildren: List[ProfiledEventCause] = Nil
 
     private def iAmRoot = leaf eq this
   }
@@ -181,6 +186,8 @@ trait ECProfilerLeaf {
   def getSummaryProfilingData: ProfiledEventCause
 
   def newChild(cause: String, includeInHandlerProfCrumb: Boolean): ECProfilerLeaf
+
+  def addExternalProfiledChildren(children: Seq[ProfiledEventCause]): Unit
 
   /**
    * Atomically update profiling information.

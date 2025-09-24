@@ -49,6 +49,7 @@ import optimus.buildtool.utils.StackUtils
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.LocatedVirtualFile
 import optimus.buildtool.utils
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.platform._
 import optimus.tools.scalacplugins.entity.reporter.OptimusNonErrorMessages
 import sbt.internal.inc.CompileFailed
@@ -58,7 +59,6 @@ import sbt.internal.prof.Zprof.ZincRun
 import xsbti.compile.AnalysisContents
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.compat.java8.OptionConverters._
 import scala.util.Failure
 import scala.util.Success
@@ -71,7 +71,7 @@ object ZincCompiler {
   // Free space below which compiler will consider a compile error to be potentially caused by a lack of
   // disk space (default: 500MB)
   lazy val MinFreeSpaceBytes: Long =
-    sys.props.get("optimus.buildtool.minFreeSpaceBytes").map(_.toLong).getOrElse(500L * 1024 * 1024)
+    OptimusBuildToolProperties.asLong("minFreeSpaceBytes").getOrElse(500L * 1024 * 1024)
 
   // workaround for incompatible JNA native library version
   sys.props.put("sbt.io.jdktimestamps", "true")
@@ -352,7 +352,6 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
           val classes = {
             utils.Jars.stampJarWithConsistentHash(
               jars.outputJar.tempPath,
-              compress = false,
               Some(activeTask.trace),
               incremental
             )

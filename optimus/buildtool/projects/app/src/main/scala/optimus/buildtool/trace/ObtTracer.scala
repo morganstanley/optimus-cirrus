@@ -11,10 +11,6 @@
  */
 package optimus.buildtool.trace
 
-import java.io.PrintWriter
-import java.io.StringWriter
-import java.time.Instant
-
 import ch.epfl.scala.bsp4j.MessageType
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.crumbs.Properties
@@ -23,11 +19,13 @@ import optimus.buildtool.artifacts.CompilationMessage.Error
 import optimus.buildtool.artifacts.CompilationMessage.Severity
 import optimus.buildtool.artifacts.CompilationMessage.Warning
 import optimus.buildtool.config.ScopeId
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
-import scala.collection.immutable.Seq
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.time.Instant
 import scala.collection.mutable
 import scala.util.Failure
 import scala.util.Success
@@ -52,9 +50,10 @@ object ObtTrace extends ObtTraceListener with ObtTracePluginApi {
   def logMsg(msg: String, tpe: MessageType): Unit = current.logMsg(msg, tpe)
 
   /** may throttle the execution of fn, if a throttle is installed */
-  @async @alwaysAutoAsyncArgs def throttleIfLowMem[T](id: ScopeId)(fn: => T): T = needsPlugin
+  @async @alwaysAutoAsyncArgs def throttleIfLowMem[T](id: ScopeId)(fn: => T): T = needsPluginAlwaysAutoAsyncArgs
   @async def throttleIfLowMem$NF[T](id: ScopeId)(fn: NodeFunction0[T]): T = current.throttleIfLowMem$NF(id)(fn)
 
+  override def finalizeBuild(success: Boolean): Unit = current.finalizeBuild(success)
   override def endBuild(success: Boolean): Boolean = current.endBuild(success)
 }
 
@@ -250,6 +249,8 @@ trait ObtTraceListener extends ObtLogger with ObtStatsHolder {
 
   @async def throttleIfLowMem$NF[T](id: ScopeId)(fn: NodeFunction0[T]): T
 
+  def finalizeBuild(success: Boolean): Unit
+
   /**
    * Called when the build has ended. May have side-effects.
    * @param success
@@ -323,6 +324,7 @@ trait DefaultObtTraceListener extends ObtTraceListener {
 
   override def logMsg(msg: String, tpe: MessageType): Unit = ()
 
+  override def finalizeBuild(success: Boolean): Unit = ()
   override def endBuild(success: Boolean): Boolean = true
 }
 

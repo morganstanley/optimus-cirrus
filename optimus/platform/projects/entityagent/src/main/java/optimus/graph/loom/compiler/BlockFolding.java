@@ -60,6 +60,8 @@ class BlockFolding {
           t0.readVarInputsAsDependency(branchOp);
           t1.readVarInputsAsDependency(branchOp);
 
+          block.dbgOpsInBlock.addAll(commonTarget.dbgOpsInBlock);
+
           branchOp.commonTarget = commonTarget;
           block.lastOp = commonTarget.lastOp;
           block.availOps.addAll(commonTarget.availOps);

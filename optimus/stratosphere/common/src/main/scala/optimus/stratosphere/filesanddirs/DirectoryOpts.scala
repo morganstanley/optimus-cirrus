@@ -25,8 +25,8 @@ import java.nio.ByteBuffer
 import java.nio.file._
 import java.nio.file.attribute._
 import java.util
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
+import scala.util.Random
 import scala.util.control.NonFatal
 
 class DirectoryOpts(path: Path) extends PathsOpts(path: Path) {
@@ -66,6 +66,11 @@ class DirectoryOpts(path: Path) extends PathsOpts(path: Path) {
       }
     }
     path
+  }
+
+  def randomDirectory(): DirectoryOpts = {
+    val randomName = Seq.fill(10)(Random.nextInt(10)).mkString
+    new DirectoryOpts(path.resolve(randomName))
   }
 
   /**

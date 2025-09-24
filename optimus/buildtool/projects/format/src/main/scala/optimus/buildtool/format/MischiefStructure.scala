@@ -16,7 +16,6 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.config.ScopeId
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 import scala.jdk.CollectionConverters._
 

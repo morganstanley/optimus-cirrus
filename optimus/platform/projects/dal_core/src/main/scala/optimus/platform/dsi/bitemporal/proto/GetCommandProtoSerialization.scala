@@ -230,6 +230,7 @@ object SelectSerializer
       case q: EntityCmReferenceQuery  => builder.setEntityCmReferenceQuery(toProto(q))
       case q: EventCmReferenceQuery   => builder.setEventCmReferenceQuery(toProto(q))
       case q: EventSerializedKeyQuery => builder.setEventKeyQuery(toProto(q))
+      case q: VersionedReferenceQuery => builder.setVersionedReferenceQuery(toProto(q))
       case _: EventClassQuery | _: EventReferenceQuery | _: EntityClassAppIdUserIdQuery =>
         throw new UnsupportedOperationException(s"SelectProto serialization for query ${select.query} not supported.")
     }).build
@@ -239,6 +240,8 @@ object SelectSerializer
     val query =
       if (proto.hasReferenceQuery)
         fromProto(proto.getReferenceQuery)
+      else if (proto.hasVersionedReferenceQuery)
+        fromProto(proto.getVersionedReferenceQuery)
       else if (proto.hasEntityClassQuery)
         fromProto(proto.getEntityClassQuery)
       else if (proto.hasSerializedKeyQuery)
@@ -291,7 +294,8 @@ object SelectSpaceSerializer
       case q: ReferenceQuery     => builder.setReferenceQuery(toProto(q))
       case q: SerializedKeyQuery => builder.setSerializedKeyQuery(toProto(q))
       case _: EntityClassQuery | _: LinkageQuery | _: EventClassQuery | _: EventReferenceQuery |
-          _: EventSerializedKeyQuery | _: EntityCmReferenceQuery | _: EventCmReferenceQuery =>
+          _: EventSerializedKeyQuery | _: EntityCmReferenceQuery | _: EventCmReferenceQuery |
+          _: VersionedReferenceQuery =>
         throw new UnsupportedOperationException(s"SelectSpace serialization for query type ${cmd.query} not supported")
       case EntityClassAppIdUserIdQuery(typeName, appId, userId) =>
         val qb = EntityClassAppIdUserIdQueryProto.newBuilder().setClassName(typeName)

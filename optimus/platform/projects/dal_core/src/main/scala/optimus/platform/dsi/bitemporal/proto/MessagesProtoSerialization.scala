@@ -110,13 +110,14 @@ object PublishTransactionMessagesCommandSerializer
   ): PublishTransactionProto =
     PublishTransactionProto.newBuilder
       .setTransaction(toProto(cmd.msg))
+      .setWaitForAck(cmd.option.waitForAck)
       .build()
 
   override def deserialize(
       proto: PublishTransactionProto
   ): MessagesPublishTransactionCommand = {
     val transaction = fromProto(proto.getTransaction)
-    MessagesPublishTransactionCommand(transaction)
+    MessagesPublishTransactionCommand(transaction, if (proto.hasWaitForAck) proto.getWaitForAck else true)
   }
 }
 

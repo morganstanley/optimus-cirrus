@@ -10,21 +10,21 @@
  * limitations under the License.
  */
 package optimus.platform
-
-import java.time.ZonedDateTime
-
-import optimus.core.needsPlugin
-import optimus.graph.Node
-import optimus.platform._
-import optimus.platform.annotations._
-import optimus.platform.relational.data.translation.ElementReplacer
-import optimus.platform.relational.tree._
-import optimus.platform.storable.Entity
-
-import optimus.scalacompat.collection._
-import scala.collection.generic.CanBuildFrom
+import optimus.platform.PluginHelpers.toNodeFactory
 
 package object relational extends QueryApi {
+  import java.time.ZonedDateTime
+
+  import optimus.core.needsPlugin
+  import optimus.graph.Node
+  import optimus.platform._
+  import optimus.platform.annotations._
+  import optimus.platform.relational.data.translation.ElementReplacer
+  import optimus.platform.relational.tree._
+  import optimus.platform.storable.Entity
+
+  import optimus.scalacompat.collection._
+  import scala.collection.generic.CanBuildFrom
 
   implicit class RichZonedDateTime(zdt: ZonedDateTime) {
     // TODO (OPTIMUS-26009): Rename this to "equalInstant".
@@ -57,7 +57,8 @@ package object relational extends QueryApi {
    */
   @nodeSyncLift
   @nodeLiftByName
-  def aggregate[T, U](@nodeLift @withNodeClassID f: Query[T] => U): NodeFunction1[Query[T], U] = needsPlugin
+  def aggregate[T, U](@nodeLift @withNodeClassID f: Query[T] => U): NodeFunction1[Query[T], U] = aggregate$withNode(
+    toNodeFactory(f))
   def aggregate$withNode[T, U](vn: Query[T] => Node[U]): NodeFunction1[Query[T], U] = asNode.apply$withNode(vn)
 
   /**

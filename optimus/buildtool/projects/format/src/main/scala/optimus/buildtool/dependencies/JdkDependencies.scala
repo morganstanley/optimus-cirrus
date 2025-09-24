@@ -15,6 +15,8 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.format.JdkDependenciesConfig
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
+import optimus.buildtool.format.Error
+import optimus.buildtool.format.JvmDependenciesConfig
 
 import java.nio.file.Paths
 import scala.jdk.CollectionConverters._
@@ -22,18 +24,41 @@ import scala.jdk.CollectionConverters._
 final case class JdkDependencies(featureVersionToJdkHome: Map[Int, Directory])
 
 object JdkDependencies {
-  val empty = JdkDependencies(Map.empty)
+  val empty: JdkDependencies = JdkDependencies(Map.empty)
+  val inferred: Result[JdkDependencies] = {
+    def missingError(key: String): Error = Error(s"$key is missing from system properties", JvmDependenciesConfig)
+    val res = for {
+      javaHome <- Result.fromOption(Option(System.getProperty("java.home")), List(missingError("java.home")))
+      javaReleaseString <- Result
+        .fromOption(Option(System.getProperty("java.version")), List(missingError("java.version")))
+      javaReleaseVersion <- Result.fromOption(
+        {
+          if (javaReleaseString.startsWith("1.")) javaReleaseString.substring(2, 3).toIntOption
+          else javaReleaseString.toIntOption
+        },
+        List(Error(s"Could not parse java.version = `$javaReleaseString`", JvmDependenciesConfig))
+      )
+    } yield JdkDependencies(Map(javaReleaseVersion -> Directory(Paths.get(javaHome))))
+    res.withProblems(
+      _.featureVersionToJdkHome.values.toList
+        .filter(!_.exists)
+        .map(dir => Error(s"$dir does not exist", JvmDependenciesConfig)))
+  }
 }
 
 object JdkDependenciesLoader {
   def load(loader: ObtFile.Loader): Result[JdkDependencies] = {
-    for (config <- loader(JdkDependenciesConfig)) yield {
-      val jdkHomes = if (config.hasPath("jdks")) {
-        val jdks = config.getObject("jdks")
-        val jdkVersions = jdks.unwrapped().keySet()
-        jdkVersions.asScala.map(v => v.toInt -> Directory(Paths.get(jdks.toConfig.getString(s"$v.home")))).toMap
-      } else Map.empty[Int, Directory]
-      JdkDependencies(jdkHomes)
+    if (loader.exists(JdkDependenciesConfig)) {
+      loader(JdkDependenciesConfig).map { config =>
+        val jdkHomes = if (config.hasPath("jdks")) {
+          val jdks = config.getObject("jdks")
+          val jdkVersions = jdks.unwrapped().keySet()
+          jdkVersions.asScala.map(v => v.toInt -> Directory(Paths.get(jdks.toConfig.getString(s"$v.home")))).toMap
+        } else Map.empty[Int, Directory]
+        JdkDependencies(jdkHomes)
+      }
+    } else {
+      JdkDependencies.inferred
     }
   }
 }

@@ -13,8 +13,6 @@ package optimus.buildtool.runconf.compile
 
 import optimus.buildtool.runconf.plugins.EnvInternal
 
-import scala.collection.immutable.Seq
-
 object Merger {
   def merge[A](target: Seq[A], source: Seq[A]): Seq[A] = {
     (target ++ source)

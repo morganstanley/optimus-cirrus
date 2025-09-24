@@ -42,7 +42,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.platform._
 import optimus.platform.util.Log
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
 import scala.collection.immutable.SortedMap
 
@@ -200,6 +199,32 @@ object CopyFilesInstaller extends Log {
       } else None
     }
   }
+
+  @async private def getSourcesOrEmpty(
+      from: Directory,
+      src: WorkspaceSourceRoot,
+      factory: DirectoryFactory,
+      fileFilter: PathFilter,
+      skipIfMissing: Boolean): SortedMap[FileAsset, HashedContent] = {
+
+    def nonExistentDirectory(): SortedMap[FileAsset, HashedContent] =
+      warnOrThrow(s"Unable to copy files from directory $from as it does not exist")
+
+    def noMatchingFiles(): SortedMap[FileAsset, HashedContent] =
+      warnOrThrow(s"Unable to copy files from directory $from as no files match the filters")
+
+    def warnOrThrow(msg: String): SortedMap[FileAsset, HashedContent] = {
+      if (skipIfMissing) { log.warn(msg); SortedMap.empty[FileAsset, HashedContent] }
+      else throw new IllegalArgumentException(msg)
+    }
+
+    getSources(from, src, factory, fileFilter) match {
+      case None                             => nonExistentDirectory()
+      case Some(sources) if sources.isEmpty => noMatchingFiles()
+      case Some(sources)                    => sources
+    }
+  }
+
   @async def getCopyInstructions(
       spec: FileCopySpec,
       toDir: Directory,
@@ -209,14 +234,7 @@ object CopyFilesInstaller extends Log {
   ): (Seq[DirectoryCopyInstruction], Seq[FileCopyInstruction]) = {
     import spec._
 
-    def nonExistentDirectory(): SortedMap[FileAsset, HashedContent] = {
-      val msg = s"Unable to copy files from directory $from as it does not exist"
-      if (skipIfMissing) { log.warn(msg); SortedMap.empty[FileAsset, HashedContent] }
-      else
-        throw new IllegalArgumentException(msg)
-    }
-
-    val sources = getSources(from, src, factory, fileFilter).getOrElse(nonExistentDirectory())
+    val sources = getSourcesOrEmpty(from, src, factory, fileFilter, skipIfMissing)
 
     val dirInstructions = sources.keySet.iterator
       .map(_.parent)
@@ -254,18 +272,14 @@ object CopyFilesInstaller extends Log {
       extensions: ExtensionConfiguration
   ): (Seq[DirectoryCopyInstruction], Seq[CompressedCopyInstruction]) = {
 
-    val sourceFolder = factory.lookupSourceFolder(src, fromDir)
-    if (sourceFolder.exists) {
+    val sourceContents = getSourcesOrEmpty(fromDir, src, factory, fileFilter, skipIfMissing)
+    if (sourceContents.nonEmpty) {
       val directoryInstruction = DirectoryCopyInstruction(
         taskId = taskId,
         source = fromDir,
         target = target.parent,
         mode = dirMode
       )
-
-      val sourceContents = factory.lookupSourceFolder(src, fromDir).findSourceFiles(fileFilter).map { case (id, c) =>
-        src.resolveFile(id.workspaceSrcRootToSourceFilePath) -> c
-      }
 
       val fileInstruction = CompressedCopyInstruction(
         taskId = taskId,
@@ -278,9 +292,7 @@ object CopyFilesInstaller extends Log {
 
       (Seq(directoryInstruction), Seq(fileInstruction))
     } else {
-      val msg = s"Unable to copy files from directory $fromDir as it does not exist"
-      if (skipIfMissing) { log.warn(msg); (Nil, Nil) }
-      else throw new IllegalArgumentException(msg)
+      (Nil, Nil) // already warned or threw an exception in getSourcesOrEmpty
     }
   }
 

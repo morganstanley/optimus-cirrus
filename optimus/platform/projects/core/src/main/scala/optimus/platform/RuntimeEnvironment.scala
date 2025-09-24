@@ -26,10 +26,13 @@ import optimus.graph.NodeTask
 import optimus.platform.RuntimeEnvironment.KnownNames
 import optimus.platform.util.PrettyStringBuilder
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Try
 import scala.util.control.NonFatal
 
 object RuntimeEnvironment {
+  private val sequenceIdCounter = new AtomicInteger()
+
   val minimal = new RuntimeEnvironment(null, null)
   private val NewLine = System.lineSeparator
 
@@ -58,12 +61,15 @@ object RuntimeEnvironment {
 
   def getAppId(ntsk: NodeTask): Option[String] = for {
     ss <- Option(ntsk.scenarioStack())
-    env <- Option(ss.env)
-    config <- Option(env.config.runtimeConfig)
-    appId <- config.getString("optimus.dsi.appid")
+    // only used for diagnostics, so don't track access
+    ssShared <- Option(ss.ssShared)
+    config <- Option(ssShared.environmentWithoutTrackingAccess.config)
+    runtimeConfig <- Option(config.runtimeConfig)
+    appId <- runtimeConfig.getString("optimus.dsi.appid")
   } yield appId
 }
 
+// note that RuntimeEnvironment is not serializable
 class RuntimeEnvironment private[optimus] (
     val config: RuntimeComponents,
     val entityResolver: EntityResolver
@@ -82,6 +88,8 @@ class RuntimeEnvironment private[optimus] (
     Breadcrumbs(ret, new EventCrumb(_, RuntimeSource, Events.RuntimeCreated))
     ret
   }
+
+  private[optimus] val sequenceId: Int = RuntimeEnvironment.sequenceIdCounter.getAndIncrement()
 
   // Won't get to the actual method for three more hops.  This indirection is necessary in order to avoid exposing
   // config directly, and to allow calling without depending on platform.

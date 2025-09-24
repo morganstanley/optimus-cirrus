@@ -24,8 +24,6 @@ import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
-import scala.collection.immutable.Seq
-
 final case class UnresolvedRunConf(
     id: ParentId,
     name: String,

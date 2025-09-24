@@ -70,7 +70,7 @@ private[buildtool] final class CountingTrace(statusIntervalSec: Option[Int] = No
             val map = if (m eq null) Map.empty[ScopeId, (Int, Int)] else m
             val (running, started) = map.getOrElse(scopeId, (0, 0))
             if (remove && running == 0) {
-              log.error(s"Attempting to stop $c for $scopeId, which isn't running, started=$started")
+              if (!c.isOuter) log.error(s"Attempting to stop $c for $scopeId, which isn't running, started=$started")
               map + (scopeId -> (0, started))
             } else if (remove)
               map + (scopeId -> (running - 1, started))
@@ -114,9 +114,9 @@ private[buildtool] final class CountingTrace(statusIntervalSec: Option[Int] = No
   def anomalies: Seq[(String, Boolean)] = {
     counts.asScala.flatMap { case (c, s) =>
       s.flatMap { case (id, (running, ran)) =>
-        def key = s"$id:${c.categoryName}"
+        def key = s"$id:${c.name}"
         val stillRunning =
-          if (running > 0) Seq((s"$key still had $running tasks running at end of build", true)) else Nil
+          if (running > 0 && !c.isOuter) Seq((s"$key still had $running tasks running at end of build", true)) else Nil
         val repeatedSingleton =
           if (c.isSingleton && ran > 1)
             Seq((s"$key ran $ran times during build (expected once only)", c.isStrictSingleton))

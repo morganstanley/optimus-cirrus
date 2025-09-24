@@ -35,7 +35,7 @@ class EntityPrettyPrintView(val e: Entity) extends AnyVal {
         if (!e.dal$isTemporary)
           e.dal$temporalContext.toString
         else
-          "Heap Entity"
+          e.dal$storageInfo.descriptorString
       })
       hb.newLine()
 

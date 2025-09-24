@@ -30,6 +30,7 @@ import optimus.graph.diagnostics.PNodeTask
 import optimus.platform.util.html.HtmlBuilder
 import optimus.platform.util.html.Indent
 import optimus.profiler.DebuggerUI
+import optimus.profiler.MarkObject
 import optimus.profiler.NodeFormatUI
 import optimus.profiler.extensions.PNodeTaskExtension._
 import optimus.profiler.recipes.CompareNodeDiffs
@@ -41,6 +42,11 @@ import optimus.profiler.ui.common.JMenu2
 import optimus.profiler.ui.common.JMenuOps
 import optimus.profiler.ui.common.JPopupMenu2
 
+import java.awt.event.ActionListener
+import javax.swing.JButton
+import javax.swing.JFrame
+import javax.swing.JPanel
+import javax.swing.JTextField
 import scala.collection.immutable.ArraySeq
 
 trait DbgPrintSource {
@@ -146,6 +152,63 @@ object NodeMenu {
 
     menu.addMenuFSS("Parents...", "Browse parents/callers") { sn =>
       GraphDebuggerUI.addTab(s"Parents of ${sn.formatIdAndName}", NodeTreeBrowser(sn, showChildren = false))
+    }
+
+    menu.addSeparator()
+
+    {
+      val mi = menu.addMenu("Mark Object...") {
+        val selectedItem = hsn.getSelection
+
+        // create a new panel to allow users to set a marker for debugger UI objects
+        val frame = new JFrame(s"Marking $selectedItem ...")
+        val input = new JTextField("", 30)
+        val panel = new JPanel()
+        val saveMarkerBtn = new JButton("Save")
+        panel.add(input)
+        panel.add(saveMarkerBtn)
+        frame.add(panel)
+
+        frame.setSize(300, 100)
+        frame.setVisible(true)
+
+        def recordMarkerAdded(pNodeTask: PNodeTask, marker: String): Unit = {
+          MarkObject.addToMarkedObjects(pNodeTask.getTask, marker)
+          frame.dispose()
+        }
+
+        saveMarkerBtn.addActionListener(new ActionListener() {
+          def actionPerformed(event: ActionEvent): Unit = {
+            recordMarkerAdded(selectedItem, input.getText().trim)
+          }
+        })
+
+        input.addKeyListener(new java.awt.event.KeyAdapter() {
+          override def keyPressed(event: KeyEvent): Unit = {
+            if (event.getKeyCode == KeyEvent.VK_ENTER) {
+              recordMarkerAdded(selectedItem, input.getText().trim)
+            }
+          }
+        })
+      }
+
+      val unmarkObjectItem = menu.addMenu("Unmark Object") {
+        val sn = hsn.getSelection
+        MarkObject.removeFromMarkedObjects(sn.getTask)
+      }
+
+      menu.addOnPopup {
+        val itemSelected = hsn.getSelection
+        val isMarked = MarkObject.inMarkedObjects(itemSelected.getTask)
+
+        if (isMarked) {
+          unmarkObjectItem.setEnabled(true)
+          mi.setEnabled(false)
+        } else {
+          unmarkObjectItem.setEnabled(false)
+          mi.setEnabled(true)
+        }
+      }
     }
 
     menu.addSeparator()

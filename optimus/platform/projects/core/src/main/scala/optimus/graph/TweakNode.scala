@@ -150,8 +150,10 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
         case tweakValueProviderNode: TweakValueProviderNode[T @unchecked] =>
           val cnode = if (tweakValueProviderNode.isKeyDependent) {
             tweakValueProviderNode.copyWith(key, evaluateInScenarioStack)
-          } else tweakValueProviderNode
-          cnode.replace(evaluateInScenarioStack.siRoot)
+          } else
+            tweakValueProviderNode
+          if (cnode.scenarioStack == null)
+            cnode.replace(evaluateInScenarioStack.siRoot)
           cnode
         case lnodeDef: LNodeFunction[T @unchecked] =>
           lnodeDef.toNodeWith(key)

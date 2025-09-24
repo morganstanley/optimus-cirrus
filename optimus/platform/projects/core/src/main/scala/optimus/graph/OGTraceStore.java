@@ -30,7 +30,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import msjava.slf4jutils.scalalog.Logger;
-import msjava.tools.util.MSProcess;
 import optimus.breadcrumbs.Breadcrumbs;
 import optimus.core.EdgeIDList;
 import optimus.core.MonitoringBreadcrumbs$;
@@ -359,15 +358,18 @@ public class OGTraceStore {
       if (customTraceToPrefix != null) {
         log.javaLogger()
             .warn(
-                "-Doptimus.traceTo is set.\n"
-                    + "This can cause issues because we can't guarantee that the file will be empty or not reused by other processes.\n"
-                    + "Unless you are debugging OGTrace itself, you probably should be using -Doptimus.scheduler.profile.folder= instead.");
+            """
+            -Doptimus.traceTo is set.
+            This can cause issues because we can't guarantee that the file will be empty or not reused by other processes.
+            Unless you are debugging OGTrace itself, you probably should be using -Doptimus.scheduler.profile.folder= instead.""");
       }
       File file =
           customTraceToPrefix != null
               ? new File(customTraceToFileName(customTraceToPrefix))
               : File.createTempFile(
-                  filePrefix, String.format(".%d.ogtrace", MSProcess.getPID()), setupDir());
+                  filePrefix,
+                  String.format(".%d.ogtrace", ProcessHandle.current().pid()),
+                  setupDir());
       log.javaLogger().info("trace file: " + file.getAbsolutePath());
       // not file itself to allow pre-deleting noinspection ResultOfMethodCallIgnored
       fileLocation = file.getParentFile();

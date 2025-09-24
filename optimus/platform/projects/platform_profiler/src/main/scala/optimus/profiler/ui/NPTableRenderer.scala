@@ -263,7 +263,7 @@ object NPTableRenderer {
       value match {
         case pnti: PNodeTaskInfo =>
           setText(pnti.flagsAsString())
-          setToolTipText(pnti.flagsAsStringVerbose())
+          setToolTipText(pnti.flagsAsStringVerbose(true))
         case filterText: String =>
           setText(filterText)
           setToolTipText(

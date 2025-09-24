@@ -47,11 +47,11 @@ object AutoAsyncRegex {
  * 10559 - view.interestingIteration(someAsync)
  *
  * Transformations:
- * option.fold(eitherAsync1)(eitherAsync2) -> Async.seq(option).fold(eitherAsync1)(eitherAsync2)
- * option.interestingOptionComb(someAsync) -> Async.seq(option).interestingOptionComb(someAsync)
- * iterable.find(someAsync) - Async.seq(iterable).find(someAsync)
- * iterable.interestingIteration(someRtAsync) -> Async.par(iterable).interestingIteration(someRtAsync)
- * iterable.interestingIteration(someNonRtAsync) -> Async.seq(iterable).interestingIteration(someNonRtAsync)
+ * option.fold(eitherAsync1)(eitherAsync2) -> AsyncInternals.seq(option).fold(eitherAsync1)(eitherAsync2)
+ * option.interestingOptionComb(someAsync) -> AsyncInternals.seq(option).interestingOptionComb(someAsync)
+ * iterable.find(someAsync) - AsyncInternals.seq(iterable).find(someAsync)
+ * iterable.interestingIteration(someRtAsync) -> AsyncInternals.par(iterable).interestingIteration(someRtAsync)
+ * iterable.interestingIteration(someNonRtAsync) -> AsyncInternals.seq(iterable).interestingIteration(someNonRtAsync)
  *
  * Main logic is in transform(Tree) method.
  *
@@ -195,7 +195,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       "optimus.ui.dsl",
       "optimus.dal.usage.projection",
       "optimus.platform.Tweak",
-      "optimus.platform.Async",
+      "optimus.platform.AsyncInternals",
       "optimus.platform.OptAsync",
       "optimus.platform.AsyncBase",
       "optimus.platform.asyncPar",
@@ -568,7 +568,8 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       alarm(
         OptimusNonErrorMessages.AUTO_ASYNC_DEBUG(s"""WRAP ${coll.pos.line} ${coll.pos.column} $comb $wrapper $coll"""),
         coll.pos)
-      val ret = Apply(Select(Select(gen.mkAttributedQualifier(platformModule.tpe), names.Async), wrapper), coll :: Nil)
+      val ret =
+        Apply(Select(Select(gen.mkAttributedQualifier(platformModule.tpe), names.AsyncInternals), wrapper), coll :: Nil)
       ret
     }
 
@@ -629,7 +630,9 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       coll match {
         // The collection is a legacy async()
         case Apply(
-              as1 @ TypeApply(Select(Select(Select(Ident(optimus), names.platform), names.Async), nme.apply), _),
+              as1 @ TypeApply(
+                Select(Select(Select(Ident(optimus), names.platform), names.AsyncInternals), nme.apply),
+                _),
               args @ (unwrapped :: _)) =>
           if (args.size > 1) {
             // Specifying parallelism level.
@@ -678,7 +681,11 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
         if ((origCombinator == nme.map || origCombinator == nme.flatMap) && isAtLeastScala2_13) {
           // For Scala 2.13, we construct the BuildFrom based on the evidence arguments that are directly passed to
           // overloaded combinators.
-          CombinatorOverload.buildFromFor(origSelect.symbol, typeArgs, implicitArgs) match {
+          CombinatorOverload.buildFromFor(
+            origSelect.symbol,
+            newCollection.tpe.typeSymbol,
+            typeArgs,
+            implicitArgs) match {
             case None =>
               reporter.error(origSelect.pos, "Unexpected combinator")
               return origTree
@@ -1685,7 +1692,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           vdx
 
         case Import(expr, ImportSelector(n, _, _, _) :: Nil)
-            if (expr.symbol == AsyncCollection && n == suppressInliningTermName) =>
+            if (expr.symbol == AsyncInternals && n == suppressInliningTermName) =>
           reporter.echo(tree.pos, s"Suppressing Option inlining for $unit")
           suppressInlining = true
           super.transform(tree)
@@ -2128,18 +2135,25 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
     lazy val all = List(SortedMap, Map, BitSet, SortedSet, IterableOps).flatMap(_.all)
     def buildFromFor(
         combinator: Symbol,
+        collTypeSym: Symbol,
         typeArgs: List[Tree],
         implicitArgs: List[Tree]): Option[(Tree, Tree, Boolean, Symbol)] = {
-      all.collectFirst {
-        case overload
-            if combinator.overriddenSymbol(
-              overload.method.owner) == overload.method && combinator.paramss.flatten.size == overload.method.paramss.flatten.size =>
-          val fun = gen.mkAttributedSelect(
-            gen.mkAttributedStableRef(CanBuildFromClass.companionModule),
-            member(CanBuildFromClass.companionModule.moduleClass, overload.buildFromMethod))
-          val buildFromTree = if (implicitArgs.nonEmpty) Apply(fun, implicitArgs) else fun
-          (buildFromTree, overload.typeArg(typeArgs), overload.upcast, overload.method)
+      def selectBF(module: Symbol, name: TermName) = {
+        val fun = gen.mkAttributedSelect(gen.mkAttributedStableRef(module), member(module.moduleClass, name))
+        if (implicitArgs.nonEmpty) Apply(fun, implicitArgs) else fun
       }
+      if (collTypeSym == UnsafeImmutableBufferWrapperClass) {
+        val bfTree =
+          selectBF(UnsafeImmutableBufferWrapperClass.companionModule, TermName("buildFromUnsafeImmutableBufferWrapper"))
+        Some((bfTree, typeArgs.head, false, combinator))
+      } else
+        all.collectFirst {
+          case overload
+              if combinator.overriddenSymbol(
+                overload.method.owner) == overload.method && combinator.paramss.flatten.size == overload.method.paramss.flatten.size =>
+            val buildFromTree = selectBF(CanBuildFromClass.companionModule, overload.buildFromMethod)
+            (buildFromTree, overload.typeArg(typeArgs), overload.upcast, overload.method)
+        }
     }
   }
 }

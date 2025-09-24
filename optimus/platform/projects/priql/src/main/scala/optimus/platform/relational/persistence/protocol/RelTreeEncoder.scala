@@ -117,7 +117,8 @@ trait RelTreeEncoder extends RelationTreeEncoder {
       indexedMember.setIndexed(m.member.metadata.get("indexed").get.asInstanceOf[Boolean])
       indexedMember.setTypeName(m.member.metadata.get("typeName").get.asInstanceOf[String])
       indexedMember.setRefFilter(m.member.metadata.get("refFilter").get.asInstanceOf[Boolean])
-      indexedMember.addAllPropertyNames(m.member.metadata.get("propertyNames").get.asInstanceOf[Seq[String]].asJava)
+      indexedMember.addAllPropertyNames(
+        m.member.metadata.get("propertyNames").get.asInstanceOf[collection.Seq[String]].asJava)
 
       RelExpr.RelationElement.newBuilder
         .setNodeType(elType)

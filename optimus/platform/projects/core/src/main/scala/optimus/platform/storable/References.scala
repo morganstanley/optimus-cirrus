@@ -320,6 +320,7 @@ private[optimus] final class FinalTypedReference private[storable] (
   override def getTypeId: Option[Int] = Some(typeId)
   // TODO (OPTIMUS-20613): Remove comment of toString method once typed refs is enabled in all DAL envs
   // override def toString = s"${Base64.encodeBytes(data)}:$typeId"
+  private[optimus] def asFinalRef = new FinalReference(d, unresolvedReference)
 }
 
 private[optimus] final class TemporaryReference private[storable] (d: Array[Byte]) extends EntityReference(d) {

@@ -26,12 +26,12 @@ main {
     "RUFF_BINARY_VERSION" = ${workspace.intellij.compat.ruff-binary}
     "HOCON_PLUGIN_VERSION" = ${versions.intellij.plugins.hocon}
     "MATERIAL_THEME_PLUGIN_VERSION" = ${versions.intellij.plugins.material-theme-ui}
+    "CLASSIC_UI_PLUGIN_VERSION" = ${?versions.intellij.plugins.classic-ui}
     "CODY_PLUGIN_VERSION" = ${versions.intellij.plugins.cody}
     "COPILOT_PLUGIN_VERSION" = ${versions.intellij.plugins.copilot}
     "GREP_CONSOLE_PLUGIN_VERSION" = ${versions.intellij.plugins.grep-console}
-    "DISABLE_ASYNC_STACK_TRACES" = ${workspace.intellij.compat.disable-async-stack-traces}
-    "LINUX_INTELLIJ_JDK" = ${workspace.intellij.compat.linux-jdk}
-    "LINUX_JCEF_SANDBOX" = ${workspace.intellij.compat.linux-jcef-sandbox}
+    "PYTHON_CE_ENABLED" = ${workspace.intellij.compat.python-ce-enabled}
+    "INTELLIJ_CONFIG_SET" = ${?workspace.intellij.compat.config-set}
   }
 }
 

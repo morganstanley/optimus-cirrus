@@ -14,7 +14,6 @@ package optimus.graph.outOfProcess.views
 import optimus.graph.DiagnosticSettings
 import optimus.graph.JMXConnection
 import optimus.graph.cache.NCSupport
-import optimus.scalacompat.collection.ArrayToVarArgsOps
 
 import scala.collection.mutable.ArrayBuffer
 

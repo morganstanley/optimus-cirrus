@@ -18,7 +18,6 @@ import optimus.buildtool.runconf.compile._
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 object TreadmillOptionsSupport {
   private val expectedTypes: Map[String, Type] = Map(

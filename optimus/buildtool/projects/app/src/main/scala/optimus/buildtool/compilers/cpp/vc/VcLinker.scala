@@ -23,7 +23,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.TypeClasses._
 
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 
 class VcLinker(scopeId: ScopeId, toolchain: CppToolchain) extends CppLinker {
   import CppLinker._

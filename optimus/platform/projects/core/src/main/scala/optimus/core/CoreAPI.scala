@@ -22,7 +22,7 @@ import optimus.platform.annotations._
 import optimus.platform.storable.Entity
 
 // Still defaulting to mutable Seq ... Some places have to enforce immutable */
-import scala.collection.immutable.{ Seq => ImmSeq }
+import scala.collection.immutable.{Seq => ImmSeq}
 
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
@@ -150,6 +150,7 @@ trait NodeAPI {
 /** Access to the [[NodeAPI]] methods for use in projects that do not depend on `platform`. */
 object NodeAPI extends NodeAPI
 
+@loom
 trait CoreAPI
     extends NodeAPI
     with AsyncCollectionHelpers
@@ -160,7 +161,8 @@ trait CoreAPI
 
   @nodeSync
   @nodeSyncLift
-  def track[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(@nodeLift @nodeLiftByName f: => T): T = needsPlugin
+  def track[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(@nodeLift @nodeLiftByName f: => T): T =
+    track$withNode(label, tpe)(toNode(f _))
   def track$withNode[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(f: Node[T]): T =
     EvaluationContext.track(label, tpe)(f).get
   def track$queued[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(f: Node[T]): Node[T] =
@@ -168,7 +170,7 @@ trait CoreAPI
 
   @nodeSync
   @nodeSyncLift
-  def trackUI[T](label: String)(@nodeLift @nodeLiftByName f: => T): T = needsPlugin
+  def trackUI[T](label: String)(@nodeLift @nodeLiftByName f: => T): T = trackUI$withNode(label)(toNode(f _))
   def trackUI$withNode[T](label: String)(f: Node[T]): T =
     EvaluationContext.track(label, CrumbNodeType.UserAction)(f).get
   def trackUI$queued[T](label: String)(f: Node[T]): Node[T] =
@@ -397,7 +399,7 @@ trait CoreAPI
   // only used in UI bindings with optimus.ui.server.graph.ProgressChannel (to indicate what handlers can be cancelled)
   @nodeSync
   @nodeSyncLift
-  def enableCancellation[T](@nodeLiftByName @nodeLift f: => T): T = needsPlugin
+  def enableCancellation[T](@nodeLiftByName @nodeLift f: => T): T = enableCancellation$withNode(toNode(f _))
   def enableCancellation$withNode[T](f: Node[T]): T = enableCancellation$n(f).get
   def enableCancellation$queued[T](f: Node[T]): Node[T] = enableCancellation$n(f).enqueueAttached
   private def enableCancellation$n[T](f: Node[T]): Node[T] = {
@@ -457,7 +459,7 @@ trait CoreAPI
    * lifts the lambda "() => B" in to a node factory "() => Node[B]"
    */
   @nodeSyncLift
-  def liftNode[B](@nodeLift @withNodeClassID f: () => B): () => Node[B] = needsPlugin
+  def liftNode[B](@nodeLift @withNodeClassID f: () => B): () => Node[B] = () => toNode(f)
   final def liftNode$withNode[B](f: () => Node[B]): () => Node[B] = f
 
   /**
@@ -471,7 +473,8 @@ trait CoreAPI
    * lifts the lambda "(A1,A2) => B" in to a node factory "(A1,A2) => Node[B]"
    */
   @nodeSyncLift
-  def liftNode[A1, A2, B](@nodeLift @withNodeClassID f: (A1, A2) => B): (A1, A2) => Node[B] = needsPlugin
+  def liftNode[A1, A2, B](@nodeLift @withNodeClassID f: (A1, A2) => B): (A1, A2) => Node[B] = liftNode$withNode(
+    toNodeFactory(f))
   final def liftNode$withNode[A1, A2, B](f: (A1, A2) => Node[B]): (A1, A2) => Node[B] = f
 
   private val liftedIdentifyForAny = (a: Any) => new AlreadyCompletedNode(a)

@@ -33,7 +33,6 @@ import optimus.platform._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.LongAdder
 import java.util.function.Function
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 

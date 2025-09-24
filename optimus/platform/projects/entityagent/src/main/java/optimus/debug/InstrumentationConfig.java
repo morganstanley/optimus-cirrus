@@ -11,11 +11,17 @@
  */
 package optimus.debug;
 
+import static optimus.graph.DiagnosticSettings.enableCastTracing;
+import static optimus.graph.DiagnosticSettings.enableEqTracing;
+import static optimus.graph.DiagnosticSettings.enableNaNWarnings;
+import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
+import static org.objectweb.asm.Opcodes.ACC_TRANSIENT;
 import static org.objectweb.asm.Type.VOID_TYPE;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiPredicate;
@@ -23,6 +29,8 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import optimus.EntityAgent;
+import optimus.FieldInjector.InjectedField;
+import optimus.graph.DiagnosticSettings;
 import optimus.systemexit.SystemExitReplacement;
 import org.objectweb.asm.Type;
 
@@ -31,6 +39,10 @@ public class InstrumentationConfig {
   private static final HashMap<String, Boolean> derivedClasses = new HashMap<>();
   private static final HashMap<String, Boolean> moduleOrEntityExclusions = new HashMap<>();
   private static final ArrayList<ClassPatch> multiClsPatches = new ArrayList<>();
+  public static final HashMap<String, MethodRef> checkCastFilter = new HashMap<>();
+  public static final HashMap<String, MethodRef> instanceOfFilter = new HashMap<>();
+  /** The patches in checkCastFilter / instanceOfFilter are not applied for methods in this map */
+  public static final HashMap<MethodRef, Boolean> castRelatedExclusions = new HashMap<>();
 
   public static boolean setExceptionHookToTraceAsNodeOnStartup;
   public static EntityInstrumentationType instrumentAllEntities = EntityInstrumentationType.none;
@@ -102,7 +114,6 @@ public class InstrumentationConfig {
   static InstrumentationConfig.MethodRef iecResume =
       new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
 
-
   public static String FWD_ORG_DEFAULT_SUFFIX = "__";
 
   public static final String CWA_INNER_NAME = "CallWithArgs";
@@ -139,31 +150,36 @@ public class InstrumentationConfig {
 
   private static final String verifySSGetNodeDesc =
       "(Loptimus/graph/Node;Loptimus/platform/ScenarioStack;Loptimus/graph/PropertyNode;Loptimus/graph/OGSchedulerContext;)V";
-  private static final InstrumentationConfig.MethodRef verifyScenarioStackGetNode =
-      new InstrumentationConfig.MethodRef(IS, "verifyScenarioStackGetNode", verifySSGetNodeDesc);
+  private static final MethodRef verifyScenarioStackGetNode =
+      new MethodRef(IS, "verifyScenarioStackGetNode", verifySSGetNodeDesc);
   private static final InstrumentationConfig.MethodRef verifyRunAndWaitEntry =
-      new InstrumentationConfig.MethodRef(
+      new MethodRef(
           IS, "runAndWaitEntry", "(Loptimus/graph/OGSchedulerContext;Loptimus/graph/NodeTask;)V");
-  private static final InstrumentationConfig.MethodRef verifyRunAndWaitExit =
+  private static final MethodRef verifyRunAndWaitExit =
       new InstrumentationConfig.MethodRef(
           IS, "runAndWaitExit", "(Loptimus/graph/OGSchedulerContext;)V");
-  private static final InstrumentationConfig.MethodRef scenarioStackGetNode =
-      new InstrumentationConfig.MethodRef(SS_TYPE, "getNode", getNodeDesc);
-  private static final InstrumentationConfig.MethodRef runAndWait =
-      new InstrumentationConfig.MethodRef(OGSC_TYPE, "runAndWait");
+  private static final MethodRef scenarioStackGetNode =
+      new MethodRef(SS_TYPE, "getNode", getNodeDesc);
+  private static final MethodRef runAndWait = new MethodRef(OGSC_TYPE, "runAndWait");
 
-  private static final InstrumentationConfig.MethodRef imcEnterCtor =
-      new InstrumentationConfig.MethodRef(IMC_TYPE, "enterReporting");
-  private static final InstrumentationConfig.MethodRef imcExitCtor =
-      new InstrumentationConfig.MethodRef(IMC_TYPE, "exitReporting");
-  static InstrumentationConfig.MethodRef imcPause =
-      new InstrumentationConfig.MethodRef(IMC_TYPE, "pauseReporting", "()I");
-  static InstrumentationConfig.MethodRef imcResume =
-      new InstrumentationConfig.MethodRef(IMC_TYPE, "resumeReporting", "(I)V");
+  private static final MethodRef imcEnterCtor = new MethodRef(IMC_TYPE, "enterReporting");
+  private static final MethodRef imcEnterLazyOnModule =
+      new MethodRef(IMC_TYPE, "enterLazyOnModuleReporting");
+  private static final MethodRef imcExitCtor = new MethodRef(IMC_TYPE, "exitReporting");
+  private static final MethodRef imcExitLazyOnModuleCtor =
+      new MethodRef(IMC_TYPE, "exitLazyOnModuleReporting");
+  static MethodRef imcPause = new MethodRef(IMC_TYPE, "pauseReporting", "()I");
+  static MethodRef imcResume = new MethodRef(IMC_TYPE, "resumeReporting", "(I)V");
 
   private static final String equalsDesc = "(Ljava/lang/Object;Ljava/lang/Object;)Z";
   public static final MethodRef instrumentedEquals =
-      new InstrumentationConfig.MethodRef("optimus/debug/InstrumentedEquals", "equals", equalsDesc);
+      new MethodRef("optimus/debug/InstrumentedEquals", "equals", equalsDesc);
+
+  private static final String castDesc = "(Ljava/lang/Object;Ljava/lang/String;)V";
+  public static final MethodRef defCheckCast =
+      new MethodRef("optimus/debug/InstrumentedByteCodes", "checkCast", castDesc);
+  public static final MethodRef defInstanceOf =
+      new MethodRef("optimus/debug/InstrumentedByteCodes", "instanceOf", castDesc);
 
   // Allows fast attribution to the location
   public static final ArrayList<MethodDesc> descriptors = new ArrayList<>();
@@ -179,7 +195,10 @@ public class InstrumentationConfig {
         || instrumentAllEntityApplies
         || instrumentAllModuleConstructors
         || instrumentAllNativePackagePrefixes != null
-        || instrumentEquals;
+        || instrumentEquals
+        || enableNaNWarnings
+        || enableEqTracing
+        || enableCastTracing;
   }
 
   private static boolean keepHierarchy(String className, String superName) {
@@ -292,14 +311,17 @@ public class InstrumentationConfig {
     public MethodRef prefix;
     public MethodRef suffix;
     public MethodRef suffixOnException; // suffix call used if an exception was thrown
-    FieldRef cacheInField;
+    InjectedField cacheInField;
     boolean checkAndReturn;
     // constructs an object of a class derived from CallWithArgs instead of passing object[]
     boolean localValueIsCallWithArgs;
-    // Keep original method and rename to keepOriginalMethodAs. Do make it public!
+    // If not null: keep original method renamed to keepOriginalMethodAs. Do make it public!
     String keepOriginalMethodAs;
     // As opposed to static call
     boolean forwardToCallIsStatic;
+    // The owner of the forwardTo method is an interface (ASM needs to know even if it's a static
+    // interface method)
+    boolean forwardToOwnerIsInterface;
     // if true, just forwards the call to prefix, and returns the result
     boolean prefixIsFullReplacement;
     boolean prefixWithID;
@@ -321,7 +343,7 @@ public class InstrumentationConfig {
     /** adds a try catch and invokes suffixOnException in case of exception thrown */
     boolean wrapWithTryCatch;
 
-    FieldRef storeToField;
+    InjectedField storeToField;
     ClassPatch classPatch;
     BiPredicate<String, Integer> predicate;
 
@@ -331,16 +353,6 @@ public class InstrumentationConfig {
 
     MethodPatch(MethodRef from) {
       this.from = from;
-    }
-  }
-
-  static class GetterMethod {
-    MethodRef mRef;
-    FieldRef field;
-
-    public GetterMethod(MethodRef getter, FieldRef field) {
-      this.mRef = getter;
-      this.field = field;
     }
   }
 
@@ -367,13 +379,13 @@ public class InstrumentationConfig {
     }
   }
 
-  static class FieldRef {
-    public final String name;
-    public final String type;
+  static final class FieldsPatch {
+    final List<InjectedField> fields;
+    final String implInterface;
 
-    FieldRef(String name, String type) {
-      this.name = name;
-      this.type = type == null ? OBJECT_DESC : type;
+    public FieldsPatch(List<InjectedField> fields, String implInterface) {
+      this.fields = fields;
+      this.implInterface = implInterface;
     }
   }
 
@@ -381,9 +393,10 @@ public class InstrumentationConfig {
     Object id;
     Predicate<String> classPredicate = null;
     ArrayList<MethodPatch> methodPatches = new ArrayList<>();
-    ArrayList<FieldRef> fieldRefs = new ArrayList<>();
+    ArrayList<FieldsPatch> injectedFields = new ArrayList<>();
     ArrayList<String> interfacePatches = new ArrayList<>();
-    GetterMethod getterMethod;
+
+    public ClassLoader restrictToClassLoader;
 
     // if the method has not been overridden from superclass,
     // implement it by calling the given forward method
@@ -394,7 +407,6 @@ public class InstrumentationConfig {
     boolean bracketAllLzyComputes;
     boolean wrapNativeCalls;
 
-    String replaceObjectAsBase;
     MethodPatch allMethodsPatch;
 
     MethodPatch forMethod(String name, String desc) {
@@ -418,8 +430,8 @@ public class InstrumentationConfig {
 
   static MethodPatch patchForLzyCompute(String clsName, String method) {
     var patch = new MethodPatch(new MethodRef(clsName, method));
-    patch.prefix = InstrumentationConfig.imcEnterCtor;
-    patch.suffix = InstrumentationConfig.imcExitCtor;
+    patch.prefix = InstrumentationConfig.imcEnterLazyOnModule;
+    patch.suffix = InstrumentationConfig.imcExitLazyOnModuleCtor;
     return patch;
   }
 
@@ -523,11 +535,6 @@ public class InstrumentationConfig {
     addInterfacePatch(type, ICS_TYPE);
   }
 
-  static void addGetterMethod(MethodRef method, FieldRef field) {
-    var clsPatch = putIfAbsentClassPatch(method.cls);
-    clsPatch.getterMethod = new GetterMethod(method, field);
-  }
-
   public static MethodPatch addPrefixCall(
       MethodRef from, MethodRef to, boolean withID, boolean withArgs) {
     var methodPatch = putIfAbsentMethodPatch(from);
@@ -580,7 +587,7 @@ public class InstrumentationConfig {
     EntityAgent.retransform(Exception.class);
   }
 
-  /** Leaf node exceptioNode */
+  /** Leaf node exceptionNode */
   static void addTraceSelfAndParentOnException() {
     addExceptionHook();
     setExceptionHookToTraceAsNodeOnStartup = true;
@@ -636,35 +643,30 @@ public class InstrumentationConfig {
     clsPatch.methodForwardsIfMissing.add(new MethodForward(from, to));
   }
 
-  static FieldRef addField(String clsName, String fieldName) {
-    return addField(clsName, fieldName, null);
-  }
-
-  static FieldRef addField(String clsName, String fieldName, String type) {
+  static InjectedField addField(
+      String clsName, String fieldName, String type, String getter, String setter) {
     var clsPatch = putIfAbsentClassPatch(clsName);
-    var fieldPatch = new FieldRef(fieldName, type);
-    clsPatch.fieldRefs.add(fieldPatch);
-    return fieldPatch;
+    var newField = new InjectedField(fieldName, type, getter, setter, ACC_PUBLIC | ACC_TRANSIENT);
+    clsPatch.injectedFields.add(new FieldsPatch(List.of(newField), null));
+    return newField;
   }
 
   @SuppressWarnings("unused")
   public static void addRecordPrefixCallIntoMemberWithStackTrace(String fieldName, MethodRef mref) {
-    addRecordPrefixCallIntoMemberWithStackTrace(fieldName, mref, traceAsStackCollector);
+    addRecordPrefixCallIntoMemberWithStackTrace(fieldName, null, mref, traceAsStackCollector);
   }
 
   public static void addRecordPrefixCallIntoMemberWithCallSite(String fieldName, MethodRef mref) {
-    var fieldRef =
-        addRecordPrefixCallIntoMemberWithStackTrace(fieldName, mref, traceAsStackCollector);
+    addRecordPrefixCallIntoMemberWithStackTrace(
+        fieldName, "getCallSite", mref, traceAsStackCollector);
     addCallSiteInterface(mref.cls);
-    addGetterMethod(new MethodRef(mref.cls, "getCallSite"), fieldRef);
   }
 
-  static FieldRef addRecordPrefixCallIntoMemberWithStackTrace(
-      String fieldName, MethodRef mref, MethodRef methodToInject) {
-    var fieldRef = addField(mref.cls, fieldName);
+  static void addRecordPrefixCallIntoMemberWithStackTrace(
+      String fieldName, String getter, MethodRef mref, MethodRef methodToInject) {
+    var fieldRef = addField(mref.cls, fieldName, OBJECT_DESC, getter, null);
     var patch = addPrefixCall(mref, methodToInject, true, true);
     patch.storeToField = fieldRef;
-    return fieldRef;
   }
 
   /**
@@ -690,11 +692,12 @@ public class InstrumentationConfig {
     addModuleConstructionIntercept(clsName);
   }
 
-  public static void addAllMethodPatchAndChangeSuper(
+  public static void addAllMethodPatchAndNewFields(
       Object id,
       Predicate<String> classPredicate,
       BiPredicate<String, Integer> methodPredicate,
-      String newBase,
+      String interfaceForFields,
+      List<InjectedField> newFields,
       MethodRef prefix,
       MethodRef suffix,
       MethodRef suffixOnException) {
@@ -702,7 +705,6 @@ public class InstrumentationConfig {
     if (multiClsPatches.stream().anyMatch(c -> id.equals(c.id))) return;
     var clsPatch = new ClassPatch();
     clsPatch.id = id;
-    clsPatch.replaceObjectAsBase = newBase;
     clsPatch.classPredicate = classPredicate;
     clsPatch.allMethodsPatch = new MethodPatch(null);
     clsPatch.allMethodsPatch.classPatch = clsPatch;
@@ -711,6 +713,7 @@ public class InstrumentationConfig {
     clsPatch.allMethodsPatch.suffix = suffix;
     clsPatch.allMethodsPatch.passLocalValue = true;
     clsPatch.allMethodsPatch.suffixWithReturnValue = true;
+    clsPatch.injectedFields.add(new FieldsPatch(newFields, interfaceForFields));
     if (suffixOnException != null) {
       clsPatch.allMethodsPatch.suffixOnException = suffixOnException;
       clsPatch.allMethodsPatch.wrapWithTryCatch = true;
@@ -718,19 +721,22 @@ public class InstrumentationConfig {
     multiClsPatches.add(clsPatch);
   }
 
+  public static void restrictToClassLoader(String className, ClassLoader clsLoader) {
+    var clsPatch = clsPatches.get(className);
+    if (null != clsLoader) clsPatch.restrictToClassLoader = clsLoader;
+  }
+
   private static void injectLdPreloadRemover() {
-    if (System.getProperty("os.name", "a great mystery").startsWith("Linux")) {
-      String cls = "optimus/patches/MiscPatches";
-      String removeLdPreloadMethod = "remove_LD_PRELOAD";
-      try {
-        var unload = new MethodRef(cls, removeLdPreloadMethod);
-        String pbCls = "java/lang/ProcessBuilder";
-        var mref = new MethodRef(pbCls, "<init>");
-        var patch = addSuffixCall(mref, unload);
-        patch.suffixWithThis = true;
-      } catch (Exception e) {
-        EntityAgent.logException("Unable to load LD_PRELOAD remover: ", e);
-      }
+    String cls = "optimus/patches/MiscPatches";
+    String removeLdPreloadAndJavaOpts = "remove_LD_PRELOAD_AND_JAVA_OPTS";
+    try {
+      var unload = new MethodRef(cls, removeLdPreloadAndJavaOpts);
+      String pbCls = "java/lang/ProcessBuilder";
+      var mref = new MethodRef(pbCls, "<init>");
+      var patch = addSuffixCall(mref, unload);
+      patch.suffixWithThis = true;
+    } catch (Exception e) {
+      EntityAgent.logException("Unable to load LD_PRELOAD and JAVA_OPTS remover: ", e);
     }
   }
 

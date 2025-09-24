@@ -13,6 +13,8 @@ package optimus.platform.pickling
 
 import optimus.core.utils.RuntimeMirror
 
+import java.lang.invoke.MethodHandle
+import java.lang.invoke.MethodHandles
 import scala.reflect.runtime.universe._
 
 /**
@@ -54,6 +56,19 @@ private[pickling] object PicklingReflectionUtils {
   private def getOwnerCompanion(tpe: Type): Type = tpe match {
     case RefinedType(parent :: _, _) => getOwnerCompanion(parent)
     case _                           => getUnderlyingType(tpe.asInstanceOf[TypeRef].pre)
+  }
+
+  def getUnpickleConverterMethodHandle(clz: Class[_]): Option[MethodHandle] = {
+    clz.getDeclaredMethods
+      .find(_.isAnnotationPresent(classOf[unpickleConverter]))
+      .map { m =>
+        if (m.getParameterCount == 1 && m.getParameterTypes()(0) == classOf[String])
+          MethodHandles.lookup().unreflect(m)
+        else
+          throw new PicklingException(
+            s"Method ${m.getName} does not satisfy the constraints of " +
+              s"${classOf[unpickleConverter].getName}. It needs to be a method with a single String argument")
+      }
   }
 
   def getUnderlyingType(tpe: Type): Type = {

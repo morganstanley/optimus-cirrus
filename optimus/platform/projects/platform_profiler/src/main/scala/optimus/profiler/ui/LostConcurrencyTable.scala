@@ -51,7 +51,7 @@ class LostConcurrencyTable extends NPTable[LostConcurrency] with Filterable[Lost
   })
 
   def refresh(): Unit = {
-    setList(ArrayBuffer(OGSchedulerLostConcurrency.lostCCEntries().asScala: _*))
+    setList(ArrayBuffer(OGSchedulerLostConcurrency.lostCCEntries().asScalaUnsafeImmutable: _*))
   }
 
   private def initPopupMenu: JPopupMenu2 = {

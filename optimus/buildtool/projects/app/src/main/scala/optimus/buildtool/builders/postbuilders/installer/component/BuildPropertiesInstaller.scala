@@ -29,7 +29,6 @@ import optimus.platform._
 import optimus.platform.util.Log
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 class BuildPropertiesInstaller(
     installer: Installer,

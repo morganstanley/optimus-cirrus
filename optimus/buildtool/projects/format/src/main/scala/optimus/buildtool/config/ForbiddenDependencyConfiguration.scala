@@ -13,7 +13,6 @@ package optimus.buildtool.config
 
 import optimus.buildtool.utils.Hashing
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 import scala.collection.compat._
 

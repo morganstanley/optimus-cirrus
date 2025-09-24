@@ -66,6 +66,7 @@ import optimus.graph.cache.Caches;
 import optimus.graph.cache.CauseGCNative$;
 import optimus.graph.diagnostics.GCNativeStats;
 import optimus.graph.diagnostics.InfoDumper;
+import optimus.graph.gcmonitor.GCCrumbs;
 import optimus.graph.tracking.DependencyTrackerRoot$;
 import optimus.graph.tracking.TrackingGraphCleanupTrigger;
 import optimus.platform.AdvancedUtils;
@@ -374,7 +375,7 @@ public class GCNative {
       if (win && !enabledOnWindows) {
         var windowsAlternative = StaticConfig.string("nativeProfilingOnWindows");
         log.info("gcnative loading on Windows is not yet enabled: use " + windowsAlternative);
-        GCMonitor.gcCrumb(
+        GCCrumbs.gcCrumb(
             crumbDesc,
             Properties.gcNative().elem("unconfigured"),
             Properties.gcNativePath().elem("NONE"));
@@ -384,7 +385,7 @@ public class GCNative {
         InstallPathLocator.Resolver resolver = InstallPathLocator.system();
         try {
           if (!resolver.disableGCNative()) {
-            GCMonitor.gcCrumb(
+            GCCrumbs.gcCrumb(
                 crumbDesc,
                 Properties.gcNative().elem("load"),
                 Properties.gcNativePath()
@@ -426,7 +427,7 @@ public class GCNative {
             t.setName("GC Native");
             t.start();
           } else {
-            GCMonitor.gcCrumb(
+            GCCrumbs.gcCrumb(
                 crumbDesc,
                 Properties.gcNative().elem("load"),
                 Properties.gcNativePath().elem("NONE"));
@@ -782,7 +783,7 @@ public class GCNative {
     }
 
     void writeCrumb() {
-      GCMonitor.gcCrumb(
+      GCCrumbs.gcCrumb(
           crumbDesc,
           Properties.gcNative().elem("sizes"),
           Properties.gcNativeIndex().elem(gcIndex),
@@ -1639,7 +1640,7 @@ public class GCNative {
         if (status != 0) {
           log.error("Failed to load jemalloc API: " + status);
         } else jemallocAPILoaded = true;
-        GCMonitor.gcCrumb(
+        GCCrumbs.gcCrumb(
             crumbDesc,
             Properties.logMsg().apply("jemalloc loaded: " + m.group() + " MALLOC_CONF=" + conf));
         return jemallocAPILoaded;
@@ -1826,7 +1827,7 @@ public class GCNative {
   // TODO(OPTIMUS-63323): Unsuppress when cppagent is fixed to call with CallStaticVoidMethod
   public static void logInfo_SUPPRESSED(String msg) {
     log.info(msg);
-    GCMonitor.gcCrumb(
+    GCCrumbs.gcCrumb(
         crumbDesc, Properties.logMsg().elem(msg), Properties.gcNativeIndex().elem(gcIndex));
   }
 
@@ -1898,7 +1899,7 @@ public class GCNative {
     long removed = 0;
     if (level == LEVEL_GC) {
       // Level 0 cleanup: just run gc
-      GCMonitor.forceGC();
+      GCMonitor.instance().forceGC();
       finalizerCount = memoryBean.getObjectPendingFinalizationCount();
       jvmHeap = memoryBean.getHeapMemoryUsage().getUsed();
       SystemFinalization.runFinalizers();
@@ -1924,14 +1925,14 @@ public class GCNative {
             long evicted =
                 AdvancedUtils.clearAllCachesWithFinalizers(
                     CauseGCNative$.MODULE$, cleanSI, cleanLocal, detectFinalizerSeconds);
-            GCMonitor.gcCrumb(
+            GCCrumbs.gcCrumb(
                 crumbDesc,
                 Properties.gcNativeIndex().elem(gcIndex),
                 Properties.gcNative().elem("eviction"),
                 Properties.gcNativeEvicted().elem(evicted));
             log.info("evicted {} nodes with finalizers", evicted);
           } catch (UnsatisfiedLinkError ex) {
-            GCMonitor.gcCrumb(
+            GCCrumbs.gcCrumb(
                 crumbDesc,
                 Properties.gcNativeIndex().elem(gcIndex),
                 Properties.gcNative().elem("fullclear"));
@@ -1945,7 +1946,7 @@ public class GCNative {
         }
 
         // GC after cache clearing, or we won't reap the benefits.
-        GCMonitor.forceGC();
+        GCMonitor.instance().forceGC();
         finalizerCount = memoryBean.getObjectPendingFinalizationCount();
         SystemFinalization.runFinalizers();
 
@@ -1968,7 +1969,7 @@ public class GCNative {
       // Level 4 means gcnative has no other choice but to kill the JVM
       // (the reason why shutdown is requested is logged by libgcnative_mts.cpp)
       // TODO (OPTIMUS-12121): Raise alert once alerter api is in place
-      GCMonitor.gcCrumb(
+      GCCrumbs.gcCrumb(
           crumbDesc,
           Properties.gcNativeIndex().elem(gcIndex),
           Properties.gcNative().elem("shutdown"),
@@ -1979,10 +1980,10 @@ public class GCNative {
           Properties.gcNativeAlloc().elem(inMB(nativeHeapBeforeClear)),
           Properties.gcNativeHeapChange().elem(inMB(nativeHeapChangeSincePrevious)),
           Properties.gcFinalizerCount().elem(finalizerCount));
-      GCMonitor.kill("GCNative");
+      GCMonitor.instance().kill("GCNative");
     }
     int finalizerCountAfter = memoryBean.getObjectPendingFinalizationCount();
-    GCMonitor.gcCrumb(
+    GCCrumbs.gcCrumb(
         crumbDesc,
         Properties.gcNative().elem("clear"),
         Properties.gcNativeAllocator().elem(allocator.name),

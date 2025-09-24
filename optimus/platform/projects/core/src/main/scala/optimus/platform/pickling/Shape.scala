@@ -12,14 +12,12 @@
 
 package optimus.platform.pickling
 
-import optimus.core.CoreHelpers
 import optimus.graph.Settings
 import org.objectweb.asm.Type
 
 import java.io.ObjectInput
 import java.lang.invoke.MethodHandle
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicIntegerArray
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
@@ -44,11 +42,10 @@ private[platform] final class Shape private (
     with Serializable
     with Cloneable {
 
+  private lazy val maybeInterner = StatsBasedInterner(classes.length, Settings.InterningScope.PICKLED)
+
   private val sbCtors = SlottedBufferClassGenerator.getOrResolveSBCtors(this)
 
-  private val stats = new AtomicIntegerArray(classes.length * 2) // Pair of integers, first is queries second is hits
-  private val profiler =
-    if (Settings.profileInterningStats && !isSeq) new StatsProfilerImpl(classes.length) else NoopStatsProfiler
   private val name2index: Map[String, Int] =
     if (isSeq) Map.empty else PicklingMapEntryOrderWorkaround.newMapForNames(names, hasTag)
 
@@ -58,18 +55,8 @@ private[platform] final class Shape private (
   // This is used to support removal of the tag from SlottedBufferAsMap methods.
   // noinspection ScalaUnusedSymbol - called by generated code
   def maybeIntern(o: AnyRef, index: Int): AnyRef = {
-    if (!safeToIntern || Settings.hitRatioForInterning < 0.0 || classes(index).isPrimitive) o
-    else {
-      val queries = stats.incrementAndGet(index * 2)
-      val hits = stats.get(index * 2 + 1)
-      val worthInterning = hits.toDouble / queries > Settings.hitRatioForInterning
-      profiler.newDecision(index, queries, worthInterning)
-      if (queries < Shape.observationThreshold || worthInterning) {
-        val interned = CoreHelpers.intern(o)
-        if (interned ne o) stats.incrementAndGet(index * 2 + 1)
-        interned
-      } else o
-    }
+    if (!safeToIntern || isSeq) o
+    else maybeInterner.maybeIntern(o, index)
   }
 
   def getFieldIndex(key: String): Int = name2index.getOrElse(key, Shape.invalidField)
@@ -164,8 +151,6 @@ private[platform] object Shape {
   val NoTag = new String("__NoTag__")
   val invalidField: Int = Int.MinValue
   private val shapeCache = new ConcurrentHashMap[ShapeKey, Shape]()
-  private val observationThreshold: Int = Settings.interningObservationThreshold
-  val observeForFlipsAt: Int = 100
 
   // This creates a Shape to be used for SlottedBufferAsMap
   def apply(names: Array[String], classes: Array[Class[_]], tag: String, safeToIntern: Boolean): Shape = {
@@ -186,16 +171,10 @@ private[platform] object Shape {
         var i = 0
         while (i < shape.classes.length) {
           if (!shape.classes(i).isPrimitive) {
-            val queries = shape.stats.get(i * 2)
-            val hits = shape.stats.get(i * 2 + 1)
             sb.append(shape.signature)
             sb.append("-")
             sb.append(if (shape.isSeq) i else shape.names(i))
-            sb.append(",")
-            sb.append(queries)
-            sb.append(",")
-            sb.append(hits)
-            shape.profiler.dumpStats(i, sb)
+            shape.maybeInterner.dumpStats(i, sb)
             sb.append("\n")
           }
           i += 1
@@ -272,34 +251,4 @@ private[platform] object Shape {
 
 }
 
-private[platform] abstract class StatsProfiler {
-  def newDecision(index: Int, queries: Int, worthInterning: Boolean): Unit = ()
-  def dumpStats(index: Int, sb: StringBuilder): Unit = ()
-}
-
-private[platform] final class StatsProfilerImpl(val args: Int) extends StatsProfiler {
-  // Non-atomic here for now. These stats are not used for any decisions in the code
-  // it's just to aid dev work.
-  private val sameDecisionCnt = new Array[Int](args)
-  private val lastDecision = new Array[Boolean](args)
-  private val numFlips = new Array[Int](args)
-  override def newDecision(index: Int, queries: Int, worthInterning: Boolean): Unit = {
-    if (worthInterning != lastDecision(index)) {
-      lastDecision(index) = worthInterning
-      sameDecisionCnt(index) = queries
-      if (queries > Shape.observeForFlipsAt) numFlips(index) += 1
-    }
-  }
-  override def dumpStats(index: Int, sb: StringBuilder): Unit = {
-    sb.append(",")
-    sb.append(sameDecisionCnt(index))
-    sb.append(",")
-    sb.append(numFlips(index))
-    sb.append(",")
-    sb.append(lastDecision(index))
-  }
-}
-
 final case class SlottedBufferCtorHolder(mainCtor: MethodHandle, streamCtor: MethodHandle)
-
-object NoopStatsProfiler extends StatsProfiler

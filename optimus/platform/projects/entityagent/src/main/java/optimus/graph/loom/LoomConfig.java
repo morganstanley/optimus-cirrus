@@ -44,10 +44,17 @@ public class LoomConfig {
   public static final String CompilerEnqueueEarlierParam = "enqueueEarlier";
   public static final String CompilerQueueSizeSensitiveParam = "queueSizeSensitive";
   public static final String CompilerAssumeGlobalMutationParam = "assumeGlobalMutation";
+  public static final String CompilerRetainModifiedByteCodeParam = "retainModifiedByteCode";
 
   public static final String NodeAnnotation = "Loptimus/platform/node;";
   public static final String AsyncAnnotation = "Loptimus/platform/async;";
+  public static final String NodeSyncLiftAnnotation = "Loptimus/platform/annotations/nodeSyncLift;";
+  public static final String NodeLiftByNameAnnotation =
+      "Loptimus/platform/annotations/nodeSyncLiftByName;";
+  public static final String NodeLiftAnnotation = "Loptimus/platform/annotations/nodeLift;";
   public static final String ExposeArgTypesParam = "exposeArgTypes";
+
+  public static final String TraceAlwaysParam = "traceAlways";
 
   public static final String ScenarioIndependentAnnotation =
       "Loptimus/platform/scenarioIndependent;";
@@ -83,9 +90,9 @@ public class LoomConfig {
 
   public static final String NODE_DESC = "Loptimus/graph/Node;";
   public static final String NODE = "optimus/graph/Node";
+  public static final Type NODE_TYPE = Type.getObjectType(NODE);
 
   public static final String NODE_GETTER_DESC = "()" + NODE_DESC;
-  public static final Type NODE_TYPE = Type.getObjectType(NODE);
 
   public static final String NODE_FUTURE_DESC = "Loptimus/graph/NodeFuture;";
   public static final String NODE_FUTURE = "optimus/graph/NodeFuture";
@@ -100,12 +107,29 @@ public class LoomConfig {
       new Method("forID", NODE_TASK_INFO, new Type[] {Type.INT_TYPE});
   public static final String PROPERTY_NODE_LOOM_DESC = Type.getMethodDescriptor(Type.VOID_TYPE);
 
+  public static final String SCALA_FUNCTION0 = "scala/Function0";
+  public static final Type SCALA_FUNCTION0_TYPE = Type.getObjectType(SCALA_FUNCTION0);
+  public static final String SCALA_FUNCTION0_DESC = SCALA_FUNCTION0_TYPE.getDescriptor();
+
+  public static final String SCALA_FUNCTION1 = "scala/Function1";
+  public static final Type SCALA_FUNCTION1_TYPE = Type.getObjectType(SCALA_FUNCTION1);
+  public static final String SCALA_FUNCTION1_DESC = SCALA_FUNCTION1_TYPE.getDescriptor();
+
+  public static final String SCALA_FUNCTION2 = "scala/Function2";
+  public static final Type SCALA_FUNCTION2_TYPE = Type.getObjectType(SCALA_FUNCTION2);
+  public static final String SCALA_FUNCTION2_DESC = SCALA_FUNCTION2_TYPE.getDescriptor();
+
+  public static final String SCALA_FUNCTION3 = "scala/Function3";
+  public static final Type SCALA_FUNCTION3_TYPE = Type.getObjectType(SCALA_FUNCTION3);
+  public static final String SCALA_FUNCTION3_DESC = SCALA_FUNCTION3_TYPE.getDescriptor();
+
   public static final String CMD_NODE = "node";
   public static final String CMD_ASYNC = "nodeAsync";
   public static final String CMD_NODE_ACPN = "nodeACPN";
   public static final String CMD_OBSERVED_VALUE_NODE = "nodeOVN";
   public static final String CMD_QUEUED = "queued";
   public static final String CMD_GET = "get";
+  public static final String CMD_GETSYNC = "getSync";
   public static final String CMD_GETSI = "getSI";
 
   private static final Type STRING_TYPE = Type.getObjectType("java/lang/String");
@@ -154,7 +178,17 @@ public class LoomConfig {
   public static final String ALSO_SET_SUFFIX = "_$colon$eq";
   public static final Type SEQ = Type.getObjectType(seqClass().getName().replace(".", "/"));
 
-  private static final String PLUGIN_HELPERS = "optimus/platform/PluginHelpers";
+  public static final String PLUGIN_HELPERS = "optimus/platform/PluginHelpers";
+  public static final String PLUGIN_HELPERS_TO_NODE = "toNode";
+  public static final String PLUGIN_HELPERS_TO_NODE_DESC =
+      "(Lscala/Function0;)Loptimus/graph/Node;";
+  public static final String PLUGIN_HELPERS_TO_NODE_FACTORY = "toNodeFactory";
+  public static final String PLUGIN_HELPERS_TO_NODE_FACTORY_1_DESC =
+      "(Lscala/Function1;)Lscala/Function1;";
+  public static final String PLUGIN_HELPERS_TO_NODE_FACTORY_2_DESC =
+      "(Lscala/Function2;)Lscala/Function2;";
+  public static final String PLUGIN_HELPERS_TO_NODE_FACTORY_3_DESC =
+      "(Lscala/Function3;)Lscala/Function3;";
   private static final String PH_ENABLE_DEBUG = "enableCompilerDebug";
   private static final String PH_LEVEL_ZERO = "setCompilerLevelZero";
 

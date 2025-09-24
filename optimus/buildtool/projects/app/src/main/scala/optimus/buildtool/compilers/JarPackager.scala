@@ -14,6 +14,7 @@ package optimus.buildtool.compilers
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
+import optimus.buildtool.config.NamingConventions.ContentType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.SourceUnitId
@@ -38,7 +39,7 @@ import optimus.platform._
           val tempJar = new ConsistentlyHashedJarOutputStream(JarAsset(tempOut), None, compressed = true)
           try {
             content.foreach { case (file, content) =>
-              if (tokens.isEmpty)
+              if (tokens.isEmpty || content.tpe == ContentType.Binary)
                 tempJar.copyInFile(content.contentAsInputStream, file.sourceFolderToFilePath)
               else {
                 val newContent = tokens.foldLeft(content.utf8ContentAsString) { case (c, (key, value)) =>

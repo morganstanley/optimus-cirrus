@@ -87,6 +87,9 @@ private[compile] object Messages {
 
   def duplicatedRunconfName(appName: String) = s"Duplicated RunConf name: $appName"
 
+  def incorrectlyCasedTemplate(actual: String, correct: String) =
+    s"Incorrectly cased default template name: $actual (use: $correct, or choose a different name completely)"
+
   def atImplicitParent(parent: String, messageToWrap: String): String = {
     s"$messageToWrap (at implicit parent '$parent')"
   }

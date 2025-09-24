@@ -28,7 +28,6 @@ import optimus.platform._
 import java.time.Instant
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.HashMap
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 import scala.collection.mutable
 

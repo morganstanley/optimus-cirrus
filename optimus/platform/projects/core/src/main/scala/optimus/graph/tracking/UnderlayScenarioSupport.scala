@@ -13,7 +13,6 @@ package optimus.graph.tracking
 
 import optimus.graph.EvaluationState
 import optimus.graph.tracking.ttracks.TweakableTracker
-import optimus.platform.EvaluationContext
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
@@ -67,8 +66,9 @@ private[tracking] trait UnderlayScenarioSupport {
         scenario,
         FrozenNodeInputMap.empty,
         EvaluationState.TRACKING_SCENARIO_STACK_FLAGS,
-        EvaluationContext.currentNode,
-        squashIfNoContent = false)
+        classOf[UnderlayScenarioSupport] /* id for debugger */,
+        squashIfNoContent = false
+      )
 
     // reset the tweakable listener to us rather than the default (parent) so we can track and invalidate
     val newStack = setUnderlayScenarioStackTweakableListenerAndDepth(

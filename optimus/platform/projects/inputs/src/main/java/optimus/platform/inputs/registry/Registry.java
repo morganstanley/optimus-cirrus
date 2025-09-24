@@ -35,7 +35,8 @@ public class Registry {
       Arrays.asList(
           "optimus.platform.inputs.registry.parameters.AuditorSafeInputs",
           "optimus.platform.inputs.registry.parameters.ModelSafeInputs",
-          "optimus.platform.inputs.registry.parameters.DTCInputs");
+          "optimus.platform.inputs.registry.parameters.DTCInputs",
+          "optimus.platform.inputs.registry.parameters.PythonInteropInputs");
   /* these scala objects listed musts only contain vals of the process inputs and nothing else */
   private static final List<String> ReflectiveScalaObjectsToLoad =
       Arrays.asList(

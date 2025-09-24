@@ -39,6 +39,8 @@ class Speedscope(cleanLambdas: Boolean) extends Log {
   def frames(frameIds: Iterable[Int]): Iterable[String] = frameIds.map(allFrames.apply)
   def line(frameIds: Iterable[Int], weight: Long): String = frames(frameIds).mkString("", ";", s" $weight")
 
+  def getAllFrames: Seq[String] = allFrames.toSeq
+
   def snap: (IndexedSeq[String], Map[String, Iterable[Trace]]) = synchronized {
     (
       allFrames.to(ArraySeq),
@@ -65,6 +67,11 @@ class Speedscope(cleanLambdas: Boolean) extends Log {
   def addTrace(eventType: String, value: Long, trace: Array[Int]): Unit = synchronized {
     val profile = profiles.getOrElseUpdate(eventType, ArrayBuffer.empty)
     profile += Trace(value, trace)
+  }
+  def addStack(stack: Array[String], sample: Long): Unit = {
+    val trace = stack.filter(_.nonEmpty).map(methodIndex)
+    // placeholder name for profire stacks
+    addTrace("profire", sample, trace)
   }
 
   /**
@@ -121,19 +128,12 @@ class Speedscope(cleanLambdas: Boolean) extends Log {
       }
     }
    */
-
-  def write(outputFile: String): Unit = {
-    val (allFrames, profiles) = snap
-    val output = new BufferedWriter(new FileWriter(outputFile))
+  def generateJson(unit: String, title: Option[String] = None): String = {
     val dollar = "$"
     def frameElement(frame: String) = s"""{"name":"$frame"}"""
     def vecString(xs: Iterable[_]) = xs.mkString("[", ",", "]")
     def vecStringCR(xs: Iterable[_]) = xs.mkString("[\n", ",\n", "\n]")
-
-    log.info(s"Read ${profiles.map(_._2.size).sum} stacks, with ${allFrames.size} unique frames")
-    log.info(s"Writing JSON to $outputFile")
-
-    output.write(s"""{
+    s"""{
   "version": "0.1.2",
   "${dollar}schema": "https://www.speedscope.app/file-format-schema.json",
   "shared" : {
@@ -143,15 +143,25 @@ class Speedscope(cleanLambdas: Boolean) extends Log {
         val (weights: Iterable[Long], traces: Iterable[Array[Int]]) = profile.unzip
         s"""{
     "type": "sampled",
-     "name": "$pname",
-     "unit": "none",
+     "name": "${title.getOrElse(pname)}",
+     "unit": "$unit",
      "startValue": 0,
      "endValue": 100,
      "samples" : ${vecStringCR(traces.map(vecString(_)))},
      "weights" : ${vecString(weights)}
    }"""
       }) /* end profiles */}
-  }""")
+  }"""
+  }
+
+  def write(outputFile: String): Unit = {
+    val (allFrames, profiles) = snap
+    val output = new BufferedWriter(new FileWriter(outputFile))
+
+    log.info(s"Read ${profiles.map(_._2.size).sum} stacks, with ${allFrames.size} unique frames")
+    log.info(s"Writing JSON to $outputFile")
+
+    output.write(generateJson("none"))
 
     output.flush()
     output.close()

@@ -16,7 +16,7 @@ import optimus.platform.util.Log
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-trait ReactiveEventPublisher[T <: ReactiveEvent] extends ReactiveEventPublisherInternal[T] {
+trait ReactiveEventPublisher[T] extends ReactiveEventPublisherInternal[T] {
   type Sub = ReactiveEventSubscriber[T]
 
   // user should define these methods.
@@ -31,23 +31,20 @@ trait ReactiveEventPublisher[T <: ReactiveEvent] extends ReactiveEventPublisherI
   def statusEventSource: Option[StatusEventSource] = None
 }
 
-trait WithPublicPublish[T <: ReactiveEvent] extends ReactiveEventPublisher[T] {
+trait WithPublicPublish[T] extends ReactiveEventPublisher[T] {
   override def publish(t: T) = super.publish(t)
   override def publishError(t: Throwable) = super.publishError(t)
 }
 
-trait WithPublicStart[T <: ReactiveEvent] extends ReactiveEventPublisher[T] {
+trait WithPublicStart[T] extends ReactiveEventPublisher[T] {
   override def start = super.start
 }
 
-trait WithPublicStop[T <: ReactiveEvent] extends ReactiveEventPublisher[T] {
+trait WithPublicStop[T] extends ReactiveEventPublisher[T] {
   override def stop = super.stop
 }
 
-trait WithPublicStartStop[T <: ReactiveEvent]
-    extends ReactiveEventPublisher[T]
-    with WithPublicStart[T]
-    with WithPublicStop[T]
+trait WithPublicStartStop[T] extends ReactiveEventPublisher[T] with WithPublicStart[T] with WithPublicStop[T]
 
 /** Container for an item that allows reads and updates with ReadWriteLock semantics. */
 private[handlers] final class StatefulIO[State](initial: State) {
@@ -75,7 +72,7 @@ private[handlers] final class StatefulIO[State](initial: State) {
 /**
  * internal API and implementation details
  */
-private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { self: ReactiveEventPublisher[T] =>
+private[reactive] trait ReactiveEventPublisherInternal[T] { self: ReactiveEventPublisher[T] =>
   import ReactiveEventPublisherInternal.logger
   val subscribers = new StatefulIO(Set.empty[ReactiveEventSubscriber[T]])
 

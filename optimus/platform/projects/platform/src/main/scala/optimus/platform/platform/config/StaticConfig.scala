@@ -12,7 +12,6 @@
 package optimus.platform.platform.config
 
 import com.typesafe.config.ConfigFactory
-import scala.collection.immutable.Seq
 
 object StaticConfig {
 

@@ -26,8 +26,7 @@ public abstract class OGEventsObserver implements Cloneable {
   public OGEventsObserver createCopy() {
     try {
       return (OGEventsObserver) clone();
-    } catch (CloneNotSupportedException e) {
-      e.printStackTrace();
+    } catch (CloneNotSupportedException ignored) {
     }
     return null; // shouldn't happen since we implement cloneable
   }
@@ -172,7 +171,7 @@ public abstract class OGEventsObserver implements Cloneable {
 
   public void lookupCollision(EvaluationQueue eq, int collisionCount) {}
 
-  public void lookupEnd(OGLocalTables lCtx, long startTime, NodeTask task, NodeTask lookupResult) {}
+  public void lookupEnd(OGLocalTables lCtx, long startTime, NodeTask key, NodeTask lookupResult) {}
 
   public void lookupEndPartial(
       OGLocalTables lCtx,
@@ -189,13 +188,20 @@ public abstract class OGEventsObserver implements Cloneable {
       boolean countMiss) {}
 
   public void lookupAdjustCacheHit(EvaluationQueue eq, PropertyNode<?> hit) {}
+
   public void lookupAdjustCacheStats(NodeTaskInfo nti, boolean hit, long startTime) {}
+
+  public LookupState lookupStartScenario(Object couldBeGiven) {
+    return LookupState.Default;
+  }
+
+  public void lookupAdjustCacheStats(LookupState ls, boolean hit) {}
 
   public void evicted(NodeTask task) {}
 
   public void invalidated(NodeTask task) {}
 
-  public void reuseUpdate(NodeTask task, int rcount) {}
+  public void reuseUpdate(NodeTask task, int count) {}
 
   /** TRACKING EVENTS */
   public void nodeHashCollision(NodeTask task) {}
@@ -215,4 +221,6 @@ public abstract class OGEventsObserver implements Cloneable {
   public void writeEvent(OGEvent event) {}
 
   public void writeEventComplete(int counterID, int id) {}
+
+  public void markEndOfCycle() {}
 }

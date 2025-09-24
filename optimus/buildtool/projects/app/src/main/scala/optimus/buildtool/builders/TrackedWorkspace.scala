@@ -12,29 +12,29 @@
 package optimus.buildtool.builders
 
 // N.B. we're using Java Futures because that's what the BSP library wants, and it's easier not to fight with it
-import java.util.concurrent.CompletableFuture
 import optimus.buildtool.app.MischiefOptions
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.DirectoryFactory
-import optimus.buildtool.rubbish.StoredArtifacts
 import optimus.buildtool.rubbish.RubbishTidyer
+import optimus.buildtool.rubbish.StoredArtifacts
 import optimus.buildtool.trace.FindArtifacts
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.ObtTraceListener
 import optimus.buildtool.trace.ScanFilesystem
 import optimus.buildtool.trace.TidyRubbish
+import optimus.buildtool.utils.GitLog
 import optimus.buildtool.utils.Utils
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.graph.CancellationScope
 import optimus.graph.tracking.DependencyTracker
-import optimus.platform.annotations.closuresEnterGraph
-import optimus.platform.util.Log
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
+import optimus.platform.annotations.closuresEnterGraph
+import optimus.platform.util.Log
 
 import java.nio.file.Path
-import scala.collection.immutable.Seq
+import java.util.concurrent.CompletableFuture
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -60,8 +60,8 @@ class TrackedWorkspace(
     rubbishTidyer: Option[RubbishTidyer],
     mischiefOptions: MischiefOptions
 ) extends Log {
-  import Utils._
   import TrackedWorkspace._
+  import Utils._
 
   def rescan(cancelScope: CancellationScope, listener: ObtTraceListener): CompletableFuture[Boolean] = {
     val tweaks = run(cancelScope, listener) {
@@ -76,12 +76,16 @@ class TrackedWorkspace(
 
       val mischiefTweaks = mischiefOptions.configAsTweaks()
 
-      (
+      val externalTweaks = Seq(
         // We always assume that mutable external artifacts may have changed. Usually there aren't any so this
         // costs us nothing (and if there are any we just pay the cost to rehash them)
-        ExternalClassFileArtifact.updateMutableExternalArtifactState() ++ scanTweaks ++ mischiefTweaks,
-        scanTweaks.nonEmpty
+        ExternalClassFileArtifact.mutableExternalArtifactState.tweakVersion(),
+        GitLog.gitStatusState.tweakVersion(),
       )
+
+      val allTweaks = externalTweaks ++ scanTweaks ++ mischiefTweaks
+      val workspaceChanged = scanTweaks.nonEmpty
+      (allTweaks, workspaceChanged)
     }
 
     tweaks.thenCompose { case (ts, workspaceChanged) => addResolvedTweaks(ts).thenApply(_ => workspaceChanged) }
@@ -163,7 +167,7 @@ class TrackedWorkspace(
       listener: ObtTraceListener
   )(
       subtask: => A
-  ): A = needsPlugin
+  ): A = needsPluginAlwaysAutoAsyncArgs
 
   @entersGraph @closuresEnterGraph private def withContext$NF[A](
       cancelScope: CancellationScope,

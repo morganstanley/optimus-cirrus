@@ -16,6 +16,7 @@ import optimus.breadcrumbs.crumbs.RequestsStallInfo
 import optimus.breadcrumbs.crumbs.StallPlugin
 import optimus.core.CoreAPI.asyncResult
 import optimus.graph._
+import optimus.graph.diagnostics.ObservationRegistry
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
@@ -25,12 +26,12 @@ import optimus.platform.dal.pubsub.PubSubClientResponse
 import optimus.platform.dsi.bitemporal.CmdLogLevelHelper
 import optimus.platform.dsi.bitemporal.DSI
 import optimus.platform.dsi.bitemporal.ExpressionQueryCommand
+import optimus.platform.dsi.bitemporal.LeadWriterCommand
 import optimus.platform.dsi.bitemporal.QueryPlan
 import optimus.platform.dsi.bitemporal.QueryResult
 import optimus.platform.dsi.bitemporal.ReadOnlyCommand
 import optimus.platform.dsi.bitemporal.Result
 import optimus.platform.dsi.bitemporal.SelResult
-import optimus.platform.dsi.bitemporal.LeadWriterCommand
 import optimus.platform.util.PrettyStringBuilder
 
 import scala.collection.mutable
@@ -84,18 +85,7 @@ object DALDSIExecutor extends DSIExecutor {
     }
   }
 
-  private def markNodeAccessingDAL(): Unit = {
-    val currNode: NodeTask = EvaluationContext.currentNode
-    /* we need to mark access DAL even if we don't have the plugin since if this runs outside a withoutDAL block and we
-    have a cache hit on this inside of the withoutDAL block we still want to crash
-     */
-    currNode.markAccessedDAL()
-    currNode.scenarioStack
-      .findPluginTag(AdvancedUtils.WithoutDALViolationCollector)
-      .foreach(_.addLocation(EvaluationContext.currentNode.enqueuerChain()))
-  }
   @async def executeQuery(dsi: DSI, cmd: ReadOnlyCommand): Result = {
-    markNodeAccessingDAL()
     val res = asyncResult(EvaluationContext.cancelScope) { doExecuteQuery(dsi, cmd) }
 
     if (res.hasException) {
@@ -113,7 +103,6 @@ object DALDSIExecutor extends DSIExecutor {
   }
 
   @async override def executeLeadWriterCommands(dsi: DSI, cmds: Seq[LeadWriterCommand]): Seq[Result] = {
-    markNodeAccessingDAL()
     dsi match {
       case clientDsi: ClientSideDSI => clientDsi.executeLeadWriterCommands(cmds)
       case serverDsi                => serverDsi.executeLeadWriterCommands(cmds)
@@ -141,11 +130,18 @@ object DALDSIExecutor extends DSIExecutor {
     require(
       results.length == 1,
       s"expected one result for one command, but got ${results.length}, the command was: $cmd")
-    if (GridProfiler.DALProfilingOn) GridProfiler.recordDALResults(results.head match {
-      case m: SelResult   => m.value.size
-      case q: QueryResult => q.value.size
-      case _              => 0
-    })
+    if (GridProfiler.DALProfilingOn || ObservationRegistry.active) {
+      val n = results.head match {
+        case m: SelResult   => m.value.size
+        case q: QueryResult => q.value.size
+        case _              => 0
+      }
+      if (GridProfiler.DALProfilingOn) GridProfiler.recordDALResults(n)
+      if (ObservationRegistry.active) {
+        DalCounters.dalRequestCounter.increment()
+        if (n > 0) DalCounters.dalResultCounter.add(n)
+      }
+    }
     results.head
   }
 

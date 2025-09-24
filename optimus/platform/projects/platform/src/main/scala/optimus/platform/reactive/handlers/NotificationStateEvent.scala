@@ -27,9 +27,7 @@ import optimus.platform.reactive.handlers.StateChangeEvent.StatusError
  * @see
  *   optimus.platform.graph.ticking.HandlerEntity
  */
-sealed trait GlobalStateEvent extends WithEventCause {
-  override def eventCause = Option.empty[EventCause]
-}
+sealed trait GlobalStateEvent
 
 /**
  * The super class of all kinds of reactive evaluator state events
@@ -73,7 +71,6 @@ sealed trait StreamFailedEvent extends ExecutionStateEvent with ErrorEvent {
   val exception: Option[Throwable]
 }
 final case class InputFailedEvent(id: Option[Any], reason: String, error: StatusError) extends StreamFailedEvent {
-  override def eventCause: Option[EventCause] = error.eventCause
   override val exception: Option[Throwable] = Some(error.reason)
 }
 final case class OutputFailedEvent(id: Option[Any], reason: String, exception: Option[Throwable])

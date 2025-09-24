@@ -603,15 +603,18 @@ class PubSubDsiProxy(
     ctx: ClientBrokerContext,
     brokerProvider: BrokerProvider,
     override val partitionMap: PartitionMap,
-    val secureTransport: Boolean)
+    val secureTransport: Boolean,
+    readDSI: Option[ClientSideDSI] = None)
     extends AbstractRemoteDSIProxyWithLeaderElector(ctx, brokerProvider)
     with PubSubConnectionInternals {
   def this(
       ctx: ClientBrokerContext,
       brokerProviderResolver: BrokerProviderResolver,
       partitionMap: PartitionMap,
-      secureTransport: Boolean) =
-    this(ctx, brokerProviderResolver.resolve(ctx.broker), partitionMap, secureTransport)
+      secureTransport: Boolean,
+      readDSI: Option[ClientSideDSI]
+  ) =
+    this(ctx, brokerProviderResolver.resolve(ctx.broker), partitionMap, secureTransport, readDSI)
 
   private[optimus] def getPubSubStreamManager: DsiClientPubSubStreamRetryManager = {
     require(pubSubRetryManager.nonEmpty)
@@ -654,7 +657,7 @@ class PubSubDsiProxy(
   override protected def getPubSubRetryManager(
       retryAttempts: ClientStreamId,
       retryBackoffTime: Long): Option[DsiClientPubSubStreamRetryManager] =
-    Some(new DsiClientPubSubStreamRetryManager(retryAttempts, retryBackoffTime))
+    Some(new DsiClientPubSubStreamRetryManager(retryAttempts, retryBackoffTime, readDSI))
 
   // Exposed for tests
   private[optimus] def getServerSideIdFromClientId(id: ClientStreamId) = {
@@ -693,7 +696,8 @@ class PubSubTcpDsiProxy(
     port: Int,
     kerberos: Boolean,
     override val partitionMap: PartitionMap,
-    val secureTransport: Boolean)
+    val secureTransport: Boolean,
+    readDSI: Option[ClientSideDSI] = None)
     extends AbstractRemoteDSIProxy(ctx)
     with PubSubConnectionInternals {
 
@@ -722,7 +726,7 @@ class PubSubTcpDsiProxy(
   override protected def getPubSubRetryManager(
       retryAttempts: Int,
       retryBackoffTime: Long): Option[DsiClientPubSubStreamRetryManager] =
-    Some(new DsiClientPubSubStreamRetryManager(retryAttempts, retryBackoffTime))
+    Some(new DsiClientPubSubStreamRetryManager(retryAttempts, retryBackoffTime, readDSI))
 }
 
 /*

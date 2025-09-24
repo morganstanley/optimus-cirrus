@@ -17,7 +17,6 @@ import optimus.buildtool.runconf.compile._
 import optimus.buildtool.runconf.plugins.ExtraExecOpts
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 object ExtraExecOptionsSupport {
   private val expectedTypes: Map[String, Type] = Map(

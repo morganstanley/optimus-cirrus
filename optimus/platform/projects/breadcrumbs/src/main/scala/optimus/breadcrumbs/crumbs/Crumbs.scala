@@ -25,6 +25,7 @@ import optimus.breadcrumbs.Breadcrumbs
 import org.slf4j.LoggerFactory
 import spray.json._
 import DefaultJsonProtocol._
+import com.github.benmanes.caffeine.cache.Caffeine
 import optimus.breadcrumbs.BreadcrumbsPublisher
 import optimus.breadcrumbs.crumbs
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
@@ -33,6 +34,7 @@ import optimus.breadcrumbs.crumbs.Crumb.OptimusSource
 import optimus.breadcrumbs.crumbs.Properties.Elem
 import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.logging.LoggingInfo
+import optimus.platform.breadcrumbs.ControlledSource
 import optimus.utils.datetime.ZoneIds
 
 import scala.annotation.varargs
@@ -56,14 +58,16 @@ sealed abstract class Crumb(
   val now: String = t.toString
   val locator: String = Crumb.newLocator()
   def prettyNow: String = Crumb.prettyNow(t)
-  private[breadcrumbs] def clazz: String = this.getClass.getName match {
-    case Crumb.extractClass(c) => c
-    case c                     => c
-  }
+  private[breadcrumbs] def clazz: String = names.get(
+    this.getClass,
+    _.getName match {
+      case Crumb.extractClass(c) => c
+      case c                     => c
+    })
   protected def baseString = s"$clazz($prettyNow, $uuid"
   protected def J[T: JsonWriter: JsonFormat](k: String, v: T): (String, JsValue) = (k, v.toJson)
   protected def J[T: JsonWriter: JsonFormat](kv: (String, T)): (String, JsValue) = (kv._1, kv._2.toJson)
-  private[breadcrumbs] final val hintString: String = hints.toSeq.sorted.mkString(",")
+  private[breadcrumbs] final val hintString: String = if (hints.isEmpty) "" else hints.toSeq.sorted.mkString(",")
   def flags = source.flags
   final val header =
     Map(
@@ -503,8 +507,11 @@ object Crumb {
     val Hints = "hints"
   }
 
+  private[crumbs] val extractClass = """.*\b(\w+)Crumb$""".r
+  private val names = Caffeine.newBuilder().maximumSize(256).build[Class[_], String]
+
   private val count = new AtomicInteger(0)
-  private def newLocator(): String = ChainedID.root.base + "L" + count.incrementAndGet()
+  private def newLocator(): String = ChainedID.root.repr + "L" + count.incrementAndGet()
   private val log = LoggerFactory.getLogger("Crumbs")
 
   import net.iharder.base64.Base64
@@ -522,7 +529,7 @@ object Crumb {
     def apply(flags: CrumbFlag*) = flags.toSet
   }
 
-  trait Source {
+  trait Source extends ControlledSource {
     def name: String
     override def toString: String = name
     val flags: CrumbFlags = CrumbFlags.None
@@ -563,6 +570,19 @@ object Crumb {
   object ProfilerSource extends Crumb.Source {
     override val name: String = "PROF"
     override val flags = Set(CrumbFlag.DoNotReplicate)
+
+    // For testing
+    private var testPublisher: BreadcrumbsPublisher = _
+    override def publisherOverride: Option[BreadcrumbsPublisher] = Option(testPublisher)
+    def intercept[T](newTestPublisher: BreadcrumbsPublisher)(f: => T): T = {
+      val oldTestPub = testPublisher // for re-entrancy
+      testPublisher = newTestPublisher
+      try {
+        f
+      } finally {
+        testPublisher = oldTestPub
+      }
+    }
   }
 
   def newSource(sourceName: String) = new Source {
@@ -583,8 +603,6 @@ object Crumb {
   def now: String = System.currentTimeMillis().toString
 
   def jsonString(as: collection.Seq[String]): String = as.toJson.toString()
-
-  private[crumbs] val extractClass = """.*\b(\w+)Crumb$""".r
 
   /**
    * Convert a sequence of strings into a sequence of crumbs

@@ -51,7 +51,7 @@ public class Regenerator implements Opcodes {
 
   final DCFlowGraph state;
 
-  public Regenerator(DCFlowGraph state) {
+  Regenerator(DCFlowGraph state) {
     this.state = state;
   }
 
@@ -192,7 +192,7 @@ public class Regenerator implements Opcodes {
   }
 
   /** Allows to specify all the parts separately */
-  public void write(Op op, AbstractInsnNode i, int popC, boolean hasResult, boolean orderSlots) {
+  void write(Op op, AbstractInsnNode i, int popC, boolean hasResult, boolean orderSlots) {
     // Verify inputs are in correct slots
     if (orderSlots && (popC > 0 || popC == POP_NOTHING_BUT_READS)) {
       adjustInputsStack(op.inputs);
@@ -211,6 +211,7 @@ public class Regenerator implements Opcodes {
     // Add result....
     if (!op.isPhi()) { // Phi is not an actual bytecode instruction!
       state.addToResult(i);
+      op.dbgWritten = state.getResult().size();
       if (op.label != null) addLabelNode(op.label);
     }
   }
@@ -222,7 +223,7 @@ public class Regenerator implements Opcodes {
   }
 
   // consider moving this to a separate class Result?
-  private void adjustInputsStack(ArrayList<Op> inputs) {
+  void adjustInputsStack(ArrayList<Op> inputs) {
     int argCount = inputs.size();
     int matchedPos = 0; // Number of args from right that matched
     // Right to left!

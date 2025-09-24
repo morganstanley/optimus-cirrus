@@ -294,6 +294,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
     checkUniqueKeys(keys);
 
     new BatchOperationTemplate<K, K>(
+        correlationName,
         timeoutsConfig.readTimeout(),
         timeoutsConfig.defaultOperationTimeout(),
         replicationStrategy,
@@ -394,6 +395,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
     checkUniqueKeysInEntries(entries);
 
     new BatchOperationTemplate<K, KVEntry<K>>(
+        correlationName,
         timeoutsConfig.readTimeout(),
         timeoutsConfig.defaultOperationTimeout(),
         replicationStrategy,
@@ -542,6 +544,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
         String correlationName,
         BatchCallback<KeyWithResult<Boolean, K>, K> resultCallback) {
       super(
+          correlationName,
           timeoutsConfig.readTimeout(),
           timeoutsConfig.defaultOperationTimeout(),
           replicationStrategy,
@@ -731,6 +734,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
     key.ensureHash(hashCalculator);
 
     new BatchOperationTemplate<K, K>(
+        correlationName,
         timeoutsConfig.readTimeout(),
         timeoutsConfig.defaultOperationTimeout(),
         replicationStrategy,
@@ -811,6 +815,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
     entry.key().ensureHash(hashCalculator);
 
     new BatchOperationTemplate<K, KVLargeEntry<K>>(
+        correlationName,
         timeoutsConfig.readTimeout(),
         timeoutsConfig.defaultOperationTimeout(),
         replicationStrategy,
@@ -891,6 +896,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
     key.ensureHash(hashCalculator);
 
     new BatchOperationTemplate<K, K>(
+        correlationName,
         timeoutsConfig.readTimeout(),
         timeoutsConfig.defaultOperationTimeout(),
         replicationStrategy,

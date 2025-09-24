@@ -13,6 +13,8 @@ package optimus.graph;
 
 import java.nio.ByteBuffer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -20,6 +22,7 @@ import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.ptr.ByReference;
 import com.sun.jna.ptr.LongByReference;
+import optimus.FieldInjector;
 import optimus.debug.InstrumentationConfig;
 import org.slf4j.LoggerFactory;
 import sun.misc.Unsafe;
@@ -31,6 +34,9 @@ public class NativeMemoryUtils {
   }
 
   private static final JEMalloc jemalloc;
+
+  public static final String BytesField = "__MemoryTrackerBytes";
+  public static final String WasteField = "__MemoryTrackerWaste";
 
   static {
     GCNative.ensureLoaded();
@@ -138,9 +144,14 @@ public class NativeMemoryUtils {
     return tlPointers.get().usedSinceSnap();
   }
 
-  public static class MemoryTracker {
-    public long __memory = 0L;
-    public Byte[] __waste = null;
+  public interface MemoryTracker {
+    // Fields for these getters and setters will be added by the agent
+    long __memory();
+
+    void __memory_set(long mem);
+
+    // only actually defined if "doWaste" is true!
+    void __waste_set(Byte[] waste);
   }
 
   // "a C programmer can write C in any language"
@@ -160,15 +171,20 @@ public class NativeMemoryUtils {
     } else return 0;
   }
 
+  private static double wasteRatio =
+      DiagnosticSettings.duplicateNativeAllocationsPct > 0.0
+          ? DiagnosticSettings.duplicateNativeAllocationsPct / 100.0
+          : 0.0;
+  private static boolean doWaste = wasteRatio > 0.0;
+
   public static void setMemory(Object obj, long initial) {
     if (exit() > 0) return;
     if (obj instanceof MemoryTracker) {
       var mem = threadAllocated() - initial;
       var mt = (MemoryTracker) obj;
-      if (mt.__memory != 0) return;
-      mt.__memory = mem;
-      if (DiagnosticSettings.duplicateNativeAllocations && mem > 0)
-        mt.__waste = new Byte[(int) mem];
+      if (mt.__memory() != 0) return;
+      mt.__memory_set(mem);
+      if (doWaste && mem > 0) mt.__waste_set(new Byte[(int) (mem * wasteRatio)]);
     }
   }
 
@@ -177,7 +193,7 @@ public class NativeMemoryUtils {
   }
 
   public static long getMemory(Object obj) {
-    if (obj instanceof MemoryTracker) return ((MemoryTracker) obj).__memory;
+    if (obj instanceof MemoryTracker tracker) return tracker.__memory();
     else return -1;
   }
 
@@ -201,11 +217,21 @@ public class NativeMemoryUtils {
         selfCheck();
       }
 
-      InstrumentationConfig.addAllMethodPatchAndChangeSuper(
+      // no immutable collections :(
+      var fields = new ArrayList<FieldInjector.InjectedField>(2);
+      fields.add(new FieldInjector.InjectedField(BytesField, "J", "__memory", "__memory_set"));
+
+      // it's fine not to add the field and it's setter / getter so long as we never call them. if
+      // we do we'll get an exception.
+      if (doWaste)
+        fields.add(new FieldInjector.InjectedField(WasteField, "[B", null, "__waste_set"));
+
+      InstrumentationConfig.addAllMethodPatchAndNewFields(
           id,
           classPredicate,
           (desc, ignored) -> notBoring.test(desc),
           "optimus/graph/NativeMemoryUtils$MemoryTracker",
+          fields,
           new InstrumentationConfig.MethodRef(CLS, "startRecording", "()J"),
           new InstrumentationConfig.MethodRef(CLS, "setMemory"),
           new InstrumentationConfig.MethodRef(CLS, "onFail"));

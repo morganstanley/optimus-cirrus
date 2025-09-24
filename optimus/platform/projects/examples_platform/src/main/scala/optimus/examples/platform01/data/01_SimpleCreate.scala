@@ -13,6 +13,7 @@ package optimus.examples.platform01.data
 
 import optimus.examples.platform.entities.SimpleEntity
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 import org.kohsuke.args4j._
 import optimus.platform._
 
@@ -21,7 +22,7 @@ class SupplyEntityNameArgs extends OptimusAppCmdLine {
   var name = System.getProperty("user.name") + "'s entity"
 }
 
-object SimpleCreate extends LegacyOptimusApp[SupplyEntityNameArgs] {
+object SimpleCreate extends LegacyOptimusApp[SupplyEntityNameArgs] with PrintlnInterceptor {
   val simpleEntity = SimpleEntity(cmdLine.name)
 
   newEvent(SimpleEvent.uniqueInstance("Create")) {

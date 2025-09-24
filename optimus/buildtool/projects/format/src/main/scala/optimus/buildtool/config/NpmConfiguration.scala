@@ -14,8 +14,6 @@ package optimus.buildtool.config
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 
-import scala.collection.immutable.Seq
-
 trait NpmConfiguration {
   def mode: NpmBuildMode
   def libs: Seq[String]

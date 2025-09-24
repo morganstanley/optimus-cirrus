@@ -194,13 +194,13 @@ object AcceleratedInfoConversions {
       .map { case id: Map[String @unchecked, _] =>
         new AcceleratedKey(id("name").asInstanceOf[String], id("schemaVersion").asInstanceOf[Int])
       } get
-    val types = properties("types").asInstanceOf[Seq[String]].toList
+    val types = properties("types").asInstanceOf[collection.Seq[String]].toList
     val fields = properties
       .get("fields")
       .map { case fields: collection.Seq[Map[String, _] @unchecked] =>
         fields.iterator
           .map(accFieldMap => {
-            val compositeFields = accFieldMap("compositeFields").asInstanceOf[Seq[String]]
+            val compositeFields = accFieldMap("compositeFields").asInstanceOf[collection.Seq[String]].toSeq
             AcceleratedField(
               accFieldMap("name").asInstanceOf[String],
               convertToRegisterFieldType(accFieldMap("typeInfo")),
@@ -217,17 +217,17 @@ object AcceleratedInfoConversions {
       .get
     val canRead = properties("canRead").asInstanceOf[Boolean]
     val canWrite = properties("canWrite").asInstanceOf[Boolean]
-    val tableHash = properties("tableHash").asInstanceOf[Seq[String]].toList
+    val tableHash = properties("tableHash").asInstanceOf[collection.Seq[String]].toList
     val nameLookup: immutable.Map[String, String] = properties("nameLookup")
-      .asInstanceOf[Seq[Seq[String]]]
+      .asInstanceOf[collection.Seq[collection.Seq[String]]]
       .iterator
-      .map { case Seq(hash, name) =>
+      .map { case collection.Seq(hash, name) =>
         hash -> name
       }
       .toMap
-    val parallelWorkers = properties.get("parallelWorkers").flatMap(_.asInstanceOf[Seq[Int]].singleOption)
+    val parallelWorkers = properties.get("parallelWorkers").flatMap(_.asInstanceOf[collection.Seq[Int]].singleOption)
     val enableSerializedKeyBasedFilter =
-      properties.get("enableSerializedKeyBasedFilter").flatMap(_.asInstanceOf[Seq[Boolean]].singleOption)
+      properties.get("enableSerializedKeyBasedFilter").flatMap(_.asInstanceOf[collection.Seq[Boolean]].singleOption)
     // we don't use classpathHashes and rwTTScope now, so set them to be Nil and None
     AcceleratedInfo(
       key,

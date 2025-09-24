@@ -108,8 +108,10 @@ final class LazyPickledReference[A <: AnyRef](
   // always return the same value), but the non-value-affecting configuration from the current SS (so that profiling
   // and performance-affecting settings from the requester are used).
   private def scenarioStackForUnpickling(requestingSS: ScenarioStack): ScenarioStack = {
-    val requestingResolver = requestingSS.env.entityResolver
-    val originalResolver = scenarioStack.env.entityResolver
+    // we don't track the access to the env here because we're only going to use it if it's equivalent to
+    // the one we already have, so we're not effectively using any information that it holds
+    val requestingResolver = requestingSS.ssShared.environmentWithoutTrackingAccess.entityResolver
+    val originalResolver = scenarioStack.ssShared.environmentWithoutTrackingAccess.entityResolver
 
     // If the requesting scenario stack ss has an EntityResolver which is equivalent (same data and entitlements) as the
     // one we were created with (i.e. the one our parent entity was loaded with), then use the requesting one
@@ -184,7 +186,10 @@ final class LazyPickledReference[A <: AnyRef](
 
     override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
       combineInfo(child, eq)
-      removeAccessDALFlag()
+      // we don't track the access to the env here because we only used it if it's equivalent to the one we already
+      // have, so we're not effectively using any information that it holds that we didn't already have.
+      // see [[WITHOUT_DAL_CHILD_DEREF]]
+      removeAccessedRuntimeEnvFlag()
       if (child.isDoneWithException) {
         val enrichedException = child.exception match {
           case e: LinkResolutionException =>

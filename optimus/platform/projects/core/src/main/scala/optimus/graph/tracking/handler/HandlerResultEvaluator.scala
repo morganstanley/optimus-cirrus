@@ -13,6 +13,7 @@ package optimus.graph.tracking.handler
 
 import optimus.breadcrumbs.crumbs.Properties.profHandlerEventTime
 import optimus.graph.CompletableNodeM
+import optimus.graph.DiagnosticSettings
 import optimus.graph.Node
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NullCancellationScope
@@ -207,10 +208,10 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
           scheduler
         )
         loop(buildInBackgroundAction(newDetails) :: accum)(more)
-      case Separately(target, createIfNotExists, f, sourceLoc, tag, progressTrackerParams) :: more =>
+      case Separately(target, createIfNotExists, warnIfNotExists, f, sourceLoc, tag, progressTrackerParams) :: more =>
         val tracker =
           if (createIfNotExists) Some(trackerFor(updater, target))
-          else updater.consistentRoot.target.root.getScenarioIfExists(target)
+          else updater.consistentRoot.target.root.getScenarioIfExists(target, warnIfNotExists)
         val steps = tracker
           .map { tracker =>
             buildSeparately(
@@ -339,7 +340,8 @@ private[optimus] object HandlerResultEvaluator extends HandlerResultEvaluatorBas
 
           token.release()
         },
-        cbSS = ssWithDifferentCS
+        cbSS = ssWithDifferentCS,
+        effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) cause else null
       )
     }
   }

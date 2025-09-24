@@ -31,7 +31,6 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.sys.process.Process
@@ -64,7 +63,8 @@ import scala.sys.process.ProcessLogger
       scope: CompilationScope
   ): SimpleAfsGenerator.Inputs = {
     // get the executable that we are running
-    val exec = generatorDefaults.configured(configuration)
+    val exec =
+      generatorDefaults.configured(configuration)
     val version = exec.dependencyDefinition(scope).version
 
     // actual executable
@@ -133,13 +133,13 @@ import scala.sys.process.ProcessLogger
           val messages = if (ret == 0) Nil else logging.map(s => CompilationMessage(None, s, CompilationMessage.Error))
           val a = GeneratedSourceArtifact.create(
             scopeId,
+            tpe,
             generatorName,
-            artifactType,
             outputJar,
             sourcePath,
             messages.toIndexedSeq
           )
-          SourceGenerator.createJar(generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
+          SourceGenerator.createJar(tpe, generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
           a
         }
         Some(artifact)

@@ -15,6 +15,10 @@
 .idea
 /.shelf/
 docs/css/overridesIJ23.css
+*.run.xml
+
+# IntelliJ IDEA - markdown generated
+/.generated/
 
 # VSCode
 *.code-workspace

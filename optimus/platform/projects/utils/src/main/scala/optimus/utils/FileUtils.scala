@@ -11,6 +11,7 @@
  */
 package optimus.utils
 
+import com.google.common.io.CountingInputStream
 import com.opencsv.CSVParserBuilder
 import com.opencsv.CSVReader
 import com.opencsv.CSVReaderBuilder
@@ -18,9 +19,15 @@ import com.opencsv.CSVWriterBuilder
 import com.opencsv.ICSVParser
 import com.opencsv.ICSVWriter
 import optimus.logging.LoggingInfo
-import optimus.platform.IO.usingQuietly
 import optimus.platform.util.Log
+import org.apache.commons.io.output.CountingOutputStream
+import com.github.luben.zstd.ZstdOutputStream
+import com.github.luben.zstd.ZstdInputStream
+import com.github.luben.zstd.RecyclingBufferPool
+import com.github.luben.zstd.Zstd
 
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -160,7 +167,7 @@ object FileUtils extends Log {
     diagnosticDumpDir.resolve(safePath)
   }
 
-  private def deleteRecursively(path: Path): Unit =
+  def deleteRecursively(path: Path): Unit =
     if (Files.exists(path)) try {
       log.info(s"Deleting temporary $path")
       Files
@@ -186,20 +193,73 @@ object FileUtils extends Log {
     dirs.foreach(deleteRecursively)
   }
 
-  def gzip(from: Path, to: Path): Try[Long] =
-    Using.Manager { use =>
+  def gzip(
+      from: Path,
+      to: Path,
+      removeOld: Boolean = true,
+      gzipBuffer: Int = 65536,
+      fileBuffer: Int = 524288): Try[(Long, Long)] = for {
+    ret <- Using.Manager { use =>
       Files.deleteIfExists(to)
-      val in = use(Files.newInputStream(from))
-      val out = use(new GZIPOutputStream(Files.newOutputStream(to)))
-      in.transferTo(out)
+      val in = use(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
+      val counting = new CountingOutputStream(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
+      val out = use(new GZIPOutputStream(counting, gzipBuffer))
+      val orig = in.transferTo(out)
+      val zipped = counting.getByteCount
+      (orig, zipped)
     }
+    _ <- Try { if (removeOld) Files.delete(from) }
+  } yield ret
 
-  def gunzip(from: Path, to: Path): Try[Long] =
-    Using.Manager { use =>
+  def gunzip(
+      from: Path,
+      to: Path,
+      removeOld: Boolean = true,
+      gzipBuffer: Int = 65536,
+      fileBuffer: Int = 524288): Try[(Long, Long)] = for {
+    ret <- Using.Manager { use =>
       Files.deleteIfExists(to)
-      val in = use(new GZIPInputStream(Files.newInputStream(from)))
-      val out = use(Files.newOutputStream(to))
-      in.transferTo(out)
+      val count = new CountingInputStream(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
+      val in = use(new GZIPInputStream(count, gzipBuffer))
+      val out = use(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
+      val unzipped = in.transferTo(out)
+      val zipped = count.getCount
+      (unzipped, zipped)
     }
+    _ <- Try { if (removeOld) Files.delete(from) }
+
+  } yield ret
+
+  def zstdCompress(
+      from: Path,
+      to: Path,
+      removeOld: Boolean = true,
+      compressionLevel: Int = Zstd.defaultCompressionLevel(),
+      fileBuffer: Int = 524288): Try[(Long, Long)] = for {
+    ret <- Using.Manager { use =>
+      Files.deleteIfExists(to)
+      val in = use(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
+      val counting = new CountingOutputStream(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
+      val out = use(new ZstdOutputStream(counting, RecyclingBufferPool.INSTANCE, compressionLevel))
+      val orig = in.transferTo(out)
+      val compressed = counting.getByteCount
+      (orig, compressed)
+    }
+    _ <- Try { if (removeOld) Files.delete(from) }
+  } yield ret
+
+  def zstdDecompress(from: Path, to: Path, removeOld: Boolean = true, fileBuffer: Int = 524288): Try[(Long, Long)] =
+    for {
+      ret <- Using.Manager { use =>
+        Files.deleteIfExists(to)
+        val count = new CountingInputStream(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
+        val in = use(new ZstdInputStream(count, RecyclingBufferPool.INSTANCE))
+        val out = use(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
+        val decompressed = in.transferTo(out)
+        val compressed = count.getCount
+        (decompressed, compressed)
+      }
+      _ <- Try { if (removeOld) Files.delete(from) }
+    } yield ret
 
 }

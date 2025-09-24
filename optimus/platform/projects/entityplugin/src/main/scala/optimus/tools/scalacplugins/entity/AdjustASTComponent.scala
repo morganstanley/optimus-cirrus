@@ -1457,7 +1457,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           alarm(OptimusErrors.METHOD_LOCAL_EVENT, cd.pos)
         val newTree = mkEventClass(cd)
         val projected = isEventProjected(mods)
-        val metaProj = DefDef(Modifiers(FINAL), names.projected, Nil, Nil, TypeTree(), LIT(projected))
+        val metaProj = DefDef(Modifiers(FINAL | SYNTHETIC), names.projected, Nil, Nil, TypeTree(), LIT(projected))
         addToCompanion(name.toTermName, metaProj :: Nil)
         val (t2, props) = inScope(newTree)
         treeCopy.ClassDef(
@@ -1468,7 +1468,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           treeCopy.Template(t2.impl, t2.impl.parents, t2.impl.self, addPropsToModuleDef(t2.impl.body, props))
         )
       case cd @ ClassDef(mods, name, tparams, _) if hasAnnotation(mods, tpnames.embeddable) =>
-        if (!mods.isCase && !mods.isTrait) {
+        if (!mods.isCase && !mods.isTrait && !mods.hasAbstractFlag) {
           alarm(OptimusErrors.EMBEDDABLE_ONLY_WITH_CASE_CLASS, cd.pos)
           tree
         } else {
@@ -1481,7 +1481,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
             else {
               addToCompanion(name.toTermName, members)
               val rhs = mkList(members.collect { case d: ValDef => Select(This(tpnme.EMPTY), d.name) })
-              val membersVal = ValDef(Modifiers(FINAL | OVERRIDE), names.projectedMembers, TypeTree(), rhs)
+              val membersVal = ValDef(Modifiers(FINAL | OVERRIDE | SYNTHETIC), names.projectedMembers, TypeTree(), rhs)
               addToCompanion(name.toTermName, membersVal :: Nil)
             }
           }

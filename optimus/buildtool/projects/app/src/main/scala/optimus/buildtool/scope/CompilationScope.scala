@@ -55,16 +55,16 @@ import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.distinctLast
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity private[buildtool] class CompilationScope(
@@ -87,7 +87,8 @@ import scala.collection.immutable.SortedMap
     val factory: CompilationNodeFactory,
     val directoryFactory: DirectoryFactory,
     val upstream: UpstreamArtifacts,
-    val mischief: Option[MischiefArgs]
+    val mischief: Option[MischiefArgs],
+    val buildAfsMapping: Boolean
 ) {
 
   @node def scalaDependenciesFingerprint: Seq[String] = {
@@ -112,6 +113,12 @@ import scala.collection.immutable.SortedMap
       compilersFingerprint ++ relevantScalaParams ++ miscFingerPrint ++ warningsFingerprint
   }
 
+  @node private def ruffFingerprint(fileName: String): Seq[String] = {
+    val file = config.paths.workspaceSourceRoot.resolveDir("config").resolveFile(fileName)
+    if (directoryFactory.fileExists(file)) Seq(s"[${file.name}]${Hashing.hashFileContent(file)}")
+    else Nil
+  }
+
   @node def pythonDependenciesFingerprint: Seq[String] = {
     def versionString(name: String, version: String): String = s"[Version:$name]$version"
     def pythonDef(definition: PythonDefinition, moduleType: ModuleType): Seq[String] = Seq(
@@ -122,8 +129,10 @@ import scala.collection.immutable.SortedMap
         case None             => None
       },
       Some(s"[thin-pyapp]${definition.thinPyapp}"),
+      Some(s"[ruff]${definition.ruffVersion}"),
       Some(s"[moduleType]${moduleType.label}"),
-      Some(s"[osVersion]${OsUtils.osVersion}")
+      Some(s"[osVersion]${OsUtils.osVersion}"),
+      Some(s"[build-afs-mapping]$buildAfsMapping")
     ).flatten
 
     val libs = config.pythonConfig
@@ -137,7 +146,9 @@ import scala.collection.immutable.SortedMap
       .map(c => pythonDef(c.python, c.moduleType))
       .getOrElse(Seq.empty)
 
-    pythonDefinitions ++ libs
+    val ruffConfigF = ruffFingerprint("ruff.toml") ++ ruffFingerprint("ruff-obt.toml")
+
+    pythonDefinitions ++ libs ++ ruffConfigF
   }
 
   @node private def loadNpmDependency(
@@ -227,7 +238,7 @@ import scala.collection.immutable.SortedMap
           )
           // get the transitive dependencies for each external plugin jar (note that we don't distinguish
           // between runtime and compile-time transitivity for external jars)
-          externalDependencyResolver.resolveDependencies(deps).resolvedArtifacts
+          externalDependencyResolver.resolveDependencies(deps).resolvedClassFileArtifacts
         case _ => Nil
       }
     )
@@ -264,7 +275,7 @@ import scala.collection.immutable.SortedMap
       fingerprintHash: String
   )(
       nf: => Option[A#A]
-  ): Seq[A#A] = needsPlugin
+  ): Seq[A#A] = needsPluginAlwaysAutoAsyncArgs
 
   // noinspection ScalaUnusedSymbol
   @node def cached$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String], fingerprintHash: String)(
@@ -317,7 +328,8 @@ object CompilationScope {
       cache: ArtifactCache with HasArtifactStore,
       factory: CompilationNodeFactory,
       directoryFactory: DirectoryFactory,
-      mischief: Option[MischiefArgs]
+      mischief: Option[MischiefArgs],
+      buildAfsMapping: Boolean
   ): CompilationScope = {
     val hasher = FingerprintHasher(id, pathBuilder, cache.store, factory.freezeHash, mischief.nonEmpty)
 
@@ -365,7 +377,8 @@ object CompilationScope {
       factory,
       directoryFactory,
       upstream,
-      mischief
+      mischief,
+      buildAfsMapping
     )
   }
 }

@@ -581,4 +581,20 @@ public class InstrumentationSupport {
     System.err.println("interceptEquals: " + result);
     return result;
   }
+
+  private static Object runtimeMirror__(Object mirrors, ClassLoader cl) {
+    return null;
+  }
+
+  private static Object nullMirror, defaultMirror;
+
+  public static Object runtimeMirror(Object mirrors, ClassLoader cl) {
+    if (cl == null && nullMirror != null) return nullMirror;
+    else if (cl == ClassLoader.getSystemClassLoader() && defaultMirror != null)
+      return defaultMirror;
+    var mirror = runtimeMirror__(mirrors, cl);
+    if (cl == null) nullMirror = mirror;
+    else if (cl == ClassLoader.getSystemClassLoader()) defaultMirror = mirror;
+    return mirror;
+  }
 }

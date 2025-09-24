@@ -22,8 +22,6 @@ import optimus.buildtool.format.Result
 import optimus.buildtool.format.Success
 import optimus.buildtool.format.Warning
 
-import scala.collection.immutable.Seq
-
 trait LegacyDependenciesLoader[A] {
 
   protected def file: DependencyConfig

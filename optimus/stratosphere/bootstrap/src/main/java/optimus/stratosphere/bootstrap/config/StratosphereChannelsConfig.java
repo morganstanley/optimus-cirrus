@@ -27,10 +27,12 @@ public class StratosphereChannelsConfig {
 
   public static final String configFile = "stratosphereChannels.conf";
   public static final String keyPrefix = "internal.channels";
+  public static final String externalThresholdsLocation = "internal.channel-thresholds-location";
   public static final String channelsListKey = keyPrefix + ".list";
   public static final String ignoredChannelsKey = keyPrefix + ".ignored.list";
   public static final String userSelectedChannelsKey = keyPrefix + ".selected.list";
   public static final String useAutoIncludeFlagKey = keyPrefix + ".auto-include.enabled";
+  public static final String externalAutoIncludeMapping = keyPrefix + ".auto-include-mapping";
   public static final String optOutUsersKey = keyPrefix + ".auto-include.opt-out-users";
   public static final String disableStratosphereChannels = keyPrefix + ".disable";
   public static final String legacyStratosphereChannelKey = "stratosphereChannel";
@@ -47,9 +49,10 @@ public class StratosphereChannelsConfig {
   }
 
   public static List<Channel> selectAllChannels(Config stratosphereConfig) {
+    Map<String, Integer> autoIncludeMapping = loadAutoIncludeMappings(stratosphereConfig);
     List<Channel> allChannels =
         stratosphereConfig.getConfigList(channelsListKey).stream()
-            .map(Channel::create)
+            .map(partialConfig -> Channel.create(partialConfig, autoIncludeMapping))
             .collect(Collectors.toList());
 
     List<String> ignoredChannelNames = stratosphereConfig.getStringList(ignoredChannelsKey);
@@ -115,5 +118,19 @@ public class StratosphereChannelsConfig {
 
   private static List<Channel> selectAutoIncludedChannels(List<Channel> channels, String userName) {
     return channels.stream().filter(config -> config.checkUserIsAutoIncluded(userName)).toList();
+  }
+
+  private static Map<String, Integer> loadAutoIncludeMappings(Config config) {
+    return config.getConfig(externalAutoIncludeMapping).entrySet().stream()
+        .collect(
+            Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> {
+                  try {
+                    return Integer.parseInt(entry.getValue().unwrapped().toString());
+                  } catch (NumberFormatException ex) {
+                    return 0;
+                  }
+                }));
   }
 }

@@ -115,9 +115,9 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
     .map(_.replaceAll("Crumb$", ""))
 
   override def filter(crumb: Crumb): Result =
+    if (!crumb.source.isFilterable) Result.Accept
     // so that EventPropertiesCrumb will be matched when PropertiesCrumb is included
-    if (processedTypes.exists(crumb.clazz.contains(_)))
-      onMatch
+    else if (processedTypes.exists(crumb.clazz.contains(_))) onMatch
     else onMismatch
 
   override def toString() = s"${CrumbFilter.CRUMB_TYPE_ALLOW_LIST}[types=${types.mkString("'", "', '", "'")}]"
@@ -125,10 +125,12 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
 
 final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer)
     extends AbstractFilter(Result.Deny, Result.Accept) {
-  override def filter(crumb: Crumb): Result =
-    if (crumb.asJSON.toString.length > threshold)
+  override def filter(crumb: Crumb): Result = {
+    if (!crumb.source.isFilterable) Result.Accept
+    else if (crumb.asJSON.toString.length > threshold)
       onMatch
     else onMismatch
+  }
 
   override def toString() = s"${CrumbFilter.LARGE_CRUMB_FILTER}[threshold=$threshold]"
 }
@@ -152,7 +154,7 @@ final class CompositeFilter extends AbstractFilter(Result.Accept, Result.Deny) w
 
   override def iterator: Iterator[CrumbFilter] = filters.toIterator
 
-  override def filter(crumb: Crumb): Result = {
+  override def filter(crumb: Crumb): Result = if (crumb.source.isFilterable) {
     // Here we want the very first onMismatch result (if any), and we also don't want to apply any filters unnecessarily
     // But still, we have to enumerate through all the filters there (without applying those after a match, though)
     // Ideally, we shouldn't even need to iterate through all filters here, but Scala doesn't seem to have a construct for that
@@ -163,7 +165,7 @@ final class CompositeFilter extends AbstractFilter(Result.Accept, Result.Deny) w
       case Result.Neutral => Result.Accept
       case result         => result
     }
-  }
+  } else Result.Accept
 
   def getCurrentFilters: Iterable[CrumbFilter] = filters.toVector
 

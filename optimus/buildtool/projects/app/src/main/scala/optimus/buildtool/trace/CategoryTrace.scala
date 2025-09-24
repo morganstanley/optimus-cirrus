@@ -35,6 +35,9 @@ private[buildtool] sealed trait CategoryTrace {
   /** A CategoryTrace for which the task executes exclusively on a single thread */
   def isSingleThreaded = false
 
+  /** A CategoryTrace which may start or finish outside the scope of the build */
+  def isOuter = false
+
   protected def lower(clazz: Class[_]): String = CategoryTrace.lower(clazz)
 
   lazy val categoryName: String = lower(getClass)
@@ -125,7 +128,9 @@ private[buildtool] case object BuildTargetPythonOptions extends SyncTrace
 
 private[buildtool] case object Build extends SingletonCategoryTrace
 
-private[buildtool] case object Queue extends SingletonCategoryTrace with AsyncCategoryTrace
+private[buildtool] final case class Queue(queued: CategoryTrace) extends AsyncCategoryTrace {
+  override lazy val name: String = s"$categoryName(${queued.name})"
+}
 private[buildtool] case object MemQueue extends SingletonCategoryTrace with AsyncCategoryTrace
 
 private[buildtool] case object GenerateSource extends MessageTrace
@@ -141,7 +146,13 @@ private[buildtool] case object Outline
 private[buildtool] case object Scala
     extends StrictSingletonCategoryTrace
     with MessageTrace
-    with SingleThreadedCategoryTrace
+    with SingleThreadedCategoryTrace {
+  // In some circumstances the scala compile can finish after the build already has completed. For example, if
+  // signature artifacts aren't available on disk (due to rubbish tidying), but scala artifacts are, then OBT
+  // will kick off a scala compile but only has to wait for the first part of it to complete before it has all
+  // the artifacts it needs.
+  override def isOuter: Boolean = true
+}
 private[buildtool] case object Java
     extends StrictSingletonCategoryTrace
     with MessageTrace
@@ -177,8 +188,12 @@ private[buildtool] final case class Fetch(clusterType: ClusterType, tpe: CacheTr
 private[buildtool] final case class Put(clusterType: ClusterType, tpe: CacheTraceType) extends CacheTrace
 
 private[buildtool] case object ScanFilesystem extends CategoryTrace
-private[buildtool] case object FindArtifacts extends CategoryTrace
-private[buildtool] case object TidyRubbish extends CategoryTrace
+private[buildtool] case object FindArtifacts extends CategoryTrace {
+  override def isOuter: Boolean = true
+}
+private[buildtool] case object TidyRubbish extends CategoryTrace {
+  override def isOuter: Boolean = true
+}
 private[buildtool] case object MarkRecentArtifacts extends CategoryTrace
 private[buildtool] case object BackgroundCommand extends SingletonCategoryTrace with AsyncCategoryTrace
 private[buildtool] case object HashSources extends SingletonCategoryTrace
@@ -230,8 +245,8 @@ private[buildtool] final case class Upload(id: String, location: UploadLocation)
   override lazy val name: String = s"$categoryName($id, $location)"
   // no need to track scopeId here: all uploads are associated to RootScopeId
   override def scenario(scopeId /* ignored */: ScopeId): Option[String] = location match {
-    case UploadLocation.Local(_, _)        => Some(id)
-    case UploadLocation.Remote(host, _, _) => Some(s"${id}_$host")
+    case UploadLocation.Local(_, _)           => Some(id)
+    case UploadLocation.Remote(host, _, _, _) => Some(s"${id}_$host")
   }
 }
 private[buildtool] final case class PostInstallApp(appName: String) extends AsyncCategoryTrace {
@@ -256,10 +271,13 @@ private[buildtool] object DeploymentScriptCommand extends AsyncCategoryTrace {
   override def scenario(scopeId: ScopeId): Option[String] = Some(s"${categoryName}_$scopeId")
 }
 
-private[buildtool] case object GitDiff extends SingletonCategoryTrace
-private[buildtool] case object GitModifiedFiles extends SingletonCategoryTrace
-private[buildtool] case object GitModifiedLines extends SingletonCategoryTrace
-private[buildtool] case object GitUntrackedFiles extends SingletonCategoryTrace
+private[buildtool] sealed trait GitTrace extends SingletonCategoryTrace {
+  override def isOuter: Boolean = true
+}
+private[buildtool] case object GitDiff extends GitTrace
+private[buildtool] case object GitStatus extends GitTrace
+private[buildtool] case object GitModifiedFiles extends GitTrace
+private[buildtool] case object GitModifiedLines extends GitTrace
 
 trait TraceFilter {
   import TraceFilter._

@@ -284,6 +284,7 @@ class PubSubProtoClient(
         // this is the case when the stream needs to be cleaned up on the broker
         pubSubCallback.remoteStreamCleanup(psr.streamId)
         None
+      case er @ ErrorResult(e: PubSubEntitlementException, _) => Some(e.streamId -> er)
       case otherResult =>
         log.error(s"${toString}::Other result received: ${otherResult}")
         None // ignore all other results

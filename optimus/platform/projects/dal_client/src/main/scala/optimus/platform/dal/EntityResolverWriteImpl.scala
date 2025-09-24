@@ -23,6 +23,7 @@ import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.Partition
 import optimus.dsi.partitioning.PartitionMap
 import optimus.entity._
+import optimus.graph.diagnostics.ObservationRegistry
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.platform._
 import optimus.platform.annotations.deprecating
@@ -76,12 +77,16 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
   private def executeSaveCommands(requests: Iterable[(Option[Entity], WriteCommand)], mutateEntities: Boolean) = {
     val writeRequests = requests.iterator.map { _._2 }.toIndexedSeq
     val results = executor.executeLeadWriterCommands(dsi, writeRequests)
-    if (GridProfiler.DALProfilingOn)
-      GridProfiler.recordDALWrite(results.count(_.isInstanceOf[PutResult]))
+    if (GridProfiler.DALProfilingOn || ObservationRegistry.active) {
+      // only counts PutResult
+      val n = results.count(_.isInstanceOf[PutResult])
+      if (GridProfiler.DALProfilingOn) GridProfiler.recordDALWrite(n)
+      if (ObservationRegistry.active) DalCounters.dalWriteCounter.add(n)
+    }
     val resolvedPartition: Partition = resolvePartitionForCmds(writeRequests, partitionMap)
-    postSaveProcessing(requests, results, mutateEntities, resolvedPartition)
+    val erefs = postSaveProcessing(requests, results, mutateEntities, resolvedPartition)
 
-    PersistResult(lastWitnessedTime(resolvedPartition))
+    PersistResult(lastWitnessedTime(resolvedPartition), erefs)
   }
 
   private[dal] def throwErrorResult(err: ErrorResult, partition: Partition) = {
@@ -141,10 +146,14 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
     val res = CoreAPI.asyncResult {
       val cmds = Seq(cmd)
       val result = executor.executeLeadWriterCommands(dsi, cmds)
-      if (GridProfiler.DALProfilingOn)
-        GridProfiler.recordDALWrite(result.collect { case r: PutApplicationEventResult =>
+      if (GridProfiler.DALProfilingOn || ObservationRegistry.active) {
+        // extracts counts of puts, invalidates and reverts from PutApplicationEventResult
+        val n = result.collect { case r: PutApplicationEventResult =>
           r.beResults.map(r => r.putResults.size + r.invResults.size + r.revertResults.size).sum
-        }.sum)
+        }.sum
+        if (GridProfiler.DALProfilingOn) GridProfiler.recordDALWrite(n)
+        if (ObservationRegistry.active) DalCounters.dalWriteCounter.add(n)
+      }
       val resolvedPartition = resolvePartitionForCmds(cmds, partitionMap)
       processAppEventResults(cmd, result, cmdToEntity, refMap, mutateEntities, resolvedPartition)
     }
@@ -284,7 +293,8 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
       result.permRef,
       temporalContext,
       result.txTime,
-      result.versionedRef)
+      FullVersionInfo(result.versionedRef, result.vtInterval, TimeInterval(result.txTime), result.lockToken)
+    )
   }
 
   // This entire API needs to be transposed to compute all effects to a single entity at one time
@@ -400,7 +410,8 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
       invalidateByRefs: Iterable[(EntityReference, (Instant, String))],
       entityReferences: mutable.Map[Entity, EntityReference],
       lockTokens: collection.Map[Entity, Long],
-      minAssignableTtOpt: Option[Instant]) = {
+      minAssignableTtOpt: Option[Instant],
+      ignoreListForReferenceResolution: Set[EntityReference]) = {
     val keyMap = new java.util.HashMap[(SerializedKey, Instant), Entity]()
     val requestBuilder = Seq.newBuilder[(Option[Entity], WriteCommand)]
 
@@ -431,7 +442,9 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
             vt,
             upsert,
             cmid,
-            minAssignableTtOpt)
+            minAssignableTtOpt,
+            ignoreListForReferenceResolution.contains(Option(entity.dal$entityRef).getOrElse(entityReferences(entity)))
+          )
       cmd.value.keys foreach { key =>
         checkSerializedKey(entity, key, vt)
       }
@@ -497,13 +510,17 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
       requests: Iterable[(Option[Entity], Command)],
       results: Iterable[Result],
       mutateEntities: Boolean,
-      partition: Partition): Unit = {
+      partition: Partition): Map[Entity, EntityReferenceHolder[Entity]] = {
+    val entityToRef = Map.newBuilder[Entity, EntityReferenceHolder[Entity]]
     val errors = Collections.flatMap2(requests, results) { case ((entity, _), res) =>
       res match {
         case AssertValidResult() => None
         // TODO (OPTIMUS-24843): remove PutResult.txTime dependency
         case pr: PutResult =>
-          if (mutateEntities) entity.foreach(mutateEntityWithPutResult(_, pr))
+          entity.foreach { e =>
+            if (mutateEntities) mutateEntityWithPutResult(e, pr)
+            else entityToRef.addOne(e, getReferenceHolderFromResult(e, pr))
+          }
           updateLastWitnessedTime(Map(partition -> pr.txTime))
           None
         case tsr: TimestampedResult =>
@@ -520,6 +537,7 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
 
     // We may get back any number of ErrorResults from the DSI.  Throw the first one arbitrarily.
     errors.headOption foreach { case (entity, ex) => throw convertDSIException(entity.orNull, ex) }
+    entityToRef.result()
   }
 
   @async def invalidateCurrentInstances[E <: Entity: Manifest](): Int = {
@@ -554,6 +572,28 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
           updateLastWitnessedTime(Map(partition -> txTime)); count
         case Seq(InvalidateAllCurrentResult(count, None)) =>
           log.warn("InvalidateAllCurrentResult txTime is None. Not updating last witnessed time")
+          count
+        case Seq(err: ErrorResult, _*) => throwErrorResult(err, partition)
+        case Seq(other, _*)            => throw new GeneralDALException("Unexpected result type " + other)
+      }
+    }
+  }
+
+  def prepareMonoTemporal[E <: Entity: Manifest](refs: Seq[EntityReference]): Int = {
+    prepareMonoTemporal(refs, implicitly[Manifest[E]].runtimeClass.getName)
+  }
+
+  def prepareMonoTemporal(refs: Seq[EntityReference], className: String): Int = {
+    checkMonoTemporalSupported(serverFeatures, className)
+
+    val cmd = PrepareMonoTemporal(refs, className)
+    val partition = resolvePartitionForCmds(Seq(cmd), partitionMap)
+    wrapQueryDSIException {
+      dsi.execute(cmd) match {
+        case Seq(PrepareMonoTemporalResult(count, Some(txTime))) =>
+          updateLastWitnessedTime(Map(partition -> txTime)); count
+        case Seq(PrepareMonoTemporalResult(count, None)) =>
+          log.warn("PrepareMonoTemporalResult txTime is None. Not updating last witnessed time")
           count
         case Seq(err: ErrorResult, _*) => throwErrorResult(err, partition)
         case Seq(other, _*)            => throw new GeneralDALException("Unexpected result type " + other)

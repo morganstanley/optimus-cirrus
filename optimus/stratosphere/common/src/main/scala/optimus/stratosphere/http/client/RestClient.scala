@@ -31,6 +31,7 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.xml._
+import optimus.stratosphere.utils.XmlLoader
 
 trait RestClient extends RestApi {
   protected implicit def actorSystem: ActorSystem
@@ -53,7 +54,7 @@ trait RestClient extends RestApi {
       maybeRequestData: Option[String],
       convert: String => T,
       contentType: ContentType.NonBinary = ContentTypes.`application/json`): Future[T] = {
-    debug(s"Request: $url")
+    debug(s"Request ${method.name}: $url")
     request(
       url,
       request => {
@@ -122,7 +123,7 @@ trait RestClient extends RestApi {
     singleRequestWithConversion(url, HttpMethods.PUT, payload, _ => true)
 
   def getXml(url: String): Elem =
-    singleRequestWithConversion(url, HttpMethods.GET, None, XML.loadString)
+    singleRequestWithConversion(url, HttpMethods.GET, None, XmlLoader.loadString)
   def postXml(url: String, xml: Option[Node]): String =
     singleRequestWithConversion(
       url,

@@ -18,8 +18,6 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
 
-import scala.collection.immutable.Seq
-
 trait CppFileCompiler {
   import CppFileCompiler._
 

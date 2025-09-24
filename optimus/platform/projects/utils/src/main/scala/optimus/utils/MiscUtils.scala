@@ -14,6 +14,7 @@ package optimus.utils
 import java.util.concurrent.atomic.AtomicLong
 import org.slf4j
 import msjava.slf4jutils.scalalog
+import msjava.slf4jutils.scalalog.getLogger
 
 import java.time.Instant
 import scala.collection.LinearSeq
@@ -27,6 +28,7 @@ import scala.util.Try
 
 /** @see [[TypeClasses]] */
 object MiscUtils {
+  private val log = getLogger(this)
 
   private val useTestingTimestampProp = "optimus.miscUtils.useTestingTimestamp"
 
@@ -88,24 +90,36 @@ object MiscUtils {
     def asScala: Option[A] = if (j.isPresent) Some(j.get()) else None
   }
 
-  def retry[A](
+  def retryWithExponentialBackoff[A](
       attempts: Int = 3,
-      delayMs: Int = 500,
+      delayMs: Long = 500,
       exceptionClasses: List[Class[_ <: Throwable]],
-      expectedResult: Option[A] = None)(f: () => A): A = {
+      expectedResult: Option[A] = None,
+      cappedDelay: Option[Long] = None)(f: () => A): A = {
+    log.warn(
+      s"Sleep time could reach ${(delayMs * Math.pow(2, attempts - 1)).toLong}ms with exponential backoff. Consider raising the base delayMs or reducing the number of attempts.")
     val r = new Random()
     var result = Try(f())
     var exceptionMessage = s""
+    var exception: Throwable = null
     var attemptCount = 1
     var updatedDelayMs = delayMs
     def retryAttempt(): Unit = {
       if (attemptCount < attempts) {
-        Thread.sleep(updatedDelayMs + r.nextInt(updatedDelayMs))
+        val updatedCappedDelayMs = Math.min(updatedDelayMs, cappedDelay.getOrElse(updatedDelayMs))
+
+        // Keep the randomness (even if we've lost the backoff)
+        val sleepTime = updatedCappedDelayMs + r.nextLong(updatedCappedDelayMs)
+        if (updatedCappedDelayMs < updatedDelayMs)
+          log.warn(s"Capped sleep time to $sleepTime (exponential backoff is now disabled).")
+
+        Thread.sleep(sleepTime)
         updatedDelayMs *= 2
         attemptCount += 1
         checkResult(Try(f()))
       } else {
-        throw new RuntimeException(exceptionMessage)
+        val toThrow = new RuntimeException(exceptionMessage)
+        if (exception ne null) throw toThrow.initCause(exception) else throw toThrow
       }
     }
     def checkResult(midResult: Try[A]): Unit = {
@@ -120,7 +134,8 @@ object MiscUtils {
         case Failure(ex) =>
           if (!exceptionClasses.contains(ex.getClass)) throw ex
           else {
-            exceptionMessage = s"Attempt $attemptCount failed with: ${ex.getMessage}"
+            exceptionMessage = s"Attempt $attemptCount failed with: ${ex.getMessage} (type: ${ex.getClass.getName})"
+            exception = ex
             // log.warn(exceptionMessage, ex)
             retryAttempt()
           }

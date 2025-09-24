@@ -16,10 +16,10 @@ import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
-import optimus.buildtool.config.NamingConventions.ConfigPrefix
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace
 import optimus.buildtool.trace.LongRunningTraceListener.sendCrumbForTask
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils
 import optimus.graph.EfficientSchedulerLogging
 import optimus.platform.util.PrettyStringBuilder
@@ -33,11 +33,11 @@ import scala.jdk.CollectionConverters._
 
 object LongRunningTraceListener {
   object Config {
-    private val prefix = s"$ConfigPrefix.longRunning"
+    private val prefix = "longRunning"
     val thresholdMillis: Long =
-      sys.props.get(s"$prefix.thresholdMillis").map(_.toLong).getOrElse(10.minutes.toMillis)
+      OptimusBuildToolProperties.asLong(s"$prefix.thresholdMillis").getOrElse(10.minutes.toMillis)
     val scanIntervalMillis: Long =
-      sys.props.get(s"$prefix.scanIntervalMillis").map(_.toLong).getOrElse(1.minutes.toMillis)
+      OptimusBuildToolProperties.asLong(s"$prefix.scanIntervalMillis").getOrElse(1.minutes.toMillis)
   }
 
   private val log = getLogger(this)

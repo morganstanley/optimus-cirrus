@@ -39,11 +39,17 @@ object QueryEntityMetadataResultSerializer
     extends QueryEntityMetadataProtoSerialization
     with ProtoSerializer[QueryEntityMetadataResult, QueryEntityMetadataResultProto] {
   override def serialize(metaResult: QueryEntityMetadataResult): QueryEntityMetadataResultProto = {
-    QueryEntityMetadataResultProto.newBuilder.setEntityMetadata(toProto(metaResult.entityMetadata)).build
+    val b = QueryEntityMetadataResultProto.newBuilder
+    if (metaResult.entityMetadata ne null)
+      b.setEntityMetadata(toProto(metaResult.entityMetadata))
+    b.build
   }
 
   override def deserialize(proto: QueryEntityMetadataResultProto): QueryEntityMetadataResult = {
-    QueryEntityMetadataResult(fromProto(proto.getEntityMetadata))
+    if (proto.hasEntityMetadata)
+      QueryEntityMetadataResult(fromProto(proto.getEntityMetadata))
+    else
+      QueryEntityMetadataResult(null)
   }
 }
 
@@ -59,6 +65,7 @@ object EntityMetadataSerializer
   }
 
   override def deserialize(proto: EntityMetadataProto): EntityMetadata = {
-    EntityMetadata(fromProto(proto.getEntityRef), proto.getClassName, Seq(proto.getTypesList().asScala: _*))
+    val types = proto.getTypesList.asScala.map(_.intern()).toIndexedSeq
+    EntityMetadata(fromProto(proto.getEntityRef), proto.getClassName.intern(), types)
   }
 }

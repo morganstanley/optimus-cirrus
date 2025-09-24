@@ -22,7 +22,6 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.format.ConfigUtils._
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 
 object CopyFilesConfigurationCompiler {

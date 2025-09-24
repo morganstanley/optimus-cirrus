@@ -17,8 +17,6 @@ import com.github.benmanes.caffeine.cache.LoadingCache
 import java.net.URL
 import java.net.URLClassLoader
 
-import scala.collection.immutable.Seq
-
 /**
  * Typesafe-ish reflection targets.
  *

@@ -18,7 +18,6 @@ import optimus.buildtool.runconf.compile._
 import optimus.buildtool.runconf.plugins.JacocoOpts
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 object JacocoOptionsSupport {
   object ValidationCriteria extends Enumeration {

@@ -40,10 +40,15 @@ final case class EntityReferenceHolder[T <: Entity] private (
   versioned ref here is a private mutable var as opposed to a case class parameter as it is an internal
   detail used mainly to support the isSameVersionAs api
    */
-  private var _versionedReference: Option[VersionedReference] = None
-  private[optimus] def versionedReference: Option[VersionedReference] = _versionedReference
+  @transient private var _versionInfo: VersionInfo = null
+  private[optimus] def versionInfo: Option[VersionInfo] = Option(_versionInfo)
+  private[optimus] def versionedReference: Option[VersionedReference] = Option(_versionInfo).map(_.vref)
   private[optimus] def withVersionedReference(vref: VersionedReference) = {
-    this._versionedReference = Some(vref)
+    this._versionInfo = VersionReferenceInfo(vref)
+    this
+  }
+  private[optimus] def withVersionInfo(versionInfo: FullVersionInfo): EntityReferenceHolder[T] = {
+    this._versionInfo = versionInfo
     this
   }
 
@@ -61,8 +66,8 @@ final case class EntityReferenceHolder[T <: Entity] private (
     }
     this
   }
-  private var knownPayloadType: Class[_ <: T] = _
-  private var concrete: Boolean = false
+  @transient private var knownPayloadType: Class[_ <: T] = _
+  @transient private var concrete: Boolean = false
 
   def payloadType = {
     val result = if (cache ne null) cache.get else null.asInstanceOf[T]
@@ -94,6 +99,22 @@ final case class EntityReferenceHolder[T <: Entity] private (
     )
     versionedReference == other.versionedReference
   }
+}
+
+final case class FullVersionInfo(
+    vReference: VersionedReference,
+    vtInterval: ValidTimeInterval,
+    ttInterval: TimeInterval,
+    lockToken: Long)
+    extends VersionInfo {
+  override def vref: VersionedReference = vReference
+}
+final case class VersionReferenceInfo(vReference: VersionedReference) extends VersionInfo {
+  override def vref: VersionedReference = vReference
+}
+
+sealed trait VersionInfo {
+  def vref: VersionedReference
 }
 
 object EntityReferenceHolder {
@@ -146,10 +167,11 @@ object EntityReferenceHolder {
       permRef: EntityReference,
       tc: TemporalContext,
       storageTxTime: Instant,
-      versionedRef: VersionedReference): EntityReferenceHolder[T] = {
+      vRefInfo: FullVersionInfo
+  ): EntityReferenceHolder[T] = {
     new EntityReferenceHolder[T](permRef, tc, Option(storageTxTime))
       .withTypeInfo(t.getClass(), true)
-      .withVersionedReference(versionedRef)
+      .withVersionInfo(vRefInfo)
   }
   private val log = getLogger(getClass)
 
@@ -172,7 +194,7 @@ object ReferenceHolderFactory {
 }
 
 final case class EntityPointHolder(eref: EntityReference, creationContext: TemporalContext) {
-  @node @scenarioIndependent private def persistedEntity: Option[PersistentEntity] =
+  @node @scenarioIndependent def persistedEntity: Option[PersistentEntity] =
     DALImpl.resolver.getPersistentEntityByRef(eref, creationContext).filterNot(_ == PersistentEntity.Null)
   @node @scenarioIndependent def entityAtCreation: Option[Entity] =
     persistedEntity.map(EntitySerializer.hydrate[Entity](_, creationContext))

@@ -22,13 +22,13 @@ import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.NoAfs
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Scala
 import optimus.buildtool.format.MavenDefinition.MavenOnlyExcludeKey
+import optimus.buildtool.utils.OptimusBuildToolProperties
 
 import scala.collection.immutable
 
 //noinspection TypeAnnotation
 object Keys {
-  val ignoredKeysForValidation =
-    sys.props.get("optimus.buildtool.ignoredInvalidKeys").map(_.split(",").toSet).getOrElse(Set.empty)
+  val ignoredKeysForValidation: Set[String] = OptimusBuildToolProperties.asSet("ignoredInvalidKeys")
 
   // Order of this keys is used to format files
   final case class KeySet(order: immutable.Seq[String]) {
@@ -77,6 +77,7 @@ object Keys {
       "forbiddenDependencies",
       "allowUnorderedAndDuplicateDependencies",
       "skipDependencyMappingValidation",
+      "allowSetViolatingCustomScopes",
       IsAgentKey,
       Substitutions
     )
@@ -133,7 +134,7 @@ object Keys {
   val agent = KeySet("agentClass", "excludes")
   val projectFile = KeySet("all", "main", "test")
 
-  val customModules = KeySet("includes", "excludes")
+  val customModules = KeySet("includes", "excludes", "includeDownstreamsOf", "excludeCircularDownstreams")
   // copy files
   val copyFileTaskFrom = KeySet("from", "fromExternal", "fromResources")
   val copyFileTask = copyFileTaskFrom ++ KeySet(
@@ -189,14 +190,15 @@ object Keys {
 
   // from ProjectProperties, needed below since we merge this with regular dependency configs for variable
   // substitution
-  private val propertyKeys = KeySet("properties", "scriptDir", "versions", "workspace")
+  private val propertyKeys =
+    KeySet("properties", "scriptDir", "versions", "workspace", "javaHomePath", "scalaHomePath", "podcast")
 
   val Boms = "boms"
 
   val DefaultVariant = "default-variant"
-  val dependencySet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms) ++ propertyKeys
+  val dependencySet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms, Substitutions) ++ propertyKeys
   val dependencySetVariant = KeySet(DefaultVariant, Boms) ++ propertyKeys
-  val variantSet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms) ++ propertyKeys
+  val variantSet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms, Substitutions) ++ propertyKeys
 
   // TODO (OPTIMUS-65072): Delete legacy forbidden dependency keys
   val legacyForbiddenDependencyKeys = KeySet(
@@ -235,7 +237,7 @@ object Keys {
     )
 
   val dependencyDefinition = commonDependencyDefinition ++
-    KeySet(Variants, Names.Configurations, Resolvers, Classifier, Scala)
+    KeySet(Variants, Names.Configurations, Resolvers, PublicationSettingsKeys.key, Scala)
   val variantDefinition = commonDependencyDefinition ++ KeySet("reason")
 
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
@@ -244,6 +246,11 @@ object Keys {
   val excludesConfig = KeySet(Group, Name)
   val excludesWithIvyConfig = KeySet(Group, Name, IvyConfiguration)
   val ivyConfiguration = KeySet(Extends, Maven)
+
+  val publicationSettings = {
+    import PublicationSettingsKeys._
+    KeySet(publicationName, tpe, ext, classifier)
+  }
 
   // resolvers file
   val resolversFile =

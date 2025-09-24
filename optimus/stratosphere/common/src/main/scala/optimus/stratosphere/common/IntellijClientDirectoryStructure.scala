@@ -15,17 +15,34 @@ package optimus.stratosphere.common
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
 import java.nio.file.Path
+import java.nio.file.Paths
 
-final case class IntellijClientDirectoryStructure(config: StratoWorkspaceCommon, intellijClientVersion: String)
+final case class IntellijClientDirectoryStructure(
+    config: StratoWorkspaceCommon,
+    intellijVersion: String,
+    intellijClientVersion: String)
     extends CommonDirectoryStructure(config) {
 
   val ideClientInstallPath: Path = ideClientStoreDir.resolve(intellijClientVersion)
 
-  val intellijClientExecutable: Path = ideClientInstallPath
+  private val ideClientBinPath: Path = ideClientInstallPath
     .resolve("idea")
     .resolve("code-with-me")
     .resolve("bin")
-    .resolve("jetbrains_client64.exe")
+
+  val ideClientExecutable: Path = ideClientBinPath.resolve("jetbrains_client64.exe")
+
+  val ideClientIcon: Path = ideClientBinPath.resolve("jetbrains_client.ico")
+
+  val ideClientShortcut: Path = ideClientBinPath.resolve("menu-shortcut.vbs")
 
   val remoteIntellijClientArtifactoryLocation: String = config.intellij.gateway.client.path(intellijClientVersion)
+
+  val defaultSharedConfigLocation: Path = {
+    val trimmedVersion: String = intellijVersion.take(6) // we only care about the major version
+    val systemAppData: String = System.getenv("APPDATA")
+    Paths.get(systemAppData).resolve("JetBrains").resolve("IntellijIdea" + trimmedVersion)
+  }
+
+  val ideaKey: Path = defaultSharedConfigLocation.resolve("idea.key")
 }

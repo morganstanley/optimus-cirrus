@@ -438,6 +438,8 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       }
     }
 
+    private val lzyComputeSuffix = "$lzycompute"
+
     def apply0(unit: CompilationUnit): Unit = gen(unit.body)
 
     def gen(tree: Tree): Unit = {
@@ -448,16 +450,43 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         symbol.hasAnnotation(EventAnnotation)
       }
 
+      // Add a Java annotation (@Generated) to methods with the Scala SYNTHETIC flag,
+      // so that Jacoco code coverage can easily filter them from coverage calculation/reporting.
+      def addGeneratedAnnotation(owner: Symbol): Unit = {
+        for (decl <- owner.info.decls) {
+          if (decl.isSynthetic && decl.isMethod) {
+            if (decl.name.startsWith("delayedEndpoint$")) {
+              // Body of DelayedInit which contains user code
+              // This probably should not be marked as SYNTHETIC by scalac
+            } else {
+              markAsGenerated(decl)
+            }
+          }
+          val lzyComputeOriginalName = decl.name.stripSuffix(lzyComputeSuffix)
+          if (lzyComputeOriginalName != decl.name) {
+            val decl1 = owner.info.decl(lzyComputeOriginalName).filter(_.isLazy)
+            if (decl1.isSynthetic) {
+              markAsGenerated(decl)
+            }
+          }
+        }
+      }
       tree match {
         case PackageDef(_, stats) => stats foreach gen
-        case cd @ ClassDef(mods, name, tparams, impl) if isSymbolContainsMetadata(cd.symbol) =>
-          classes += cd
-          impl.body foreach gen
-        case md @ ModuleDef(mods, name, impl) if isSymbolContainsMetadata(md.symbol) =>
-          classes += md
-          impl.body foreach gen
-        case pko @ ClassDef(_, _, _, impl) if pko.symbol.isPackageObjectClass =>
-          packageObjects += collectPackageMeta(pko.symbol.fullName.stripSuffix(".package"), impl)
+        case cd @ ClassDef(mods, name, tparams, impl) =>
+          addGeneratedAnnotation(cd.symbol)
+          if (isSymbolContainsMetadata(cd.symbol)) {
+            classes += cd
+            impl.body foreach gen
+          } else if (cd.symbol.isPackageObjectClass) {
+            packageObjects += collectPackageMeta(cd.symbol.fullName.stripSuffix(".package"), impl)
+          }
+        case md @ ModuleDef(mods, name, impl) =>
+          addGeneratedAnnotation(md.symbol.moduleClass)
+          if (isSymbolContainsMetadata(md.symbol)) {
+            classes += md
+            impl.body foreach gen
+          }
         case _ => ()
       }
     }

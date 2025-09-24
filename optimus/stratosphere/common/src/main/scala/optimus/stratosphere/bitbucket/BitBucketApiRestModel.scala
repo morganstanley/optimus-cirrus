@@ -15,7 +15,6 @@ import spray.json.DefaultJsonProtocol
 import spray.json.JsonFormat
 
 import java.time.Instant
-import scala.collection.immutable.Seq
 
 final case class ForkSyncStatus(
     repository: Repository,

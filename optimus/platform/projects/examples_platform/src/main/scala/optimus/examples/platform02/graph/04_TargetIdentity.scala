@@ -13,12 +13,13 @@ package optimus.examples.platform02.graph
 
 import optimus.platform._
 import optimus.examples.platform.entities._
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform.dal.config.DalEnv
 import optimus.platform.dal.config.DalLocation
 import optimus.platform.dsi.bitemporal.Context
 import optimus.platform.dsi.bitemporal.NamedContext
 
-object TargetIdentity extends OptimusApp {
+object TargetIdentity extends OptimusApp with PrintlnInterceptor {
   protected override def dalLocation: DalLocation = DalEnv.dev
   protected override def dalContext: Context = NamedContext(user)
 

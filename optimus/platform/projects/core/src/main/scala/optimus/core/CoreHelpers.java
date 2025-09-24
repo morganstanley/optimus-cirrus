@@ -97,6 +97,12 @@ public final class CoreHelpers {
   public static Object intern(Object src) {
     return src == null ? null : interner.intern(src);
   }
+
+  /** Intern any object into a weak table, not List will match Seq etc... */
+  public static Object nonStrictIntern(Object src) {
+    return src == null ? null : interner.nonStrictIntern(src);
+  }
+
   /** Intern any object into a strong table, more logic could be added here... */
   public static Object strongIntern(Object src) {
     return src == null ? null : strongInterner.intern(src);

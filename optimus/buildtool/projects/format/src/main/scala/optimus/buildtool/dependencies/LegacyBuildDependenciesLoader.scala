@@ -22,7 +22,6 @@ import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.format.Result
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 final case class LegacyBuildDependencies(dependencies: Seq[DependencyDefinition])
 

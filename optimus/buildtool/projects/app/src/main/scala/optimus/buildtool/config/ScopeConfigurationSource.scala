@@ -22,8 +22,8 @@ import java.nio.file.Paths
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
+import optimus.scalacompat.collection._
 
 /**
  * A source of dependency configuration information, i.e. which scopes depend on which other scopes or libraries
@@ -35,7 +35,8 @@ import scala.collection.immutable.Set
   @node def compilationBundles: Set[MetaBundle] = compilationScopeIds.map(_.metaBundle)
   @node def scope(id: String): ScopeId
 
-  @node def changesAsScopes(changes: Set[Path]): Set[ScopeId]
+  @node def changesAsScopes(changes: Set[Path]): Set[ScopeId] = changesByScopes(changes).keySet
+  @node def changesByScopes(changes: Set[Path]): Map[ScopeId, Set[Path]]
   @node def metaBundle(id: String): MetaBundle
   @node def resolveScopes(partialId: String): Set[ScopeId]
   @node def tryResolveScopes(partialId: String): Option[Set[ScopeId]]
@@ -93,14 +94,19 @@ object ScopeConfigurationSourceBase {
     compilationBundleScopeIds.filter(bundleScope => compiledMetaBundles.contains(bundleScope.metaBundle))
   }
 
-  @node override def changesAsScopes(changes: Set[Path]): Set[ScopeId] =
-    changes
+  @node override def changesByScopes(changes: Set[Path]): Map[ScopeId, Set[Path]] =
+    changes.apar
       // optimization for huge PRs, map to parent dir to get the # of entries lower
-      .apar.map(path => Option(path.getParent).getOrElse(Paths.get(""))).apar.flatMap { path =>
-        val scopes = pathToScopes(path)
-        log.debug(s"[Dynamic Scoping] Mapped $path to $scopes")
-        scopes
+      .groupBy(path => Option(path.getParent).getOrElse(Paths.get("")))
+      .toSet
+      .apar
+      .flatMap { case (parentDir, changedFiles) =>
+        val scopes = pathToScopes(parentDir)
+        log.debug(s"[Dynamic Scoping] Mapped $parentDir to $scopes")
+        scopes.map(scope => scope -> changedFiles)
       }
+      .groupBy { case (scope, _) => scope }
+      .mapValuesNow(_.flatMap { case (_, changedFiles) => changedFiles })
 
   @node private def pathToScopes(path: Path): Set[ScopeId] = {
     val partialId = maybeScopeId(path)

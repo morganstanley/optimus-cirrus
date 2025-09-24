@@ -20,8 +20,6 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.StackUtils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class ErrorReporter(errorsDir: Directory) {
 
   @async def writeErrorReport(buildResult: CompletedBuildResult): Unit = {

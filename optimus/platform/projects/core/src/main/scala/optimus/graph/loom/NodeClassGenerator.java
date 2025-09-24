@@ -71,7 +71,7 @@ public class NodeClassGenerator implements Opcodes {
     var names = new ArrayList<String>();
     var lnodeFunctions = new ArrayList<String>();
     var lnodeBase = Type.getInternalName(LNodeFunction.class);
-    for (int i = 0; i < 23; i++) {
+    for (int i = 0; i < 128; i++) {
       names.add("arg" + i);
       lnodeFunctions.add(lnodeBase + i);
     }
@@ -369,12 +369,18 @@ public class NodeClassGenerator implements Opcodes {
     var access = ACC_PUBLIC | ACC_FINAL;
     try (var mv = newMethod(cw, access, "transformTweak", TRANSFORM_TWEAK_DESC)) {
       mv.getThisField(nodeClsName, "entity", entityFieldType()); // move this to common adaptor?
+      var handlerArgTypes = new Type[cArgs.length + 1];
       mv.loadArgsWithCast(returnType);
-      var desc = Type.getMethodDescriptor(SEQ, returnType);
-      var ownder = entityFieldType().getInternalName();
+      handlerArgTypes[0] = returnType;
+      for (int i = 0; i < cArgs.length; i++) {
+        mv.getThisField(nodeClsName, argNames[i], cArgs[i]);
+        handlerArgTypes[i + 1] = cArgs[i];
+      }
+      var desc = Type.getMethodDescriptor(SEQ, handlerArgTypes);
+      var owner = entityFieldType().getInternalName();
       var alsoSetName = methodName + ALSO_SET_SUFFIX;
       var instr = isInterface ? INVOKEINTERFACE : INVOKEVIRTUAL;
-      mv.visitMethodInsn(instr, ownder, alsoSetName, desc, isInterface);
+      mv.visitMethodInsn(instr, owner, alsoSetName, desc, isInterface);
       mv.returnValue();
     }
   }

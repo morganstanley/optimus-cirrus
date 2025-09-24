@@ -106,6 +106,4 @@ object ImmutableArray {
   implicit def factoryToCBF[T: ClassTag, Node[_]](
       factory: ImmutableArray.type
   ): CanBuildFrom[ImmutableArray[Node[T]], T, ImmutableArray[T]] = canBuildFrom
-
-  def applyOnUnderlying[A, B](f: Array[A] => B, a: ImmutableArray[A]): B = f(a.as)
 }

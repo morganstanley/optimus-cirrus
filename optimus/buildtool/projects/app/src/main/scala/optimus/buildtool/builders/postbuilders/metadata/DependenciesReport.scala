@@ -20,7 +20,6 @@ import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 final case class DependenciesReport(dependencies: Set[DependencyReport])
 

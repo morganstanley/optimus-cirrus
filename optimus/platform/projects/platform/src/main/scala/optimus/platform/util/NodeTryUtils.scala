@@ -29,6 +29,14 @@ trait NodeTryUtils {
         NodeTryUtils.safeLog.error("Error: ", ex)
         None
       }
+
+    @node @scenarioIndependent def toOptionRTSafe: Option[A] =
+      nodeTry.map(Option.apply).getOrRecover { case ex @ RTException =>
+        // If Option is safe to be None, no need to scare people
+        // Downgrade "Error" to "Warning"
+        NodeTryUtils.safeLog.warn("Warning: ", ex)
+        None
+      }
   }
 
 }

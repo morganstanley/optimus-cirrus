@@ -19,19 +19,22 @@ import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Success
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
-final case class MultiSourceDependencies(all: Seq[MultiSourceDependency]) {
+final case class MultiSourceDependencies(all: Seq[MultiSourceDependency], substitutions: Seq[Substitution]) {
   val preferred: Seq[DependencyDefinition] = all.flatMap(_.definitions.preferred)
   val afsOnly: Seq[DependencyDefinition] = all.map(_.definitions).collect { case AfsOnly(a) => a }
   val unmapped: Seq[DependencyDefinition] = all.map(_.definitions).collect { case Unmapped(m) => m }
   val mavenOnly: Seq[DependencyDefinition] = all.map(_.definitions).collect { case MavenOnly(m) => m }
   val mapped: Seq[Mapped] = all.map(_.definitions).collect { case m: Mapped => m }
 
-  def ++(to: MultiSourceDependencies): MultiSourceDependencies = MultiSourceDependencies((this.all ++ to.all).distinct)
+  def ++(to: MultiSourceDependencies): MultiSourceDependencies =
+    MultiSourceDependencies(
+      all = (this.all ++ to.all).distinct,
+      substitutions = (this.substitutions ++ to.substitutions).distinct)
 
   def +++(to: Iterable[MultiSourceDependencies]): MultiSourceDependencies = MultiSourceDependencies(
-    (this.all ++ to.flatMap(_.all)).distinct)
+    all = (this.all ++ to.flatMap(_.all)).distinct,
+    substitutions = (this.substitutions ++ to.flatMap(_.substitutions)).distinct)
 }
 
 sealed trait Definitions {

@@ -18,7 +18,7 @@ import optimus.platform.EvaluationContext
 
 object CrumbLogger {
 
-  final def runtimeID = EvaluationContext.scenarioStack.env.config.runtimeConfig.rootID.toString
+  final def runtimeID: String = String.valueOf(EvaluationContext.scenarioStack.rootIDWithoutTrackingAccess)
 
   private def send(level: BreadcrumbLevel.Level, source: Crumb.Source, msg: String): Unit = {
     send(level, nodeID, source, msg)

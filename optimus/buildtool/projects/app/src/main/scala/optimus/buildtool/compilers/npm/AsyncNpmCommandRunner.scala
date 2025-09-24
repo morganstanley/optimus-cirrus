@@ -23,7 +23,7 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 
-import scala.collection.immutable.Seq
+import scala.util.Properties
 
 object AsyncNpmCommandRunner extends Log {
   // we allow arbitrary cmds be used in sandbox, but we have to warn user it's dangerous.
@@ -31,6 +31,12 @@ object AsyncNpmCommandRunner extends Log {
   // and pay attention when cache hit we won't trigger web cmds again!
   private val dangerousCmds: Seq[String] =
     Seq("mkdir", "rmdir", "cp", "mv", "rm", "touch", "mkfs", "mkswap", "tar", "untar", "dd", "zip")
+
+  // the internal npm setup code on Windows/Linux needs these to be passed though. The rest of the env will be cleared
+  // to improve consistency between different users / machines
+  private val envVarsToRetain =
+    if (Properties.isWin) Set("USERPROFILE", "SYS_LOC", "PROCESSOR_ARCHITECTURE", "PREFIX")
+    else Set("JAVA_KRB5CCNAME", "KRB5CCNAME", "HOME")
 
   @async private def runWebProcess(
       cmd: String,
@@ -46,8 +52,9 @@ object AsyncNpmCommandRunner extends Log {
       logFile,
       cmds,
       workingDir = Some(sandboxSrc),
-      envVariablesToClean = Seq("FPATH"),
-      useCrumbs = useCrumbs)
+      envVariablesToRetain = Some(envVarsToRetain),
+      useCrumbs = useCrumbs
+    )
       .buildWithRetry(id, NpmCommand)(
         maxRetry = 3, // retry 3 times to prevent maven server setup unstable issue
         msDelay = 0,
@@ -66,17 +73,11 @@ object AsyncNpmCommandRunner extends Log {
       logFile: FileAsset,
       useCrumbs: Boolean): Seq[CompilationMessage] = {
     ObtTrace.info(s"[${id.toString}] Downloading npm remote artifacts from maven server")
-    val userCmd = npmBuildCommands
-      .map(c =>
-        c.replace(
-          "npx pnpm install",
-          s"npm config set store-dir ${pnpmStoreDir.path} && npx pnpm@$pnpmVersion install"))
-      .mkString(" && ")
     val cmd = commandTemplate
       .replace("{nodeVersion}", nodeVersion)
       .replace("{pnpmVersion}", pnpmVersion)
       .replace("{pnpmStoreDir}", pnpmStoreDir.pathString)
-      .replace("{userCmd}", userCmd)
+      .replace("{userCmd}", npmBuildCommands.mkString(" && "))
     runWebProcess(cmd, logFile, sandboxSrc, id, useCrumbs)
     val warnCmds = dangerousCmds.collect { case dangerousCmd if cmd.contains(dangerousCmd) => s"'$dangerousCmd'" }
     if (warnCmds.isEmpty) Seq(CompilationMessage.info(cmd))

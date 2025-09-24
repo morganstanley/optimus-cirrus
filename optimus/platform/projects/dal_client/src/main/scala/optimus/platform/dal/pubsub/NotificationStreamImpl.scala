@@ -13,7 +13,6 @@ package optimus.platform.dal.pubsub
 
 import java.util.concurrent.atomic.AtomicReference
 import java.time.Instant
-
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.dsi.notification.NotificationEntry
 import optimus.dsi.partitioning.Partition
@@ -21,12 +20,15 @@ import optimus.dsi.partitioning.PartitionMap
 import optimus.dsi.pubsub._
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.TimeInterval
+import optimus.platform.dal.ClientSideDSI
 import optimus.platform.dal.DALPubSub._
+import optimus.platform.dal.NotificationStream.SubscriptionIdType
 import optimus.platform.dal.PartitionMapAPI
 import optimus.platform.dal.pubsub.PubSubClientRequest.ChangeSubRequest
 import optimus.platform.dal.pubsub.PubSubClientRequest.CloseStream
 import optimus.platform.dsi.bitemporal._
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 
@@ -43,7 +45,8 @@ private[optimus] class NotificationStreamImpl(
     notificationStreamCallback: NotificationStreamCallback,
     val partition: Partition,
     private[optimus] val pubSubRequestHandler: HandlePubSub,
-    env: RuntimeEnvironment
+    env: RuntimeEnvironment,
+    readDSI: Option[ClientSideDSI] = None
 ) extends NotificationStream {
   import NotificationStreamImpl._
 
@@ -69,7 +72,14 @@ private[optimus] class NotificationStreamImpl(
 
   private[this] val msgHandler = createNotificationMessageHandler
   protected def createNotificationMessageHandler: NotificationMessageHandler =
-    new AsyncNotificationMessageHandler(serverSideStreamId, id, notificationStreamCallback, () => close())
+    new AsyncNotificationMessageHandler(
+      serverSideStreamId,
+      id,
+      notificationStreamCallback,
+      () => close(),
+      readDSI,
+      (subscriptionsToRemove) => removeSubscription(subscriptionsToRemove)
+    )
 
   private[optimus] def getLastSeenTt: Instant = lastSeenTxTime.get
 
@@ -88,6 +98,15 @@ private[optimus] class NotificationStreamImpl(
   override def currentSubscriptions: Set[Subscription] = synchronized {
     subscriptionStateManager.currentSubscriptions()
   }
+
+  def getSubscription(subId: SubscriptionIdType): Option[Subscription] = {
+    subscriptionStateManager.getSubscription(subId)
+  }
+
+  private val changeIdGen = new AtomicInteger(Int.MaxValue)
+
+  def removeSubscription(subscriptionsToRemove: Set[Subscription.Id]): Unit =
+    changeSubscription(changeIdGen.decrementAndGet(), Set(), subscriptionsToRemove)
 
   override def changeSubscription(
       changeId: Int,
@@ -232,34 +251,38 @@ private[optimus] class NotificationStreamImpl(
     }
 
     val notificationMessages = result match {
-      case res @ CreatePubSubStreamSuccessResult(svid, tt) if getState == NotificationStreamState.OngoingRefresh =>
+      case res @ CreatePubSubStreamSuccessResult(svid, tt, postChecks)
+          if getState == NotificationStreamState.OngoingRefresh =>
         require(
           retryCmd.get.isDefined,
           s"${clientAndServerStreamLogHeader(svid)} Since this is post-refresh, we expect the retryCmd to be defined!")
         val pendingChangeIds = subscriptionStateManager.pendingChanges.asScala.map { case (k, _) => k }
-        val subChangeResponses = pendingChangeIds.map(SubscriptionChangeSucceeded(_, tt)).toSeq
+        val subChangeResponses = pendingChangeIds.map(SubscriptionChangeSucceeded(_, tt, postChecks)).toSeq
         subscriptionStateManager.resetStateManager(postRefresh = true)
         subscriptionStateManager.subscriptionChangeResponse(res, retryCmd.get)
         // we are also acknowledging all the pending subChange requests, since they have been merged in the new request
-        val allResponses = Seq(StreamCreationSucceeded(tt)) ++ subChangeResponses
+        val allResponses = Seq(StreamCreationSucceeded(tt, postChecks)) ++ subChangeResponses
         updateTt(tt)
         updateState(NotificationStreamState.Initialized)
         log.info(s"${clientAndServerStreamLogHeader(svid)} Stream re-established at tt: $tt")
+        warnPostChecks(svid, postChecks)
         executePendingClientRequests()
         allResponses
-      case res @ CreatePubSubStreamSuccessResult(svid, tt) =>
+      case res @ CreatePubSubStreamSuccessResult(svid, tt, postChecks) =>
         subscriptionStateManager.subscriptionChangeResponse(res)
         updateTt(tt)
         updateState(NotificationStreamState.Initialized)
         log.info(s"${clientAndServerStreamLogHeader(svid)} Stream creation ack received at tt: $tt")
+        warnPostChecks(svid, postChecks)
         executePendingClientRequests()
-        Seq(StreamCreationSucceeded(tt))
-      case res @ ChangeSubscriptionSuccessResult(svid, changeId, tt) =>
+        Seq(StreamCreationSucceeded(tt, postChecks))
+      case res @ ChangeSubscriptionSuccessResult(svid, changeId, tt, postChecks) =>
         subscriptionStateManager.subscriptionChangeResponse(res)
         updateTt(tt)
         log.info(
           s"${clientAndServerStreamLogHeader(svid)} Subscriptions successfully changed for changeRequestId: $changeId at tt: $tt")
-        Seq(SubscriptionChangeSucceeded(changeId, getLastSeenTt))
+        warnPostChecks(svid, postChecks)
+        Seq(SubscriptionChangeSucceeded(changeId, getLastSeenTt, postChecks))
       case sowResult: PubSubSowResult =>
         val data = subscriptionStateManager.sowResponse(sowResult)
         updateTt(sowResult.txTime)
@@ -335,6 +358,12 @@ private[optimus] class NotificationStreamImpl(
     actionSeqBuilder.result().iterator
   }
 
+  protected def warnPostChecks(svid: String, postChecks: Seq[SubscriptionIdType]): Unit = {
+    postChecks.flatMap(subscriptionStateManager.getSubscription(_)).foreach { sub =>
+      log.warn(s"${clientAndServerStreamLogHeader(svid)} Post check will happen for: $sub")
+    }
+  }
+
   protected[pubsub] def handleErrorResult(result: ErrorResult): Unit = synchronized {
     getState match {
       case NotificationStreamState.Closed =>
@@ -354,6 +383,9 @@ private[optimus] class NotificationStreamImpl(
           case ex: ChangeSubscriptionMultiPartitionException =>
             subscriptionStateManager.subscriptionChangeResponse(result)
             MultiPartitionSubscriptionChangeFailed(ex.changeRequestId, getLastSeenTt, ex.partitionToSubMap)
+          case ex: PubSubEntitlementException =>
+            removeSubscription(Set(ex.subId))
+            StreamErrorMessage(ex)
           case t =>
             StreamErrorMessage(t)
         }

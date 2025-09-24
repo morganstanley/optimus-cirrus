@@ -190,6 +190,13 @@ object TraceEvent {
     val relevance = Two
   }
 
+  case object ParallelGpTcsWriterStall extends Event with ImpliesWallclockTiming with ImpliesStallTiming {
+    val name = "PGTW_STALL"
+    val level = Info
+    val phase = Queued
+    val relevance = Nine
+  }
+
   case object DdcRequestLock extends Event with ImpliesWallclockTiming with ImpliesStallTiming {
     val name = "DDC_REQUEST_LOCK"
     val level = Info
@@ -248,6 +255,13 @@ object TraceEvent {
 
   final case class MongoPrep(info: Map[String, Int] = Map.empty) extends Event with ImpliesWallclockTiming {
     val name = "MONGO_PREP"
+    val level: Level = Info
+    val phase: Phase = Execution
+    val relevance: Relevance = One
+  }
+
+  final case class PreCommit(info: Map[String, Int] = Map.empty) extends Event with ImpliesWallclockTiming {
+    val name = "PRE_COMMIT"
     val level: Level = Info
     val phase: Phase = Execution
     val relevance: Relevance = One
@@ -658,6 +672,13 @@ object TraceEvent {
     val relevance = Ten
   }
 
+  case object ReferenceResolverIgnoreListCount extends Event {
+    val name = "IL_CNT"
+    val level = Info
+    val phase = Execution
+    val relevance = Ten
+  }
+
   case object BackEndSerialization extends Event {
     val name = "BACKEND_SER"
     val level = Debug
@@ -719,6 +740,13 @@ object TraceEvent {
     val level = Info
     val phase = Execution
     val relevance = Seven
+  }
+
+  case object MongoPinning extends Event {
+    val name = "MONGO_PINNING"
+    val level = Info
+    val phase = Execution
+    val relevance = One
   }
 
   case object WriteBlobs extends Event {
@@ -864,7 +892,7 @@ object TraceEvent {
     val name = "TXNMANAGER_LOG_METADATA"
     val level = Info
     val phase = Execution
-    val relevance = Three
+    val relevance = Five
   }
 
   case object TxnManagerLogWriteCompleted extends Event {
@@ -1110,67 +1138,6 @@ object TraceEvent {
     def apply(name: String, hitCount: Long, missCount: Long, backEnd: BackEnd): CacheRead = {
       CacheRead(name, hitCount, missCount, 0L, backEnd)
     }
-  }
-
-  // below are DAL notification related events
-  // We set `relevance` to `One`, because we do not need the associated breadcrumbs for most cases
-  // If we do in the future, we may want to bump this value to `Nine` or `Ten` so that we publish crumbs for all requests
-  sealed trait TimePointEvent
-  sealed trait TimeDurationEvent
-  case object ReplicationEntryEnqueue extends Event with BackEndAware with TimePointEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "RE_ENQUEUE"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  case object ReplicationEntryDequeue extends Event with BackEndAware with TimePointEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "RE_DEQUEUE"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  case object NotificationTransform extends Event with BackEndAware with TimeDurationEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "NE_TRANSFORM"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  case object NotificationEntryEnqueue extends Event with BackEndAware with TimePointEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "NE_ENQUEUE"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  case object NotificationEntryDequeue extends Event with BackEndAware with TimePointEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "NE_DEQUEUE"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  case object NotificationEntryPublish extends Event with BackEndAware with TimeDurationEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "NE_ENQUEUE"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
-  }
-
-  final case class NotificationReset(reason: String) extends Event with BackEndAware with TimePointEvent {
-    override val backEnd = TraceBackEnd.Notification
-    val name = "NE_RESET"
-    val level = Info
-    val phase = Execution
-    override val relevance = One
   }
 
   // Below are DAL PubSub related events..

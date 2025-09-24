@@ -35,15 +35,17 @@ class Op {
   public int flags;
   final int mutatesArgsMask; // can potentially mutate argument N mask
   Label label;
+
+  int dbgWritten;
   public int popCount;
   public boolean hasResult;
   public Type resultType; // REVISIT: consider storing as String!!!
 
   ValueGroup valueGroup;
-  ArrayList<Op> consumers = new ArrayList<>();
-  ArrayList<Op> inputs = new ArrayList<>();
+  ArrayList<Op> inputs = new ArrayList<>(); // Actual inputs to this Op
 
-  // All those ops needs to be delayed until this Op is done
+  ArrayList<Op> consumers = new ArrayList<>();
+  // All those ops needs to be delayed until this Op is done (the edge drawn in red in digraph)
   ArrayList<Op> dependencies = new ArrayList<>();
   private int incomingEdges;
   private final ArrayList<Op> dbgIncomingEdges = new ArrayList<>();
@@ -241,6 +243,11 @@ class Op {
     @Override
     public void write(Regenerator regenerator) {
       if (insnNode != null) super.write(regenerator); // write IF...
+      else if (hasFallThroughTarget) {
+        // super.write() updates the stack for real branches
+        // but we also need to do it for "fake" ones.
+        regenerator.adjustInputsStack(inputs);
+      }
 
       if (commonTarget != null) { // if we are dealing with a reduced branch
         regenerator.writeBlocks(targets);

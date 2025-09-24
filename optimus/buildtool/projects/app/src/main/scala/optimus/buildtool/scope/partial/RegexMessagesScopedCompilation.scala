@@ -26,7 +26,7 @@ class RegexMessagesScopedCompilation(
     val scope: CompilationScope,
     val sources: RegexMessagesCompilationSources,
     rules: Seq[CodeFlaggingRule]
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
 
   @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = Vector()
   @node override protected def containsRelevantSources: Boolean =

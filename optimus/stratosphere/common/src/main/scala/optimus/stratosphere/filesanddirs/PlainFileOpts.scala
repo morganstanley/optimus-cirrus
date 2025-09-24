@@ -30,7 +30,6 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.WatchEvent
-import scala.collection.immutable.Seq
 import scala.io.Codec
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -46,15 +45,15 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
     if (name.startsWith(".")) name else name.split("\\.").dropRight(1).mkString("")
   }
 
-  def copyTo(destinationFile: Path): Unit = try {
+  def copyTo(destinationFile: Path): Path = try {
     destinationFile.getParent.dir.create()
     Files.copy(path, destinationFile, StandardCopyOption.REPLACE_EXISTING)
   } catch {
-    case ex: IOException => if (!destinationFile.exists()) throw ex
+    case ex: IOException => if (!destinationFile.exists()) throw ex else destinationFile
     case ex: Exception   => throw ex
   }
 
-  def copyToDir(destinationDir: Path): Unit = copyTo(destinationDir.resolve(path.getFileName))
+  def copyToDir(destinationDir: Path): Path = copyTo(destinationDir.resolve(path.getFileName))
 
   def ifExistsCopyToDir(destinationDir: Path): Unit = if (exists()) copyTo(destinationDir.resolve(path.name))
 
@@ -114,6 +113,11 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
     path
   }
 
+  def write(data: Array[Byte]): Path = writeLock() { c =>
+    c.write(buffer(data))
+    path
+  }
+
   def writeConfig(config: Config): Unit =
     write(config.root.render(ConfigRenderOptions.concise.setFormatted(true)))
 
@@ -155,6 +159,8 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
   }
 
   def getContent(): String = readLock { Files.readString(path, StandardCharsets.UTF_8) }
+
+  def getByteContent(): Array[Byte] = readLock { Files.readAllBytes(path) }
 
   def content(): Option[String] = if (exists()) Some(getContent()) else None
 

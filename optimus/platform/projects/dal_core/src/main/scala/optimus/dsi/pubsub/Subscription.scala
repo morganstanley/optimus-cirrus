@@ -27,7 +27,8 @@ final case class Subscription private (
     subId: Subscription.Id,
     query: QueryHolder,
     includeSow: Boolean,
-    entitledOnly: Boolean
+    entitledOnly: Boolean,
+    postCheckRequired: Boolean = false
 ) {
 
   def className: Option[SerializedEntity.TypeRef] = query match {
@@ -73,14 +74,30 @@ object Subscription {
       query: Expression,
       clientFilter: Option[NodeFunction1[Any, Boolean]],
       includeSow: Boolean,
-      entitledOnly: Boolean
+      entitledOnly: Boolean,
+      postCheckRequired: Boolean
   ): Subscription =
-    Subscription(subIdGenerator.incrementAndGet(), ExpressionQueryHolder(query, clientFilter), includeSow, entitledOnly)
+    Subscription(
+      subIdGenerator.incrementAndGet(),
+      ExpressionQueryHolder(query, clientFilter),
+      includeSow,
+      entitledOnly,
+      postCheckRequired)
+  def apply(
+      query: Expression,
+      clientFilter: Option[NodeFunction1[Any, Boolean]],
+      includeSow: Boolean,
+      entitledOnly: Boolean
+  ): Subscription = apply(query, clientFilter, includeSow, entitledOnly, postCheckRequired = false)
   def apply(
       query: Expression,
       includeSow: Boolean,
-      entitledOnly: Boolean = false
-  ): Subscription = apply(query, None, includeSow, entitledOnly)
+      entitledOnly: Boolean
+  ): Subscription = apply(query, None, includeSow, entitledOnly, postCheckRequired = false)
+  def apply(
+      query: Expression,
+      includeSow: Boolean,
+  ): Subscription = apply(query, None, includeSow, entitledOnly = false, postCheckRequired = false)
   def apply(): Subscription = apply(DefaultPartition)
   def apply(heartbeatIntervalInMillis: Long): Subscription = apply(DefaultPartition, heartbeatIntervalInMillis)
   def apply(partition: Partition): Subscription = apply(partition, defaultHeartbeatIntervalInMillis)

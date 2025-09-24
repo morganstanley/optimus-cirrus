@@ -19,7 +19,6 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.generators.GeneratorType
 import optimus.buildtool.processors.ProcessorType
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 
 private[buildtool] final case class AgentConfiguration(agentClass: String, excluded: Set[ScopeId])
@@ -172,7 +171,8 @@ private[buildtool] final case class ScopeFlags(
     installIvy: Boolean,
     pathingBundle: Boolean,
     mavenOnly: Boolean,
-    skipDependencyMappingValidation: Boolean
+    skipDependencyMappingValidation: Boolean,
+    allowSetViolatingCustomScopes: Boolean
 )
 object ScopeFlags {
   val empty: ScopeFlags = ScopeFlags(
@@ -191,7 +191,8 @@ object ScopeFlags {
     installIvy = false,
     pathingBundle = false,
     mavenOnly = false,
-    skipDependencyMappingValidation = false
+    skipDependencyMappingValidation = false,
+    allowSetViolatingCustomScopes = false
   )
 }
 

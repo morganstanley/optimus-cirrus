@@ -17,8 +17,6 @@ import optimus.buildtool.files.Directory
 import optimus.platform._
 import optimus.utils.{TypeClasses => MoreTypeClasses}
 
-import scala.collection.immutable.Seq
-
 object TypeClasses extends MoreTypeClasses {
   implicit class MoreStringOps(s: String) extends StringOps(s) {
     def mapNonEmpty[A](f: String => A): Option[A] = if (s.nonEmpty) Some(f(s)) else None

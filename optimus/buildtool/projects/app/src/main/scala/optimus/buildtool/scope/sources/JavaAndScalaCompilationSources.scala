@@ -29,7 +29,8 @@ private[sources] final case class HashedJavaAndScalaSources(
     content: Seq[(String, SortedMap[SourceUnitId, HashedContent])],
     generatedSourceArtifacts: Seq[Artifact],
     externalCompileDependencies: Seq[ResolutionArtifact],
-    fingerprint: FingerprintArtifact
+    fingerprint: FingerprintArtifact,
+    fingerprintContent: Seq[String]
 ) extends HashedSources
 
 @entity class JavaAndScalaCompilationSources(
@@ -38,6 +39,8 @@ private[sources] final case class HashedJavaAndScalaSources(
 ) extends CompilationSources {
 
   override def id: ScopeId = scope.id
+
+  @node def generatedSourceArtifacts: IndexedSeq[Artifact] = hashedSources.generatedSourceArtifacts.toVector
 
   @node def externalCompileDependencies: IndexedSeq[ResolutionArtifact] =
     hashedSources.externalCompileDependencies.toVector
@@ -67,7 +70,8 @@ private[sources] final case class HashedJavaAndScalaSources(
       sourceFileContent,
       source.generatedSourceArtifacts,
       externalDeps,
-      fingerprintHash
+      fingerprintHash,
+      compilationInputsFingerprint
     )
   }
 

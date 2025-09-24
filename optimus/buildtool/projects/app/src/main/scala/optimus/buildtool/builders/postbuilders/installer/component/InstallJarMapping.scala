@@ -15,8 +15,6 @@ import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.JarAsset
 
-import scala.collection.immutable.Seq
-
 object InstallJarMapping {
 
   // for a given artifact jar (that is, under build_obt/), look up its scope and its final destination

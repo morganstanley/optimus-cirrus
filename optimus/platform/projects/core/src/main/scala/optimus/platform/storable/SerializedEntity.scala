@@ -12,12 +12,15 @@
 package optimus.platform.storable
 
 import optimus.entity.EntityLinkageProperty
+import optimus.graph.DiagnosticSettings
 import optimus.platform.{TimeInterval, ValidTimeInterval}
 import optimus.platform.annotations.parallelizable
 
+import java.util.Objects
 import scala.collection.immutable
 
 object SerializedEntity {
+  lazy val useQuickHashCode = DiagnosticSettings.getBoolProperty("optimus.platform.storable.useQuickHashCode", true)
   type TypeRef = String
   type LinkageMap = Map[EntityLinkageProperty, Set[SerializedEntity.EntityLinkage]]
 
@@ -117,6 +120,13 @@ final case class SerializedEntity(
   }
 
   def getKey: Option[SerializedKey] = keys.find(_.isKey)
+
+  override def hashCode(): Int = if (SerializedEntity.useQuickHashCode) {
+    Objects.hash(entityRef, cmid, className, keys.size, inlinedEntities.size)
+  } else {
+    // This is falling back to old behavior of calculating hash based on every property (default impl) -
+    Objects.hash(entityRef, cmid, className, properties, keys, types, inlinedEntities, linkages, slot)
+  }
 }
 
 final case class MultiSlotSerializedEntity private (entities: immutable.SortedSet[SerializedEntity]) {

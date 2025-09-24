@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object SortBy extends LegacyOptimusApp {
+object SortBy extends LegacyOptimusApp with PrintlnInterceptor {
 
   // This example demonstrates ordering of rows
   val sortedPos = from(Data.getPositions()).sortBy(pos =>

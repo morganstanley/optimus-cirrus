@@ -12,12 +12,12 @@
 package optimus.examples.platform01.data
 
 import optimus.platform._
-
 import optimus.examples.platform.entities._
+import optimus.examples.testinfra.PrintlnInterceptor
 
 // This example shows how the user can create their own sandboxed bit of datastore
 // this is useful when testing and experimenting.
-object UserDatabase extends OptimusApp {
+object UserDatabase extends OptimusApp with PrintlnInterceptor {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

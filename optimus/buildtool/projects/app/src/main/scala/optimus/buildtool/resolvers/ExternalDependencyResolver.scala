@@ -14,6 +14,7 @@ package optimus.buildtool.resolvers
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.ExternalArtifactId
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.ExternalHashedArtifact
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.ModuleSet
@@ -75,14 +76,17 @@ import scala.collection.immutable.{IndexedSeq, Seq}
  * @param mappedDependencies All resolved dependencies mapped from AFS to maven coordinates
  */
 final case class ResolutionResult(
-    resolvedArtifactsToDepInfos: Seq[(ExternalClassFileArtifact, Seq[DependencyInfo])],
+    resolvedArtifactsToDepInfos: Seq[(ExternalHashedArtifact, Seq[DependencyInfo])],
     messages: Seq[CompilationMessage],
     jniPaths: Seq[String],
     moduleLoads: Seq[String],
     finalDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
     mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]]
 ) {
-  lazy val resolvedArtifacts: IndexedSeq[ExternalClassFileArtifact] = resolvedArtifactsToDepInfos.map(_._1).toVector
+  lazy val resolvedArtifacts: IndexedSeq[ExternalHashedArtifact] = resolvedArtifactsToDepInfos.map(_._1).toVector
+  lazy val resolvedClassFileArtifacts: IndexedSeq[ExternalClassFileArtifact] = resolvedArtifactsToDepInfos.collect {
+    case (artifact: ExternalClassFileArtifact, _) => artifact
+  }.toVector
   def dependencies: Set[DependencyInfo] = resolvedArtifactsToDepInfos.flatMap(_._2).toSet
 }
 

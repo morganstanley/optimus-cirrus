@@ -21,7 +21,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
@@ -29,18 +29,16 @@ import org.slf4j.LoggerFactory;
 
 public class ObjectDefParser2 {
   private static final ConcurrentMap<Class, ClassParser> classParserMap = new ConcurrentHashMap<>();
-  public static final ObjectMapper objectMapper;
+  public static final ObjectMapper objectMapper =
+      YAMLMapper.builder()
+          .enable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
+          .activateDefaultTyping(
+              new LaissezFaireSubTypeValidator(),
+              ObjectMapper.DefaultTyping.NON_FINAL,
+              JsonTypeInfo.As.PROPERTY)
+          .build();
 
   private static Logger log = LoggerFactory.getLogger(ObjectDefParser2.class);
-
-  static {
-    objectMapper =
-        new ObjectMapper(new YAMLFactory().enable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER));
-    objectMapper.activateDefaultTyping(
-        new LaissezFaireSubTypeValidator(),
-        ObjectMapper.DefaultTyping.NON_FINAL,
-        JsonTypeInfo.As.PROPERTY);
-  }
 
   static final boolean debug = false;
   private static final boolean debugAddParser = false;

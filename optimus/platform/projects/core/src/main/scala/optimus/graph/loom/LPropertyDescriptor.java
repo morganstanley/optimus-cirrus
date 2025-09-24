@@ -15,16 +15,16 @@ import static optimus.graph.loom.LoomConfig.COLUMN_NA;
 import java.lang.invoke.MethodType;
 import java.util.Arrays;
 import java.util.Objects;
+import optimus.graph.NodeTaskInfo;
+import optimus.graph.NodeTaskInfoRegistry;
 
 public class LPropertyDescriptor {
   private static final Object _descriptorLock = new Object();
-  private static int descriptorsCount = 1;
+  private static int descriptorsCount = 0;
   private static LPropertyDescriptor[] descriptors = new LPropertyDescriptor[1024];
 
   static {
-    var cls = LPropertyDescriptor.class.getName();
-    descriptors[0] =
-        new LPropertyDescriptor(cls, "ctor", "LPropertyDescriptor.java", 26, COLUMN_NA, 0);
+    register(LPropertyDescriptor.class, "ctor", "LPropertyDescriptor.java", 26, COLUMN_NA, 0, -1);
   }
 
   public final String className;
@@ -33,22 +33,13 @@ public class LPropertyDescriptor {
   public int lineNumber;
   public int columnNumber;
   public MethodType methodType;
-  public final int localID; // Number of the lambda method in the bytecode (serialization)
+  public int localID; // Number of the lambda method in the bytecode (serialization)
   public int profileID; // See getProfileID. Assigned in core
 
   public LPropertyDescriptor(String className, String methodName) {
     this.className = className;
     this.methodName = methodName;
     this.localID = -1;
-  }
-
-  public LPropertyDescriptor(String cls, String method, String src, int line, int col, int lID) {
-    this.className = cls;
-    this.methodName = method;
-    this.source = src;
-    this.lineNumber = line;
-    this.columnNumber = col;
-    this.localID = lID;
   }
 
   @Override
@@ -64,20 +55,39 @@ public class LPropertyDescriptor {
     return Objects.hash(className, methodName);
   }
 
+  /*
+   * returns clsID
+   * */
   public static int register(
-      Class<?> clazz, String methodName, String source, int line, int col, int localID) {
+      Class<?> clazz,
+      String methodName,
+      String source,
+      int line,
+      int col,
+      int localID,
+      int propertyID) {
+    var className = clazz.getName();
+    LPropertyDescriptor desc;
+    if (propertyID <= NodeTaskInfo.Default.profile)
+      desc = new LPropertyDescriptor(className, methodName);
+    else desc = NodeTaskInfoRegistry.getDescriptor(propertyID);
+
+    desc.source = source;
+    desc.lineNumber = line;
+    desc.columnNumber = col;
+    desc.localID = localID;
+
     synchronized (_descriptorLock) {
       var id = descriptorsCount;
       if (descriptorsCount >= descriptors.length)
         descriptors = Arrays.copyOf(descriptors, descriptors.length * 2);
-      var className = clazz.getName();
-      var desc = new LPropertyDescriptor(className, methodName, source, line, col, localID);
+
       descriptors[descriptorsCount++] = desc;
       return id;
     }
   }
 
-  public static LPropertyDescriptor get(int id) {
-    return descriptors[id];
+  public static LPropertyDescriptor get(int clsID) {
+    return descriptors[clsID];
   }
 }

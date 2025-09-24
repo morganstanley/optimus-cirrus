@@ -18,8 +18,6 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 @entity private[scope] class GenericFilesCompilationSources(scope: CompilationScope) extends CompilationSources {
 
   override def id: ScopeId = scope.id
@@ -29,7 +27,7 @@ import scala.collection.immutable.Seq
     val hashedFiles = scope.genericFileFolders.apar.map(_.resources()).merge[SourceUnitId]
     val fingerprint = scope.fingerprint(hashedFiles, tpe)
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenericFilesFingerprint)
-    HashedSourcesImpl(Seq(tpe -> hashedFiles), Nil, fingerprintHash)
+    HashedSourcesImpl(Seq(tpe -> hashedFiles), fingerprintHash, fingerprint)
   }
 }
 

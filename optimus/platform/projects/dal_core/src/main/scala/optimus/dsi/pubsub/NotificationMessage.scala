@@ -12,8 +12,8 @@
 package optimus.dsi.pubsub
 
 import java.time.Instant
-
 import optimus.dsi.notification.NotificationEntry
+import optimus.platform.dal.NotificationStream.SubscriptionIdType
 import optimus.platform.storable.PersistentEntity
 
 sealed trait NotificationMessage
@@ -24,7 +24,7 @@ sealed trait DataMessage extends StreamEvent
 /**
  * message is received when the requested stream creation is successful
  */
-final case class StreamCreationSucceeded(tt: Instant) extends StreamEvent
+final case class StreamCreationSucceeded(tt: Instant, postChecks: Seq[SubscriptionIdType]) extends StreamEvent
 
 /**
  * message is received when the requested stream is not successful
@@ -42,7 +42,8 @@ final case class MultiPartitionStreamCreationFailed(partitionedSubs: Map[String,
 /**
  * message is received when stream is changed successfully with update in subscriptions
  */
-final case class SubscriptionChangeSucceeded(changeRequestId: Int, tt: Instant) extends StreamEvent
+final case class SubscriptionChangeSucceeded(changeRequestId: Int, tt: Instant, postChecks: Seq[SubscriptionIdType])
+    extends StreamEvent
 
 /**
  * message is received when stream change is not successful

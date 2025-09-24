@@ -15,7 +15,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
-import java.util.Objects;
+import optimus.interception.StrictEquality;
 
 /*
  * A weak interner that supports custom hashCode/equals. For items that implement
@@ -72,6 +72,19 @@ public class WeakInterner {
   }
 
   public Object intern(Object o) {
+    var fence = StrictEquality.enter();
+    try {
+      return doIntern(o);
+    } finally {
+      StrictEquality.exit(fence);
+    }
+  }
+
+  public Object nonStrictIntern(Object o) {
+    return doIntern(o);
+  }
+
+  private Object doIntern(Object o) {
     int hash = rehash(hashOf(o));
     Node candidate = null;
 

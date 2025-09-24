@@ -22,7 +22,6 @@ import optimus.ui.ScenarioReference
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.Success
@@ -144,19 +143,6 @@ private[optimus] class DependencyTracker private[tracking] (
 
   private[optimus] final val scenarioStack: ScenarioStack = newScenarioStack(cached = true, nodeInputs)
   final val scenarioState: ScenarioState = scenarioStack.asScenarioState
-
-  private[tracking] def snapshotConsistentSubtree: SnapshotScenarioStack = {
-    val childSnapshots = mutable.ArrayBuffer[SnapshotScenarioStack]()
-    val childIt = children.iterator
-    while (childIt.hasNext) {
-      val child = childIt.next()
-      if (!child.scenarioReference.introduceConcurrentSubtree) // snapshot consistent children as they can be overlayed
-        childSnapshots += child.snapshotConsistentSubtree
-    }
-    val scenario = scenarioStack.nestScenariosUpTo(parentScenarioStack)
-    val tags = scenarioStack.siParams.nodeInputs.freeze
-    SnapshotScenarioStack(scenarioReference, scenario, childSnapshots.toArray, tags)
-  }
 
   /**
    * A clone of scenarioStack with transitively cachable set to false.

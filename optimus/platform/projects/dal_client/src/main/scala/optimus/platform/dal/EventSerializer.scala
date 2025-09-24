@@ -17,7 +17,6 @@ import optimus.entity.EntityInfoRegistry
 import optimus.entity.IndexInfo
 import optimus.graph.PropertyInfo
 import optimus.platform._
-import optimus.platform.internal.IgnoreSyncStacksPlugin
 import optimus.platform.internal.TemporalSource
 import optimus.platform.pickling.AbstractPickledOutputStream
 import optimus.platform.pickling.PickledMapWrapper
@@ -27,18 +26,9 @@ import optimus.platform.temporalSurface._
 import optimus.platform.temporalSurface.advanced.TemporalContextUtils
 import optimus.platform.versioning.TransformerRegistry
 
-import java.time.Instant
 import scala.collection.concurrent
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-
-// This is hack to work around the fact that we have a sync stack when doing DALImpl.TemporalContext(...)
-// because of the (eventual) call to FlatTemporalContext.factory.create, which is @si @node.
-// TODO (OPTIMUS-13717): remove this workaround
-@entity private[dal] object NoSyncStackTemporalSurfaceFactoryWorkaround {
-  @node private[dal] def createTemporalContext(vt: Instant, tt: Instant) = DALImpl.TemporalContext(vt, tt)
-  IgnoreSyncStacksPlugin.installIfNeeded(createTemporalContext_info)
-}
 
 sealed trait BusinessEventSerializer extends StorableSerializer {
   private val log = getLogger(this)
@@ -75,11 +65,7 @@ sealed trait BusinessEventSerializer extends StorableSerializer {
     val info = getInfo(ser)
     val properties = if (props.isEmpty) ser.properties else props
 
-    // XXX What should PickledMapWrapper have?
-    val fakeTemporalContext =
-      NoSyncStackTemporalSurfaceFactoryWorkaround.createTemporalContext(
-        ser.validTime,
-        tc.ttContext.getTTForEvent(ser.className))
+    val fakeTemporalContext = DALImpl.TemporalContext(ser.validTime, tc.ttContext.getTTForEvent(ser.className))
     val versioned = version(ser.className, properties, fakeTemporalContext)
     val in = new PickledMapWrapper(versioned, fakeTemporalContext, ser.id)
     val eventInfo = if (persisted) DSIEventInfo(ser.versionId, ser.lockToken, ser.tt) else LocalDALEventInfo

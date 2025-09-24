@@ -196,12 +196,11 @@ import scala.collection.mutable
     val externalArtifacts = runtimeDependencies.transitiveExternalArtifacts
     val resolvedArtifacts =
       externalArtifacts.collect { case c: ResolutionArtifact =>
-        c.result.resolvedArtifacts.filter(_.containsAgent)
+        c.result.resolvedClassFileArtifacts.filter(_.containsAgent)
       }.flatten
 
     internalAgentsForOurRuntime ++ resolvedArtifacts
   }
-
 
   @node def allUpstreamArtifacts: IndexedSeq[Artifact] =
     // ask our upstreams for full compile, compileOnly and runtime artifacts

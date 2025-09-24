@@ -18,8 +18,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.format.ConfigUtils.ConfOps
 import optimus.buildtool.format.Keys.KeySet
 
-import scala.collection.immutable.Seq
-
 object RuleFilterConfigurationCompiler {
   private val allKey = "all"
   private val anyKey = "any"

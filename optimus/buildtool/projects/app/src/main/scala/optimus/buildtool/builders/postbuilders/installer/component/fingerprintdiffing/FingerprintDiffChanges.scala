@@ -13,23 +13,38 @@ package optimus.buildtool.builders.postbuilders.installer.component.fingerprintd
 
 import optimus.buildtool.artifactcomparator.BuildArtifactComparatorParamsLocation
 import optimus.buildtool.builders.postbuilders.installer.component.testplans.Changes
+import optimus.buildtool.builders.postbuilders.installer.component.testplans.GitChanges
+import optimus.buildtool.config.FingerprintsDiffConfiguration
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.platform._
-import optimus.platform.util.Log
 
 import java.io.FileNotFoundException
 import java.nio.file.Path
 
-object FingerprintDiffChanges extends Log {
+@entity class FingerprintDiffChanges(
+    val scopes: Option[Set[ScopeId]],
+    val scopeConfigSource: ScopeConfigurationSource
+) extends Changes
 
-  @async def create(scopeConfigSource: ScopeConfigurationSource, buildPath: Path, installVersion: String): Changes =
-    Changes(changesAsScopes(scopeConfigSource, buildPath, installVersion), scopeConfigSource)
+@entity object FingerprintDiffChanges {
+
+  @async def create(
+      scopeConfigSource: ScopeConfigurationSource,
+      fingerprintsConfig: FingerprintsDiffConfiguration,
+      buildPath: Path,
+      installVersion: String,
+      gitChanges: GitChanges): FingerprintDiffChanges =
+    FingerprintDiffChanges(
+      changesAsScopes(scopeConfigSource, fingerprintsConfig, buildPath, installVersion, gitChanges),
+      scopeConfigSource)
 
   @async private def changesAsScopes(
       scopeConfigSource: ScopeConfigurationSource,
+      fingerprintsConfig: FingerprintsDiffConfiguration,
       buildPath: Path,
-      installVersion: String): Option[Set[ScopeId]] =
+      installVersion: String,
+      gitChanges: GitChanges): Option[Set[ScopeId]] =
     BuildArtifactComparatorParamsLocation.loadDeps(buildPath) match {
       case Left(e: FileNotFoundException) =>
         // Prepare Build Artifact App did not generate file with dependencies, ignore
@@ -37,6 +52,13 @@ object FingerprintDiffChanges extends Log {
         None
       case Left(throwable) => throw throwable
       case Right(deps) =>
-        Some(BuildArtifactComparator(deps, scopeConfigSource, regCopyLocal = false, installVersion).run())
+        Some(
+          BuildArtifactComparator(
+            deps,
+            scopeConfigSource,
+            fingerprintsConfig,
+            regCopyLocal = false,
+            installVersion,
+            gitChanges).run())
     }
 }

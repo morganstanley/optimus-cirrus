@@ -30,7 +30,6 @@ import optimus.stratosphere.bootstrap.FsCampus;
 import optimus.stratosphere.bootstrap.OsSpecific;
 import optimus.stratosphere.bootstrap.StratosphereException;
 import optimus.stratosphere.bootstrap.WorkspaceRoot;
-import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys;
 
 public class StratosphereConfig {
 
@@ -43,14 +42,20 @@ public class StratosphereConfig {
 
   public static String obtVersionProperty = "obt-version";
 
-  private final String stratosphereInfraOverride = System.getenv("STRATOSPHERE_INFRA_OVERRIDE");
-  private final String buildtoolOverride = System.getenv("BUILDTOOL_OVERRIDE");
+  public static String STRATOSPHERE_INFRA_OVERRIDE_ENV_NAME = "STRATOSPHERE_INFRA_OVERRIDE";
+
+  public static String BUILDTOOL_OVERRIDE_ENV_NAME = "BUILDTOOL_OVERRIDE";
+
+  private final String stratosphereInfraOverride;
 
   public static String stratosphereMigrationLocationOverride =
       System.getenv("STRATOSPHERE_MIGRATION_LOCATION_OVERRIDE");
 
   private static final ConfigResolveOptions allowUnresolved =
       ConfigResolveOptions.defaults().setAllowUnresolved(true);
+
+  private static final String versionRegex = "(strato-\\d{4}\\d{2}\\d{2}-\\d+)";
+  private static final Pattern versionPattern = Pattern.compile(versionRegex);
 
   private static String prepareConfigExceptionMessage(ConfigException exception) {
     String msg = exception.getMessage();
@@ -84,8 +89,29 @@ public class StratosphereConfig {
    * @return config for the given workspace
    */
   public static Config loadFromLocation(Path workspaceRoot) {
+    final String stratosphereInfraOverride = System.getenv(STRATOSPHERE_INFRA_OVERRIDE_ENV_NAME);
+    final String buildtoolOverride = System.getenv(BUILDTOOL_OVERRIDE_ENV_NAME);
+    return loadFromLocation(workspaceRoot, stratosphereInfraOverride, buildtoolOverride);
+  }
+
+  /**
+   * Loads the workspace config from current dir. This operation is relatively expensive and should
+   * be cached.
+   *
+   * <p>NOTE: test purposes only
+   *
+   * @param workspaceRoot location to load the workspace config from.
+   * @param stratosphereInfraOverride stratosphere path provided from environment variables
+   * @param buildtoolOverride build tool path provided from environment variables
+   * @return config for the given workspace
+   */
+  protected static Config loadFromLocation(
+      Path workspaceRoot, String stratosphereInfraOverride, String buildtoolOverride) {
     return new StratosphereConfig(
-            workspaceRoot, workspaceRoot == null ? "no-workspace.conf" : "workspace.conf")
+            workspaceRoot,
+            workspaceRoot == null ? "no-workspace.conf" : "workspace.conf",
+            stratosphereInfraOverride,
+            buildtoolOverride)
         .config;
   }
 
@@ -110,7 +136,12 @@ public class StratosphereConfig {
     }
   }
 
-  private StratosphereConfig(Path workspaceRoot, String configName) {
+  private StratosphereConfig(
+      Path workspaceRoot,
+      String configName,
+      String stratosphereInfraOverride,
+      String buildtoolOverride) {
+    this.stratosphereInfraOverride = stratosphereInfraOverride;
     try {
       String repositoryConfigName = getRepositoryConfigName(workspaceRoot);
 
@@ -118,6 +149,12 @@ public class StratosphereConfig {
       addConfig("/etc/" + configName);
       addConfig("/etc/" + OsSpecific.platformString + ".conf");
       addConfig("/etc/application.conf");
+
+      Config tmpConfig = config.resolve(allowUnresolved);
+      if (tmpConfig.hasPath("intellij.config-set")) {
+        String intellijConfigSet = tmpConfig.getString("intellij.config-set");
+        addConfig("/etc/" + intellijConfigSet + ".conf");
+      }
 
       if (stratosphereInfraOverride != null) {
         updateProperty(
@@ -161,13 +198,25 @@ public class StratosphereConfig {
          * during the setup we add `stratosphereHome` to custom.conf. We do that because all commands are run inside
          * src directory, and they need to be able to locate rest of the 'workspace'.
          */
-        updateProperty(
-            "stratosphereHome",
-            trimTrailingSlashes(workspaceRoot.getParent().toAbsolutePath().toString()));
-        updateProperty("stratosphereWorkspace", workspaceRoot.getFileName().toString());
+        Path trainRoot = WorkspaceRoot.trainRoot(workspaceRoot);
+        if (trainRoot != workspaceRoot) {
+          updateProperty(
+              "stratosphereHome",
+              trimTrailingSlashes(trainRoot.getParent().toAbsolutePath().toString()));
+          updateProperty("stratosphereWorkspace", trainRoot.getFileName().toString());
+          updateProperty("stratosphereInstallDir", trainRoot.toAbsolutePath().toString());
+        } else {
+          updateProperty(
+              "stratosphereHome",
+              trimTrailingSlashes(workspaceRoot.getParent().toAbsolutePath().toString()));
+          updateProperty("stratosphereWorkspace", workspaceRoot.getFileName().toString());
+        }
         String srcDir =
             trimTrailingSlashes(workspaceRoot.resolve("src").toAbsolutePath().toString());
         updateProperty("stratosphereSrcDir", srcDir);
+        if (!config.hasPath("stratosphereWsDir")) {
+          updateProperty("stratosphereWsDir", workspaceRoot.toAbsolutePath().toString());
+        }
       }
 
       // resolving to have stratosphereSrcDir, we need it to add sysloc property
@@ -179,6 +228,12 @@ public class StratosphereConfig {
       updateProperty("region.default", fsCampus.getValue());
       updateProperty("region.reports", fsCampus.getAlternativeMapping("report-upload"));
       updateProperty("region.obt-dht", fsCampus.getAlternativeMapping("obt-dht"));
+
+      /*
+       * We need to load the mapping before we start to apply anything related to the channels,
+       * but at the same time as late as possible
+       */
+      loadChannelsThreshold(tmpResolvedConfig);
 
       // re-resolve to have region properties
       tmpResolvedConfig = config.resolve(allowUnresolved);
@@ -205,13 +260,7 @@ public class StratosphereConfig {
 
       if (stratosphereInfraOverride != null) {
         updateProperty(
-            stratosphereVersionProperty,
-            Paths.get(stratosphereInfraOverride)
-                .normalize()
-                .getParent()
-                .getParent()
-                .getFileName()
-                .toString());
+            stratosphereVersionProperty, extractVersion(Paths.get(stratosphereInfraOverride)));
       } else {
         mapProperty(stratosphereVersionProperty, tmpResolvedConfig);
         String stratosphereVersion = config.getString(stratosphereVersionProperty);
@@ -228,28 +277,6 @@ public class StratosphereConfig {
           addConfig(workspaceRoot, "src/profiles/" + profileName + ".conf");
         }
       }
-
-      // We need to add this on the bootstrap level,
-      // because potential migration affects also workspaces with older versions of stratosphere
-      addConfig("/etc/migration-messages.conf");
-      Path migrationConfigLocation =
-          getMigrationConfigLocation(
-              tmpResolvedConfig.getString("internal.paths.migration-config"));
-      addConfig(migrationConfigLocation, "repoMigration.conf");
-      updateProperty(
-          HistoryTruncationConfigKeys.selectedMigrationConfigLocation,
-          migrationConfigLocation.toAbsolutePath().toString());
-
-      // resolving to use proper Scala version in further resolves
-      tmpResolvedConfig = config.resolve(allowUnresolved);
-      ScalaDependency scalaDependency =
-          ScalaDependency.get(
-              tmpResolvedConfig.getString("scalaVersion"),
-              tmpResolvedConfig.getString("internal.scala.nightly-location"),
-              tmpResolvedConfig.getString("internal.scala.release-location"));
-      updateProperty("scalaVersion", scalaDependency.version);
-      updateProperty("scalaMajorVersion", scalaDependency.getMajorVersion());
-      scalaDependency.customRepo.ifPresent(this::addCustomScalaRepository);
 
       // resolving to have version visible
       config = config.resolve(allowUnresolved);
@@ -279,11 +306,10 @@ public class StratosphereConfig {
         updateProperty("stratosphereHome", stratosphereHomeOutsideOfWorkspace());
       }
 
-      String stratosphereHome = config.getString("stratosphereHome");
-      String stratosphereWorkspace = config.getString("stratosphereWorkspace");
-      Path stratosphereWsDir = Paths.get(stratosphereHome).resolve(stratosphereWorkspace);
-
       if (!config.hasPath("stratosphereWsDir")) {
+        String stratosphereHome = config.getString("stratosphereHome");
+        String stratosphereWorkspace = config.getString("stratosphereWorkspace");
+        Path stratosphereWsDir = Paths.get(stratosphereHome).resolve(stratosphereWorkspace);
         updateProperty("stratosphereWsDir", stratosphereWsDir.toString());
       }
 
@@ -331,6 +357,16 @@ public class StratosphereConfig {
       } else {
         throw new StratosphereException(msg, configException);
       }
+    }
+  }
+
+  private String extractVersion(Path path) {
+    Path basePath = path.normalize();
+    Matcher matcher = versionPattern.matcher(basePath.toString());
+    if (matcher.find()) {
+      return matcher.group(1);
+    } else {
+      return basePath.getParent().getParent().getFileName().toString();
     }
   }
 
@@ -393,6 +429,10 @@ public class StratosphereConfig {
 
   private Config withConfig(Path basePath, String path, Config config) {
     Path confFile = basePath.resolve(path);
+    return withConfig(confFile, config);
+  }
+
+  private Config withConfig(Path confFile, Config config) {
     if (Files.exists(confFile)) {
       Config newConfig = ConfigFactory.parseFile(confFile.toFile());
       return (config != null) ? newConfig.withFallback(config) : newConfig;
@@ -411,6 +451,14 @@ public class StratosphereConfig {
             propertyName, currentVersion, newVersion);
         updateProperty(propertyName, newVersion);
       }
+    }
+  }
+
+  private void loadChannelsThreshold(final Config tmpConfig) {
+    if (tmpConfig.hasPath(StratosphereChannelsConfig.externalThresholdsLocation)) {
+      Path tmpConfigFile =
+          Paths.get(tmpConfig.getString(StratosphereChannelsConfig.externalThresholdsLocation));
+      if (Files.exists(tmpConfigFile)) config = withConfig(tmpConfigFile, config);
     }
   }
 
@@ -433,11 +481,6 @@ public class StratosphereConfig {
 
   private void updateProperty(String propertyName, ConfigValue newValue) {
     config = config.withValue(propertyName, newValue);
-  }
-
-  private void addCustomScalaRepository(ScalaDependency.IvyRepository repo) {
-    updateProperty("scala.customRepo.ivyPattern", repo.ivyPattern);
-    updateProperty("scala.customRepo.artifactPattern", repo.artifactPattern);
   }
 
   private String replaceLast(String string, String substring, String replacement) {

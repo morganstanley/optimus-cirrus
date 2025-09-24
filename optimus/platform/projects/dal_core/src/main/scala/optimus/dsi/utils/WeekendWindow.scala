@@ -17,8 +17,9 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.temporal.ChronoField
 import java.time.temporal.TemporalAdjusters
-
 import optimus.config.RuntimeEnvironmentEnum
+import optimus.dsi.utils.WeekendWindow.calculateWeekendTcmFridayCutoffNewyork
+import optimus.dsi.utils.WeekendWindow.weekendTcmFridayCutoffNewYork
 import optimus.platform.dal.config.DALEnvs
 import optimus.platform.dal.config.DalEnv
 
@@ -26,9 +27,27 @@ object WeekendWindow {
   private val weekendWindowPattern = """(FRI|SAT|SUN)(\d\d)-(FRI|SAT|SUN)(\d\d)""".r
   private val weekendWindowPatternWithMinutes = """(FRI|SAT|SUN)(\d\d):(\d\d)-(FRI|SAT|SUN)(\d\d):(\d\d)""".r
   val zone = ZoneId.of("America/New_York")
+  private[optimus] val weekendTcmFridayCutoffNewYork = System.getProperty(
+    "dal.ent.weekend.tcm.friday.cutoff.newyork",
+    "07:00:00"
+  ) // 7:00 AM in America/New_York which is 11:00 AM UTC
   val DefaultProdWindow = "SAT09-SUN11"
   val DefaultNonProdWindow = "FRI19:30-SUN19:30"
   val WeekendWindowProperty = "optimus.dal.weekend.window"
+
+  def calculateWeekendTcmFridayCutoffNewyork: LocalDateTime = {
+    val cutoffTime = weekendTcmFridayCutoffNewYork.split(":")
+    val hour = cutoffTime(0).toInt
+    val minute = cutoffTime(1).toInt
+
+    LocalDateTime
+      .now(WeekendWindow.zone)
+      .`with`(TemporalAdjusters.nextOrSame(DayOfWeek.FRIDAY))
+      .`with`(ChronoField.HOUR_OF_DAY, hour)
+      .`with`(ChronoField.MINUTE_OF_HOUR, minute)
+      .`with`(ChronoField.SECOND_OF_MINUTE, 0)
+      .`with`(ChronoField.MILLI_OF_SECOND, 0)
+  }
 
   def byEnv(env: DalEnv): WeekendWindow = {
     DALEnvs.envInfoRuntime(DalEnv(env.mode)) match {
@@ -146,6 +165,19 @@ final case class WeekendWindow(
    * left in current window Else return time interval of next full window.
    */
   def currentOrNextWindow(from: LocalDateTime, minLength: Duration): LocalDateTimeWindow = {
+
+    val weekendTCMCutoffFriday = calculateWeekendTcmFridayCutoffNewyork
+
+    // Check for weekend TCM if from is after the cutoff time on the specified day
+    if (from.isAfter(weekendTCMCutoffFriday)) {
+      // Move to the next Friday at 1:00 AM to ensure the next window starts in the subsequent week before the cutoff time
+      return currentOrNextWindow(
+        from
+          .`with`(TemporalAdjusters.next(DayOfWeek.FRIDAY))
+          .`with`(ChronoField.HOUR_OF_DAY, 1)
+          .`with`(ChronoField.MINUTE_OF_HOUR, 0)
+      )
+    }
     val first = currentOrNextWindow(from)
     val duration = Duration.between(first.from, first.to)
     if (duration.compareTo(minLength) < 0) {

@@ -17,22 +17,16 @@ import optimus.graph.OGSchedulerContext
 import optimus.graph.SchedulerPlugin
 import optimus.graph.Settings
 
-private[internal] object LAST extends SchedulerPlugin { def adapt(n: NodeTask, ec: OGSchedulerContext) = false }
-
-object IgnoreSyncStacksPlugin {
+object IgnoreSyncStacksPlugin extends SchedulerPlugin {
   def installIfNeeded(nodes: NodeTaskInfo*): Unit = {
     if (Settings.syncStacksDetectionEnabled) nodes foreach { taskInfo =>
       require(!taskInfo.shouldLookupPlugin(), s"There should not already be a plugin set on ${taskInfo.name}")
-      taskInfo.setPlugin(basic)
+      taskInfo.setPlugin(IgnoreSyncStacksPlugin)
     }
   }
-  private val basic = new IgnoreSyncStacksPlugin(LAST)
-}
-
-class IgnoreSyncStacksPlugin private (next: SchedulerPlugin) extends SchedulerPlugin {
   def adapt(n: NodeTask, ec: OGSchedulerContext): Boolean = {
     val newStack = n.scenarioStack().ensureIgnoreSyncStack
     n.replace(newStack)
-    next.readapt(n, ec)
+    false
   }
 }

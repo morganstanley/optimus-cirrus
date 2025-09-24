@@ -15,7 +15,6 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.config.ModuleId
-import scala.collection.immutable.Seq
 
 abstract class Analyzer[T](msgs: Seq[MessagesArtifact], predicate: CompilationMessage => Boolean) {
   def groupByModule: Map[ModuleId, Seq[MessagesArtifact]] = msgs.groupBy(_.id.scopeId.fullModule)

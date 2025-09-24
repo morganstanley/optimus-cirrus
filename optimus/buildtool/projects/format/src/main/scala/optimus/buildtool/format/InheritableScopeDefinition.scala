@@ -27,8 +27,6 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 
-import scala.collection.immutable.Seq
-
 final case class PostInstallApp(name: String, args: Seq[String], afterInstall: Boolean)
 
 final case class InheritableScopeDefinition(
@@ -62,6 +60,7 @@ final case class InheritableScopeDefinition(
     mavenOnly: Option[Boolean],
     skipDependencyMappingValidation: Option[Boolean],
     allowUnorderedAndDuplicateDependencies: Option[Boolean],
+    allowSetViolatingCustomScopes: Option[Boolean],
     relationships: Seq[ScopeRelationship],
     extraLibs: Dependencies,
     forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
@@ -103,6 +102,7 @@ final case class InheritableScopeDefinition(
       skipDependencyMappingValidation = skipDependencyMappingValidation.orElse(parent.skipDependencyMappingValidation),
       allowUnorderedAndDuplicateDependencies =
         allowUnorderedAndDuplicateDependencies.orElse(parent.allowUnorderedAndDuplicateDependencies),
+      allowSetViolatingCustomScopes = allowSetViolatingCustomScopes.orElse(parent.allowSetViolatingCustomScopes),
       relationships = relationships ++ parent.relationships,
       extraLibs = extraLibs ++ parent.extraLibs,
       forbiddenDependencies = forbiddenDependencies ++ parent.forbiddenDependencies,
@@ -149,6 +149,7 @@ object InheritableScopeDefinition {
     mavenOnly = None,
     skipDependencyMappingValidation = None,
     allowUnorderedAndDuplicateDependencies = None,
+    allowSetViolatingCustomScopes = None,
     relationships = Nil,
     extraLibs = Dependencies.empty,
     forbiddenDependencies = Nil,

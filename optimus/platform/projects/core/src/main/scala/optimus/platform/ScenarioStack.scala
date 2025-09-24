@@ -164,6 +164,16 @@ final case class ScenarioStack private[optimus] (
     @volatile private[optimus] var _stableSS: ScenarioStack = null,
     private[optimus] var pss: PScenarioStack = null
 ) extends Serializable {
+  import CancelScopeAndEnvironmentIdPacker._
+
+  private[optimus] val cancelScopeAndEnvId: Long = {
+    val envId = if (ssShared ne null) ssShared.environmentWithoutTrackingAccess.sequenceId else 0
+    val csId = siParams.cancelScope.sequenceId
+    packCancelScopeAndEnvId(csId, envId)
+  }
+
+  private[optimus] def cancellationScopeId: Long = unpackCancelScopeId(cancelScopeAndEnvId)
+  private[optimus] def envId: Long = unpackEnvId(cancelScopeAndEnvId)
 
   if (_stableSS eq null)
     _stableSS = this
@@ -207,7 +217,7 @@ final case class ScenarioStack private[optimus] (
   def asSiStack(locMarker: AnyRef): ScenarioStack =
     if (isScenarioIndependent) this
     else {
-      val flagsToPropagate = flags & EvaluationState.FLAGS_TO_PROPAGATE_TO_SI_STACK
+      val flagsToPropagate = flags & EvaluationState.NON_SCENARIO_FLAGS
       val si = siRoot
       // only create a new SiScenario stack if we have to
       if (ScenarioStack.equivSIParams(this, si)) si
@@ -249,7 +259,7 @@ final case class ScenarioStack private[optimus] (
           //  we simply refuse to compare equal scenario stacks that have different listeners.
           //
           // Also of possible interest is the fact that tweakableListener is a var. This means that it is possible to
-          // have scenario stacks that compare equals but have different hashcodes, if the hashcodes were computed
+          // have scenario stacks that compare equals but have different hash codes, if the hash codes were computed
           // before an update to the tweakableListeners. I don't think this ever happens currently.
           (tweakableListener.underlyingListener eq that.tweakableListener.underlyingListener) &&
             that.getClass == getClass &&
@@ -342,6 +352,18 @@ final case class ScenarioStack private[optimus] (
   }
 
   def env: RuntimeEnvironment = if (ssShared ne null) ssShared.environment else null
+
+  /**
+   * gets the root ChainedID from the environment without tracking the access of the environment. This is only safe
+   * to use if the ChainedID does not affect the result of any nodes. For example, it's fine to use this for logging
+   * or breadcrumbs. It's INCORRECT to return the ChainedID from a node after obtaining it this way - in that case
+   * you should obtain it via this.env.config.runtimeConfig.rootID so that the access is tracked for cache keying.
+   */
+  def rootIDWithoutTrackingAccess: ChainedID = {
+    val conf = ssShared.environmentWithoutTrackingAccess.config
+    if (conf ne null) conf.runtimeConfig.rootID else null
+  }
+
   def rootScenarioStack: ScenarioStack = ssShared.scenarioStack
   def siRoot: ScenarioStack = ssShared.siStack
   def asSiStack: ScenarioStack = asSiStack(null)
@@ -361,6 +383,9 @@ final case class ScenarioStack private[optimus] (
   def requireJobConfiguration[T <: JobConfiguration]: T = jobConfiguration.asInstanceOf[T]
   def ignoreSyncStacks: Boolean = (flags & EvaluationState.IGNORE_SYNC_STACKS) != 0
   def failOnSyncStacks: Boolean = (flags & EvaluationState.FAIL_ON_SYNC_STACKS) != 0
+  // TODO (OPTIMUS-78287): - See note referencing this JIRA in ReflectivePicklingImpl.unpickleFill regarding the need
+  // for this check and when it can be removed
+  def picklingInterningDisabled: Boolean = (flags & EvaluationState.DISABLE_PICKLING_INTERNING) != 0
   def auditorCallbacksDisabled: Boolean = (flags & EvaluationState.AUDITOR_CALLBACKS_DISABLED) != 0
   def cachedTransitively: Boolean = (flags & EvaluationState.CACHED_TRANSITIVELY) != 0
   def isScenarioIndependent: Boolean = (flags & EvaluationState.SCENARIO_INDEPENDENT_STACK) != 0
@@ -490,16 +515,27 @@ final case class ScenarioStack private[optimus] (
         TweakExpander.expandTweaks(scenario, this)
       } else scenario
 
+      val lookupObject = OGTrace.observer.lookupStartScenario(givenNode)
+
       val cacheKey = new SSCacheKey(_cacheID.id, expandedScenario)
       val freshCacheID = SSCacheID.newUninitialized(expandedScenario)
-      val cacheID = CacheIDs.putIfAbsent(cacheKey, freshCacheID)
+      val cacheID =
+        if (lookupObject.cache) CacheIDs.putIfAbsent(cacheKey, freshCacheID)
+        else {
+          freshCacheID.ensureInitialized()
+          freshCacheID
+        }
+
+      val cacheHit = cacheID ne freshCacheID
+      OGTrace.observer.lookupAdjustCacheStats(lookupObject, cacheHit)
+
       // tweaks effecting values (aka RT) are the same but other flags are not.
       // create a new child sharing the cacheID of the one we got from cache
       val ss = initChild(scenario, frozen, extraFlags, tl, cacheID, name)
       // the line above will cause expansion of tweaks if needed
 
       if (NodeTrace.profileSSUsage.getValue)
-        Profiler.t_sstack_usage(ss, givenNode, cacheID ne freshCacheID)
+        Profiler.t_sstack_usage(ss, givenNode, cacheHit)
       ss
     }
   }
@@ -641,11 +677,11 @@ final case class ScenarioStack private[optimus] (
       overlay: Scenario,
       frozen: FrozenNodeInputMap,
       ref: ScenarioReference): ScenarioStack = {
-    createChild(overlay, frozen, 0, this, name = ref.name)
+    createChild(overlay, frozen, 0, classOf[ScenarioStack] /* id for the debugger UI*/, name = ref.name)
   }
 
   private[optimus] def fromScenarioAndSnapshot(scen: Scenario, sss: SnapshotScenarioStack): ScenarioStack =
-    createChild(scen, sss.nodeInputs.freeze, 0, this, name = sss.ref.name)
+    createChild(scen, sss.nodeInputs.freeze, 0, classOf[ScenarioStack], name = sss.ref.name)
 
   /** tracking overlay */
   private[optimus] def withOverlay(overlayScenarioRef: ScenarioReference, overlaySS: ScenarioStack): ScenarioStack = {
@@ -751,7 +787,7 @@ final case class ScenarioStack private[optimus] (
       }
   }
 
-  private[optimus] def withScopePath(scopePath: String): ScenarioStack = {
+  def withScopePath(scopePath: String): ScenarioStack = {
     if (scopePath == null || scopePath.isEmpty) this
     else {
       val profileBlockID =
@@ -910,8 +946,12 @@ final case class ScenarioStack private[optimus] (
   /**
    * creates a new ScenarioStack with the scenario from this, but the non-scenario properties from other
    */
-  def withNonScenarioPropertiesFrom(other: ScenarioStack, clearFlags: Int = 0): ScenarioStack =
-    copy(flags = other.flags & ~clearFlags, siParams = other.siParams)
+  def withNonScenarioPropertiesFrom(other: ScenarioStack): ScenarioStack = {
+    // we take non-scenario flags from other, and scenario flags from this
+    val flagsFromOther = other.flags & EvaluationState.NON_SCENARIO_FLAGS
+    val flagsFromThis = flags & ~EvaluationState.NON_SCENARIO_FLAGS
+    copy(flags = flagsFromOther | flagsFromThis, siParams = other.siParams)
+  }
 
   def withJobConfiguration(jobConfiguration: JobConfiguration): ScenarioStack =
     withSIParams(siParams.copy(jobConfiguration = jobConfiguration))
@@ -958,10 +998,10 @@ final case class ScenarioStack private[optimus] (
         ChainedID.root
       else if (cur.trackingNodeID eq null) {
         if (cur.ssShared ne null) {
-          val config = cur.ssShared.environment.config
+          // chainedID only used for diagnostics so we won't track usage of env
+          val rootID = cur.rootIDWithoutTrackingAccess
           // Because DSIRuntimeEnvironment tends to lack config, and mock runtimes lack rootID
-          if ((config ne null) && (config.runtimeConfig.rootID ne null)) config.runtimeConfig.rootID
-          else ChainedID.root
+          if (rootID ne null) rootID else ChainedID.root
         } else ChainedID.root
       } else
         cur.trackingNodeID
@@ -981,7 +1021,7 @@ final case class ScenarioStack private[optimus] (
       if (cur eq null)
         ChainedID.root
       else if (cur.trackingNodeID eq null) // we're already at the top
-        cur.ssShared.environment.config.runtimeConfig.rootID
+        cur.rootIDWithoutTrackingAccess // rootID only used for diagnostics so we won't track the access
       else {
         val id = cur.trackingNodeID
         // Search up the stack for a different tracking id
@@ -991,7 +1031,7 @@ final case class ScenarioStack private[optimus] (
         if (cur eq null)
           ChainedID.root
         else if (cur.trackingNodeID eq null) // we're already at the top
-          cur.ssShared.environment.config.runtimeConfig.rootID
+          cur.rootIDWithoutTrackingAccess
         else
           cur.trackingNodeID
       }
@@ -1004,7 +1044,7 @@ final case class ScenarioStack private[optimus] (
       new TwkResolver(requesting, key, startSS = this, trackWhenClause)
     } else if (isSelfOrAncestorScenarioIndependent) {
       // If the node was wasTweakedAtLeastOnce then the TwkResolver will take care of SI checking, but if not we must
-      // check it here. If we or any of our ancestors are SI then we immediately know that this tweakble lookup is
+      // check it here. If we or any of our ancestors are SI then we immediately know that this tweakable lookup is
       // illegal (we don't need to worry about the legal case where the tweakable was tweaked somewhere inside the
       // SI stack, because we know it was never tweaked).
       throw new IllegalScenarioDependenceException(key, requesting)

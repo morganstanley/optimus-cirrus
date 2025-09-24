@@ -24,7 +24,6 @@ import optimus.buildtool.files.Directory
 import optimus.platform._
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 
 class MessageReporter(
     obtConfig: ObtConfig,
@@ -72,7 +71,10 @@ class MessageReporter(
 
   @async private def writeOptimusWarningReports(buildResult: CompletedBuildResult): Unit = warningsDir.foreach { dir =>
     val msgs = buildResult.messageArtifacts
-    val filesToReport = csvReporter.writeOptimusWarningReports(dir, msgs) ++ csvReporter.writeAlertReport(dir, msgs)
+    val filesToReport =
+      csvReporter.writeOptimusWarningReports(dir, msgs) ++
+        csvReporter.writeAlertReport(dir, msgs) ++
+        csvReporter.writeInfoReport(dir, msgs)
     if (filesToReport.nonEmpty) {
       val zipAsset = dir.resolveFile("warnings-report.zip")
       val entries = filesToReport.toCompress.map(f => ArchiveEntry(f, dir.relativize(f)))

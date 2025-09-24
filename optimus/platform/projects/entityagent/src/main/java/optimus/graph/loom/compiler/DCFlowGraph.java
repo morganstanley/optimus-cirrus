@@ -168,4 +168,12 @@ class DCFlowGraph {
     block.blockID = blocks.size();
     blocks.add(block);
   }
+
+  public Type[] outVarTypes() {
+    var r = new Type[vars.length];
+    for (int i = 0; i < vars.length; i++) {
+      r[i] = vars[i] == null ? null : vars[i].resultType;
+    }
+    return r;
+  }
 }

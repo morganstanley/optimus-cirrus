@@ -13,7 +13,6 @@ package optimus.platform.catalog
 
 import optimus.platform.catalog
 import optimus.platform.catalog.DataQualityDimension.DataQualityDimension
-import scala.collection.immutable.Seq
 
 // docs-snippet:Controls
 object DataQualityDimension extends Enumeration {

@@ -20,6 +20,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+import optimus.debug.CommonAdapter;
 import optimus.graph.loom.compiler.LCompiler;
 import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.Handle;
@@ -130,7 +133,9 @@ public class LoomAdapter implements Opcodes {
   // [INNER_NAME] local names like anon$func$1 -> enriched name
   private final HashMap<String, EnrichedName> nameTranslate = new HashMap<>();
   /* method, null*/
-  private final HashMap<LNodeCall, LNodeCall> nodeCalls = new HashMap<>();
+  private final HashMap<LNodeCall, Set<String>> nodeCalls = new HashMap<>();
+  // sentinel
+  private static final Set<String> NO_OVERLOADS = Collections.unmodifiableSet(new HashSet<>());
 
   /* lambdas, column number */
   private final HashMap<String, Integer> lambdasWithCN = new HashMap<>();
@@ -146,6 +151,10 @@ public class LoomAdapter implements Opcodes {
     this.mangledClsName = mangleName(cls.name);
   }
 
+  boolean debugRetainModifiedByteCode() {
+    return classCompilerArgs.retainModifiedByteCode;
+  }
+
   public void transform() {
     // Order here is important...
     setupNodeAndLambdaCalls();
@@ -156,6 +165,7 @@ public class LoomAdapter implements Opcodes {
     transformNodeFunctions(); // Function call re-ordering
     implementDeserializeLLambda();
     implementPrivateLoomMethods();
+    forwardQueuedMethods();
   }
 
   /**
@@ -200,9 +210,22 @@ public class LoomAdapter implements Opcodes {
 
   private void trackNodeCalls(ArrayList<String> value) {
     String owner = null;
-    for (var ownerOrMethod : value) {
-      if (ownerOrMethod.indexOf('/') > 0) owner = ownerOrMethod;
-      else nodeCalls.putIfAbsent(new LNodeCall(owner, ownerOrMethod), null);
+    LNodeCall method = null;
+    Set<String> signatures = null;
+    for (var token : value) {
+      if (token.startsWith("(")) {
+        if (signatures == null) {
+          signatures = new HashSet<>();
+          nodeCalls.put(method, signatures);
+        }
+        signatures.add(token);
+      } else if (token.indexOf('/') >= 0) {
+        owner = token;
+      } else {
+        method = new LNodeCall(owner, token);
+        signatures = null;
+        nodeCalls.putIfAbsent(method, NO_OVERLOADS);
+      }
     }
   }
 
@@ -343,7 +366,8 @@ public class LoomAdapter implements Opcodes {
   }
 
   public boolean isNodeCall(MethodInsnNode methodInsn) {
-    return nodeCalls.containsKey(new LNodeCall(methodInsn.owner, methodInsn.name));
+    var entry = nodeCalls.getOrDefault(new LNodeCall(methodInsn.owner, methodInsn.name), null);
+    return entry != null && (entry == NO_OVERLOADS || entry.contains(methodInsn.desc));
   }
 
   public boolean isImmutable(String clsName) {
@@ -412,9 +436,21 @@ public class LoomAdapter implements Opcodes {
     mv.visitInsn(Opcodes.ARETURN);
   }
 
+  /**
+   * Write
+   *
+   * <pre>
+   * int orgMethod() = nodeFactory.[lookup]AndGet()
+   * int orgMethod$queued() = nodeFactory().[lookupAnd]Enqueue
+   * int orgMethod$newNode() = nodeFactory()
+   * </pre>
+   *
+   * Note: no 'lookup' for non-nodes since no cache and tweak lookup is needed
+   */
   private void implementPrivateLoomMethods() {
     for (var nm : asyncMethods) {
-      nm.writeNodeSyncFunc(cls);
+      var loomName = mkLoomName(mangledClsName, nm.method.name);
+      nm.writeNodeSyncFunc(cls, loomName);
       // Preserve the attribute on the original method
       var newSyncEntry = cls.methods.get(cls.methods.size() - 1);
       // Preserve visible annotations so that they can be visible at runtime by user code
@@ -426,14 +462,159 @@ public class LoomAdapter implements Opcodes {
       if (nm.implFieldDesc != null) {
         cls.methods.remove(nm.method);
       } else {
-        nm.method.name = mkLoomName(mangledClsName, nm.method.name);
-        // we can just drop the annotations
-        nm.method.visibleAnnotations = null;
+        // Renamed the original method (aka "Copies") with mangled name
+        // It has to become private, as calling it externally (from a generated node)
+        // should call only this method and not its overrides
+        nm.method.name = loomName;
+        nm.method.visibleAnnotations = null; // we can just drop the annotations
         nm.method.invisibleAnnotations = null;
         nm.method.parameters = null;
         nm.method.access = makePrivate(nm.method.access);
       }
     }
+  }
+
+  /**
+   * When we have @nodeSyncLift, the $queued method signature is not the same as the base method
+   * Loom will retain calls to the base method and not modify them to call $queued with new args The
+   * user is expected to have manually implemented $queued in terms of Node If the user has not also
+   * implemented a Loom specific overload of $queued, automatically add it
+   */
+  private void forwardQueuedMethods() {
+    var nodeSyncLiftMethods =
+        cls.methods.stream()
+            .filter(
+                m ->
+                    m.invisibleAnnotations != null
+                        && m.invisibleParameterAnnotations != null
+                        && m.invisibleAnnotations.stream()
+                            .anyMatch(a -> a.desc.equals(NodeSyncLiftAnnotation)))
+            .collect(Collectors.toList());
+
+    // there are only ~200 @nodeSyncLift methods in the code base
+    nodeSyncLiftMethods.forEach(
+        baseMethod -> {
+          var queuedMethodName = mkQueuedName(mangledClsName, baseMethod.name);
+
+          if (cls.methods.stream()
+              .anyMatch(
+                  m ->
+                      m.name.equals(queuedMethodName)
+                          && sameArguments(baseMethod.desc, m.desc)
+                          && Type.getMethodType(m.desc).getReturnType().equals(NODE_FUTURE_TYPE))) {
+            // someone already wrote this method manually
+            // NOTE: the user MAY have implemented the non-loom version in terms of NODE_FUTURE
+            //   if the method signature is identical to the one we want to add, then we can't
+            return;
+          }
+
+          var baseMethodType = Type.getMethodType(baseMethod.desc);
+          var baseMethodArgumentTypes = baseMethodType.getArgumentTypes();
+
+          // we will forward to a $queued method with the same signature as the base method
+          // but with the nodeLifted arguments and the return type changing
+          var hasNodeLift = false;
+          var targetMethodArgumentTypes = new Type[baseMethodArgumentTypes.length];
+          for (int i = 0; i < baseMethodArgumentTypes.length; i++) {
+            var argAnnotations = baseMethod.invisibleParameterAnnotations[i];
+            var baseArgumentType = baseMethodArgumentTypes[i];
+            if (argAnnotations != null
+                && argAnnotations.stream()
+                    .anyMatch(
+                        a ->
+                            a.desc.equals(NodeLiftAnnotation)
+                                || a.desc.equals(NodeLiftByNameAnnotation))) {
+              hasNodeLift = true;
+
+              if (baseArgumentType.equals(SCALA_FUNCTION0_TYPE)) {
+                // (f: => T)   becomes  (f: Node[T])
+                targetMethodArgumentTypes[i] = NODE_TYPE;
+              } else if (baseArgumentType.equals(SCALA_FUNCTION1_TYPE)
+                  || baseArgumentType.equals(SCALA_FUNCTION2_TYPE)
+                  || baseArgumentType.equals(SCALA_FUNCTION3_TYPE)) {
+                // (f: FunctionN[T])   becomes  (f: FuncionN[Node{T]])
+                // NOTE this has the same erasure!
+                targetMethodArgumentTypes[i] = baseArgumentType;
+              } else {
+                // some unsupported type in a nodeLIft slot. we don't know how to handle it
+                return;
+              }
+            } else {
+              targetMethodArgumentTypes[i] = baseArgumentType;
+            }
+          }
+          if (!hasNodeLift) return;
+
+          var targetMethodPlaceholderType =
+              Type.getMethodType(NODE_TYPE, targetMethodArgumentTypes).getDescriptor();
+
+          var targetMethodCandidates =
+              cls.methods.stream()
+                  .filter(
+                      m ->
+                          m.name.equals(queuedMethodName)
+                              && sameArguments(targetMethodPlaceholderType, m.desc))
+                  .collect(Collectors.toList());
+
+          if (targetMethodCandidates.size() != 1) return;
+
+          var targetMethod = targetMethodCandidates.get(0);
+          var newMethodType = Type.getMethodType(NODE_FUTURE_TYPE, baseMethodArgumentTypes);
+
+          if (newMethodType.getDescriptor().equals(targetMethod.desc)) {
+            return;
+          }
+
+          // very simple.  forward to the other $queued method.  Any nodeLifted arg needs
+          // to be converted to be node based instead of a raw function
+          try (var mv =
+              newMethod(cls, baseMethod.access, queuedMethodName, newMethodType.getDescriptor())) {
+            var isInterface = CommonAdapter.isInterface(cls.access);
+            var isStatic = CommonAdapter.isStatic(baseMethod.access);
+
+            if (!isStatic) {
+              mv.loadThis();
+            }
+            for (int i = 0; i < targetMethodArgumentTypes.length; i++) {
+              mv.loadArg(i);
+              // need to convert to node
+              if (targetMethodArgumentTypes[i].equals(NODE_TYPE)) {
+                mv.visitMethodInsn(
+                    INVOKESTATIC,
+                    PLUGIN_HELPERS,
+                    PLUGIN_HELPERS_TO_NODE,
+                    PLUGIN_HELPERS_TO_NODE_DESC,
+                    false);
+              } else if (targetMethodArgumentTypes[i].equals(SCALA_FUNCTION1_TYPE)) {
+                mv.visitMethodInsn(
+                    INVOKESTATIC,
+                    PLUGIN_HELPERS,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY_1_DESC,
+                    false);
+              } else if (targetMethodArgumentTypes[i].equals(SCALA_FUNCTION2_TYPE)) {
+                mv.visitMethodInsn(
+                    INVOKESTATIC,
+                    PLUGIN_HELPERS,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY_2_DESC,
+                    false);
+              } else if (targetMethodArgumentTypes[i].equals(SCALA_FUNCTION3_TYPE)) {
+                mv.visitMethodInsn(
+                    INVOKESTATIC,
+                    PLUGIN_HELPERS,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY,
+                    PLUGIN_HELPERS_TO_NODE_FACTORY_3_DESC,
+                    false);
+              }
+            }
+
+            var opCode = isStatic ? INVOKESTATIC : isInterface ? INVOKEINTERFACE : INVOKEVIRTUAL;
+
+            mv.visitMethodInsn(opCode, cls.name, targetMethod.name, targetMethod.desc, isInterface);
+            mv.returnValue();
+          }
+        });
   }
 
   /** Find matching NodeMethod using clean names. */
@@ -470,6 +651,8 @@ public class LoomAdapter implements Opcodes {
 
   private NodeMethod methodAsync(MethodNode method) {
     if ((method.access & NON_NODE_ACCESS) != 0) return null;
+    // interned embeddable constructors get @node annotations
+    if ("<init>".equals(method.name)) return null;
     if (method.visibleAnnotations == null && method.invisibleAnnotations == null) return null;
     //noinspection StringEquality
     if (implFieldMap.get(method.name) == SKIP_DESC) return null;
@@ -516,6 +699,7 @@ public class LoomAdapter implements Opcodes {
         var name = (String) values.get(i);
         var value = values.get(i + 1);
         if (name.equals(ExposeArgTypesParam)) method.trait = (Boolean) value;
+        else if (name.equals(TraceAlwaysParam)) method.traceAlways = (Boolean) value;
       }
     }
   }

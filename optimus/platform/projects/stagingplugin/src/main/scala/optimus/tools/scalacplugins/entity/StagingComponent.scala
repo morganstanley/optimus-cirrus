@@ -36,11 +36,6 @@ class StagingComponent(
     val staged = newTypeName("staged")
   }
 
-  lazy val DefaultSeq_toVarargsSeq: Symbol = {
-    val mod = rootMirror.getModuleIfDefined("optimus.scala212.DefaultSeq")
-    mod.info.decl(newTermName("toVarargsSeq"))
-  }
-
   // Since this necessarily runs pre-typer, we have no idea what the actual annotation is.
   // This used to go through some contortions to support @platform.staged and @optimus.platform.staged,
   // but since that's already somewhat best effort and error-prone we may as well just admit to the unreliability.
@@ -166,7 +161,7 @@ class StagingComponent(
     }
 
     override def transform(tree: Tree): Tree =
-      if (!stagingEnabled) otherTransforms(tree)
+      if (!stagingEnabled) super.transform(tree)
       else
         tree match {
           case ModuleDef(_, name, t @ Template(_, _, init :: If(ann @ Annotated(annot, cond), ttree, ftree) :: Nil))
@@ -194,29 +189,8 @@ class StagingComponent(
             if (eval(cond)) transform(ttree)
             else transform(ftree)
           case _ =>
-            otherTransforms(tree)
+            super.transform(tree)
         }
-
-    private var suppressVarargsTransform: Boolean = false
-    private def otherTransforms(tree: Tree): Tree = tree match {
-      case Typed(expr, ws @ Ident(tpnme.WILDCARD_STAR))
-          if !suppressVarargsTransform && pluginData.varargs213Compat && DefaultSeq_toVarargsSeq != NoSymbol =>
-        // Automatically convert s.c.Seq to s.c.i.Seq when targetting Scala 2.13. This will be removed
-        // in favour of explicit rewrites of source code once 2.12 support is dropped.
-        // TODO (OPTIMUS-48502): Drop this once we drop 2.12 support and then adopt 2.13 meaning of Seq
-        val expr1 = atPos(expr.pos.makeTransparent)(
-          gen.mkMethodCall(gen.mkAttributedRef(DefaultSeq_toVarargsSeq), super.transform(expr) :: Nil))
-        treeCopy.Typed(tree, expr1, ws)
-      // Scala 2.12 and 2.13 have a bug where unstable arguments used as _* parameters to eta expanded methods
-      // cause a compilation error, so we can't do the DefaultSeq_toVarargsSeq rewrite on these
-      case Typed(_, Function(Nil, EmptyTree)) =>
-        val prev = suppressVarargsTransform
-        suppressVarargsTransform = true
-        try super.transform(tree)
-        finally suppressVarargsTransform = prev
-      case _ =>
-        super.transform(tree)
-    }
   }
 
   // this enables us to access pluginData in OptimusMacroReporter by casting Transform$Phase to a PluginDataAccess

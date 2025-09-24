@@ -32,12 +32,14 @@ import optimus.graph.diagnostics.PNodeTask
 import optimus.platform.Tweak
 import optimus.profiler.DebuggerUI
 import optimus.profiler.Generic
+import optimus.profiler.MarkObject
 import optimus.profiler.NodeFormatUI
 import optimus.profiler.extensions.NPTreeNodeExt
 import optimus.profiler.recipes.NodeGraphVisitor
 import optimus.profiler.recipes.NodeGraphVisitor.NodeToUTrackToInvalidate
 import optimus.profiler.ui.NPTableRenderer.TimeFullRange
 import optimus.profiler.ui.NPTableRenderer.TimeSubRange
+import optimus.profiler.ui.NPTableRenderer.ValueWithTooltip
 import optimus.profiler.ui.NodeTreeTable.ExpandConfig
 import optimus.profiler.ui.NodeTreeTable.recomputeMinMaxTime
 import optimus.profiler.ui.common.NodeGroup
@@ -140,12 +142,15 @@ object NodeTreeTable {
       override def valueOf(row: NodeTreeView): Any = row.task.getEntity
       override def computeSummary(table: NPTable[NodeTreeView], indexes: Seq[Int]): AnyRef = "" // Do not aggregate
     },
-    new TableColumnString[NodeTreeView]("Property Flags", 100) {
-      override def valueOf(row: NodeTreeView): String = row.task.propertyFlagsAsString
+    new TableColumn[NodeTreeView]("Property Flags", 100) {
+      override def valueOf(row: NodeTreeView): ValueWithTooltip[String] =
+        ValueWithTooltip(row.task.propertyFlagsAsString, row.task.propertyFlagsAsDetailedString(true))
+
       override def computeSummary(table: NPTable[NodeTreeView], indexes: Seq[Int]): AnyRef = "" // Do not aggregate
     },
-    new TableColumnString[NodeTreeView]("Node Flags", 100) {
-      override def valueOf(row: NodeTreeView): String = row.task.stateAsString
+    new TableColumn[NodeTreeView]("Node Flags", 100) {
+      override def valueOf(row: NodeTreeView): ValueWithTooltip[String] =
+        ValueWithTooltip(row.task.stateAsString, row.task.stateAsDetailedString(true))
       override def computeSummary(table: NPTable[NodeTreeView], indexes: Seq[Int]): AnyRef = "" // Do not aggregate
     },
     new TableColumnCount[NodeTreeView](idColumnName, 100) {
@@ -503,7 +508,8 @@ class NodeTreeTableForGroupedBrowsing(details: NodeView)
 
   /** to allow us to redo grouping in browser */
   private var _browserFilterCallback: Iterable[PNodeTask] => Unit = _
-  private[ui] def setBrowserFilterCallback(callback: Iterable[PNodeTask] => Unit): Unit = _browserFilterCallback = callback
+  private[ui] def setBrowserFilterCallback(callback: Iterable[PNodeTask] => Unit): Unit = _browserFilterCallback =
+    callback
 
   /** need to setRows on the underlying data model before calling updateFilterAndRefresh, then redo browser grouping */
   private[ui] override def updateFilterAndRefresh(): Unit = {
@@ -672,7 +678,8 @@ class NodeTreeView(override val task: PNodeTask, val expandCfg: ExpandConfig, va
 
   override def title: String = {
     val taskName = task.toPrettyName(NodeFormatUI.useEntityType, NodeFormatUI.abbreviateName)
-    if (!task.isDone) "↨" + taskName else taskName
+    val maybeWithMarkedLabel = MarkObject.formatMarkedObject(task.getTask, taskName)
+    if (!task.isDone) "↨" + maybeWithMarkedLabel else maybeWithMarkedLabel
   }
 
   override def printSource(): Unit = task.printSource()

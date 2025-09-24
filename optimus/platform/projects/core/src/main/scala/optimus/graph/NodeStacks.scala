@@ -15,7 +15,7 @@ import msjava.slf4jutils.scalalog._
 import optimus.platform.debugger.StackElemData
 import optimus.platform.debugger.StackElemType
 import optimus.graph.diagnostics.NodeName
-import optimus.platform.EvaluationContext
+import optimus.graph.tracking.EventCause
 import optimus.platform.StartNode
 import optimus.scalacompat.collection._
 
@@ -38,7 +38,7 @@ import scala.jdk.CollectionConverters._
  *
  * case 2 (Worker thread)
  *
- * frame1 frame2 frame3 o.g.OGScheduer$OGThread.run (MARKER)
+ * frame1 frame2 frame3 o.g.OGScheduler$OGThread.run (MARKER)
  *
  *   1. Iterate over the stack elements, splitting the list at the point where we find a MARKER
  *   1. Drop the top sub-list (i.e. part of the stack up to the first MARKER - displayed by default in the debugger).
@@ -53,8 +53,7 @@ import scala.jdk.CollectionConverters._
  * frame1 (thread a) frame2 (thread b) nodeCall1 nodeCall2 frame1 (thread b) nodeCall3 frame1 (thread c) frame2 (thread
  * c) o.g.OGScheduler$OGThread.run
  *
- * Once we have the stacks, we then convert them into a CSV representation (detailed below) that can be parsed by the
- * IntelliJ plugin.
+ * Once we have the stacks, we convert them into jsons that intellij can parse.
  */
 object NodeStacks {
 
@@ -74,72 +73,73 @@ object NodeStacks {
     (className == "optimus.graph.OGScheduler$OGThread" && methodName == "run")
   }
 
-  def jvmStacksSplitBySyncFrame: Map[Thread, IndexedSeq[Seq[StackTraceElement]]] =
-    Thread.getAllStackTraces.asScala.mapValuesNow(splitAtSyncFrame[StackTraceElement](_, isSyncMarker)).toMap
+  private def buildSyncStack(
+      syncStacksForThread: IndexedSeq[IndexedSeq[StackTraceElement]],
+      frame: OGSchedulerContext#SyncFrame): List[StackElem] = {
+    if (DiagnosticSettings.collapseSyncStacksInDebugger) {
+      val ssFrames = syncStacksForThread(frame.index)
+      val waitingOn = frame.getWaitingOn
 
-  @tailrec def splitAtSyncFrame[T](
-      in: Seq[T],
-      isSyncMarker: T => Boolean,
-      out: ArrayBuffer[Seq[T]] = ArrayBuffer.empty[Seq[T]]
-  ): IndexedSeq[Seq[T]] = {
-    in match {
-      // We append to the end of the buffer for efficiency and so must reverse it once we are done
-      case Nil => out.view.reverse.to(ArraySeq)
-      // Need the extra empty frame so that sync frame indices and the output array indices match up
-      case Seq(x) if isSyncMarker(x) =>
-        splitAtSyncFrame(Seq.empty, isSyncMarker, out += Seq.empty)
-      // But we don't want the empty frame if we're not at the end of the stack
-      case x +: xs if isSyncMarker(x) => splitAtSyncFrame(xs, isSyncMarker, out)
-      case _                          =>
-        // If sync frame is not first elem, then size of in is guaranteed to decrease
-        splitAtSyncFrame(in.dropWhile(!isSyncMarker(_)), isSyncMarker, out += in.takeWhile(!isSyncMarker(_)))
-    }
-  }
-
-  // Useful method for debugging in case of parsing issues
-  def debugJvmStacks(): Unit =
-    NodeStacks.jvmStacksSplitBySyncFrame.foreach { case (thread, stacks) =>
-      log.info(thread.getName)
-      var splitIdx = 0
-      stacks.foreach(stack => {
-        log.info(s"Stacks for split: $splitIdx")
-        stack.foreach(elem => log.info(elem.toString))
-        splitIdx += 1
-      })
-    }
-
-  private def getStackElemData(stackElem: StackElem): StackElemData = {
-    stackElem match {
-      case NodeStackElem(ntsk) =>
-        try {
-          val lineNumber = ntsk.stackTraceElem.getLineNumber
-          val (className, methodRawName, methodDisplayName) = {
-            val cls = ntsk.getClass
-            val execInfoName = ntsk.executionInfo().name()
-            ntsk match {
-              case p: PropertyNode[_] =>
-                val owningCls = if (p.entity ne null) p.entity.$info.runtimeClass else cls
-                (owningCls.getName, execInfoName, p.propertyInfo.name())
-              case _ =>
-                // Basically presume that this is manually written node and so get the class and use the run method on it
-                val cleanName = NodeName.cleanNodeClassName(cls)
-                val methodName = cleanName.substring(cleanName.lastIndexOf('.') + 1)
-                (cls.getName, "run", s"$execInfoName $methodName")
-            }
-          }
-          StackElemData(className, methodRawName, s"(node) $methodDisplayName", lineNumber, StackElemType.node)
-        } catch {
-          case ex: Exception =>
-            log.error(s"Unable to extract stack trace information for frame - skipping", ex)
-            StackElemData("unable to extract frame (see log for error)", "UNKNOWN", "UNKNOWN", 1, StackElemType.node)
+      // For most sync stacks, we can find the guilty method that causes the sync stacks by grabbing the waitingOn
+      // and finding the function that (likely) called it. This is a bit of a hack, but it works for normal property
+      // nodes sync stacks.
+      val likelySyncCall = Option(waitingOn)
+        .map(_.classMethodName())
+        .flatMap { toFind =>
+          // we are looking for the frame right *after* the one that has the method name of the waiting on
+          val i = ssFrames.indexWhere(s => toFind.endsWith(s.getMethodName))
+          if ((i > -1) && (i + 1 < ssFrames.length))
+            Some(ssFrames(i + 1))
+          else None
         }
-      case JvmStackElem(elem) =>
-        StackElemData(elem.getClassName, elem.getMethodName, elem.getMethodName, elem.getLineNumber, StackElemType.jvm)
-    }
+        // If we found the parent of the sync stack, we use it in the debugger display in the frame to make it nicer.
+        // for @node foo -> bar1 -> bar2 -> @node baz, we end up with
+        //
+        // (node) baz
+        // (sync stack) bar2
+        // (node) foo
+        //
+        // with "bar1" folded in the sync stack frame, but findable. If we fail to find the our culprit we still have
+        // all the frames folded away, we just show whatever is the top method as our "sync stack", which will probably
+        // be something beautiful like "apply_22_33$fsm<init>" or whatever
+        .getOrElse(ssFrames.head)
 
+      CollapsedJvmStackElem(likelySyncCall, ssFrames.toArray) :: Nil
+    } else syncStacksForThread(frame.index).map(JvmStackElem).toList
   }
 
-  def reconstitutedNodeAndJvmStack(nodeTask: NodeTask): Seq[StackElem] = {
+  def jvmStacksSplitBySyncFrame: Map[Thread, IndexedSeq[IndexedSeq[StackTraceElement]]] =
+    Thread.getAllStackTraces.asScala
+      .mapValuesNow(t => splitAtSyncFrame[StackTraceElement](ArraySeq.unsafeWrapArray(t), isSyncMarker))
+      .toMap
+
+  def splitAtSyncFrame[T](
+      in: ArraySeq[T],
+      isSyncMarker: T => Boolean
+  ): IndexedSeq[IndexedSeq[T]] = {
+    @tailrec def splitRec(
+        in: ArraySeq[T],
+        isSyncMarker: T => Boolean,
+        out: ArrayBuffer[ArraySeq[T]]
+    ): IndexedSeq[IndexedSeq[T]] = {
+      in match {
+        // We append to the end of the buffer for efficiency and so must reverse it once we are done
+        case Nil => out.view.reverse.to(ArraySeq)
+        // Need the extra empty frame so that sync frame indices and the output array indices match up
+        case Seq(x) if isSyncMarker(x) =>
+          splitRec(ArraySeq.empty, isSyncMarker, out += ArraySeq.empty)
+        // But we don't want the empty frame if we're not at the end of the stack
+        case x +: xs if isSyncMarker(x) => splitRec(xs, isSyncMarker, out)
+        case _                          =>
+          // If sync frame is not first elem, then size of in is guaranteed to decrease
+          splitRec(in.dropWhile(!isSyncMarker(_)), isSyncMarker, out += in.takeWhile(!isSyncMarker(_)))
+      }
+    }
+
+    splitRec(in, isSyncMarker, ArrayBuffer.empty)
+  }
+
+  def reconstitutedNodeAndJvmStack(nodeTask: NodeTask): Array[StackElem] = {
     val syncStacks = jvmStacksSplitBySyncFrame
     nodeTask
       .dbgWaitChain(false)
@@ -149,24 +149,64 @@ object NodeStacks {
         case _: StartNode   => Nil
         case task: NodeTask => NodeStackElem(task.cacheUnderlyingNode) :: Nil
         case sync: OGSchedulerContext#SyncFrame =>
-          val stack = syncStacks.get(sync.thread)
-          if (stack.isEmpty) Nil
-          else stack.get(sync.index).map(JvmStackElem)
+          syncStacks.get(sync.thread) match {
+            case Some(ss) => buildSyncStack(ss, sync)
+            case None     => Nil
+          }
+        case ec: EventCause => List(ECStackElem(ec))
       }
       .flatten
-      .to(ArraySeq)
+      .to(Array)
   }
-
-  def reconstitutedNodeAndJvmStack(): Array[StackElem] =
-    reconstitutedNodeAndJvmStack(EvaluationContext.currentNode).toArray
-
-  def reconstitutedNodeAndJvmStackAsStrings(nodeTask: NodeTask): Seq[String] =
-    reconstitutedNodeAndJvmStack(nodeTask).map(getStackElemData).map(StackElemData.write)
-
-  def reconstitutedNodeAndJvmStackAsStrings(): Array[String] =
-    reconstitutedNodeAndJvmStackAsStrings(EvaluationContext.currentNode).toArray
 }
 
-sealed trait StackElem
-final case class NodeStackElem(ntsk: NodeTask) extends StackElem
-final case class JvmStackElem(elem: StackTraceElement) extends StackElem
+sealed trait StackElem {
+  def toStackData: StackElemData
+  def toStackString: String = StackElemData.write(toStackData)
+}
+
+final case class NodeStackElem(ntsk: NodeTask) extends StackElem {
+  def toStackData: StackElemData = try {
+    val lineNumber = ntsk.stackTraceElem.getLineNumber
+    val (className, methodRawName, methodDisplayName) = {
+      val cls = ntsk.getClass
+      val execInfoName = ntsk.executionInfo().name()
+      ntsk match {
+        case p: PropertyNode[_] =>
+          val owningCls = if (p.entity ne null) p.entity.$info.runtimeClass else cls
+          (owningCls.getName, execInfoName, p.propertyInfo.name())
+        case _ =>
+          // Basically presume that this is manually written node and so get the class and use the run method on it
+          val cleanName = NodeName.cleanNodeClassName(cls)
+          val methodName = cleanName.substring(cleanName.lastIndexOf('.') + 1)
+          (cls.getName, "run", s"$execInfoName $methodName")
+      }
+    }
+    StackElemData(className, methodRawName, s"(node) $methodDisplayName", lineNumber, StackElemType.node)
+  } catch {
+    case ex: Exception =>
+      NodeStacks.log.error(s"Unable to extract stack trace information for frame - skipping", ex)
+      StackElemData("unable to extract frame (see log for error)", "UNKNOWN", "UNKNOWN", 1, StackElemType.node)
+  }
+}
+
+final case class JvmStackElem(elem: StackTraceElement) extends StackElem {
+  def toStackData: StackElemData =
+    StackElemData(elem.getClassName, elem.getMethodName, elem.getMethodName, elem.getLineNumber, StackElemType.jvm)
+}
+
+final case class ECStackElem(ec: EventCause) extends StackElem {
+  def toStackData: StackElemData = StackElemData(ec.getClass.toString, "", ec.cause, -1, StackElemType.ec)
+}
+
+final case class CollapsedJvmStackElem(syncCall: StackTraceElement, val stack: Array[StackTraceElement])
+    extends StackElem {
+  override def toString: String = stack.map(_.toString).mkString("\n")
+  def toStackData: StackElemData =
+    StackElemData(
+      syncCall.getClassName,
+      syncCall.getMethodName,
+      s"(sync stack) ${syncCall.getMethodName}",
+      syncCall.getLineNumber,
+      StackElemType.jvm)
+}

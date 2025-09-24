@@ -12,6 +12,7 @@
 package optimus.examples.platform01.data
 
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 
 /**
@@ -67,7 +68,7 @@ object ExampleSingleton {
   }
 }
 
-object Singleton extends OptimusApp {
+object Singleton extends OptimusApp with PrintlnInterceptor {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

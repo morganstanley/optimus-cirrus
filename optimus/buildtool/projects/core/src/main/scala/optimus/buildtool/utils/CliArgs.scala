@@ -13,8 +13,6 @@ package optimus.buildtool.utils
 
 import optimus.buildtool.utils.parser.Parser
 
-import scala.collection.immutable.Seq
-
 object CliArgs {
 
   /**

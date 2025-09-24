@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object FilterWhere extends LegacyOptimusApp {
+object FilterWhere extends LegacyOptimusApp with PrintlnInterceptor {
 
   // This example demonstrates simple filter.
   val simpleFilter = for (p <- from(Data.getPositions()) if p.portfolio == "James" || p.portfolio == "Kostya") yield p

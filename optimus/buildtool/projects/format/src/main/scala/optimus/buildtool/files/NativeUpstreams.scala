@@ -12,7 +12,6 @@
 package optimus.buildtool.files
 
 import optimus.buildtool.config.ScopeId
-import scala.collection.immutable.Seq
 
 sealed trait NativeUpstreams[+A <: Asset] {
   def fingerprint(descriptor: String = ""): Seq[String]

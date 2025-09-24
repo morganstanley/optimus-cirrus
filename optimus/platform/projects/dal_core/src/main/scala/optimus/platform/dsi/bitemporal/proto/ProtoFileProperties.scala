@@ -32,7 +32,7 @@ object ProtoFileProperties { props =>
 
   final lazy val featureInfo = {
     // default info which would be sent. Please update both the build number and the date
-    val defInfo = FeatureInfo(build = 120, "2025-04-17-0")
+    val defInfo = FeatureInfo(build = 127, "2025-09-04-0")
 
     def safeDo[R](f: => Option[R]): Option[R] = try { f }
     catch { case _: Throwable => None }

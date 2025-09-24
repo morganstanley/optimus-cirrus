@@ -18,7 +18,6 @@ import optimus.buildtool.artifacts.MessageArtifactType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace.MessageTrace
 
-import scala.collection.immutable.Seq
 class CompilationException(
     val scopeId: ScopeId,
     message: String,

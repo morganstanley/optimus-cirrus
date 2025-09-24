@@ -15,7 +15,6 @@ import optimus.stratosphere.config.ConsoleColors
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.collection.immutable.Seq
 
 object CentralLogger {
   private val verboseState = new AtomicBoolean(false)

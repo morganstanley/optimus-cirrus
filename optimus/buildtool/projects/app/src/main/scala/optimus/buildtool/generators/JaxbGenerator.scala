@@ -27,7 +27,6 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -68,7 +67,6 @@ import java.net.URLConnection
 import java.net.URLStreamHandler
 import java.net.spi.URLStreamHandlerProvider
 import scala.annotation.nowarn
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -76,7 +74,7 @@ import scala.xml.InputSource
 
 @entity class JaxbGenerator(directoryFactory: DirectoryFactory, workspaceSourceRoot: Directory)
     extends SourceGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.Jaxb
+  override val generatorType: String = "jaxb"
 
   override type Inputs = JaxbGenerator.Inputs
 
@@ -107,6 +105,7 @@ import scala.xml.InputSource
       configuration.collect {
         case (k, v) if k.startsWith("plugins.") => Class.forName(v).getConstructor().newInstance().asInstanceOf[Plugin]
       }.toIndexedSeq
+    val enableIntrospection = configuration.get("enableIntrospection").exists(_.toBoolean)
 
     val (bindingFiles, bindingFingerprint) =
       configuration
@@ -155,6 +154,7 @@ import scala.xml.InputSource
         pkg.map(p => s"[Package]$p").toIndexedSeq ++
           pkgs.map(p => s"[Packages]$p") ++
           plugins.map(p => s"[Plugins]${p.getOptionName}") ++
+          Seq(s"[Introspection]$enableIntrospection") ++
           templateFingerprint ++
           bindingFingerprint.getOrElse(Nil) ++
           rootFingerprint.getOrElse(Nil)
@@ -170,7 +170,8 @@ import scala.xml.InputSource
       bindingFiles.getOrElse(Nil),
       rootFiles.map(_.map(_._2).merge).getOrElse(SortedMap.empty),
       fingerprintHash,
-      plugins
+      plugins,
+      enableIntrospection
     )
   }
 
@@ -210,6 +211,10 @@ import scala.xml.InputSource
               plugins.foreach(plugin => compilerSettings.parseArgument(Array(s"-${plugin.getOptionName}"), 0))
             }
 
+            if (enableIntrospection) {
+              compilerSettings.parseArgument(Array("-enableIntrospection"), 0)
+            }
+
             // noinspection ScalaDeprecation
             bindingFiles.map(_._2).merge.foreach { case (f, c) =>
               val s = new InputSource(c.contentAsInputStream)
@@ -242,13 +247,14 @@ import scala.xml.InputSource
             else Seq(CompilationMessage(None, "JAXB generation failed", CompilationMessage.Error))
 
           case JaxbType.Wsdl =>
+            val tempDir = Directory.temporary()
             val validatedTemplates = templateFiles.apar.map { case (d, files) =>
-              SourceGenerator.validateFiles(d, files)
+              SourceGenerator.validateFiles(d, files, tempDir)
             }
             val validatedTemplateFiles = validatedTemplates.flatMap(_.files)
             val validatedBindings = bindingFiles.apar
               .map { case (d, files) =>
-                SourceGenerator.validateFiles(d, files)
+                SourceGenerator.validateFiles(d, files, tempDir)
               }
               .flatMap(_.files)
             validatedTemplateFiles
@@ -269,13 +275,21 @@ import scala.xml.InputSource
         }
         val a = GeneratedSourceArtifact.create(
           scopeId,
+          tpe,
           generatorName,
-          artifactType,
           outputJar,
           JaxbGenerator.SourcePath,
           msgs
         )
-        SourceGenerator.createJar(generatorName, JaxbGenerator.SourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
+        SourceGenerator.createJar(
+          tpe,
+          generatorName,
+          JaxbGenerator.SourcePath,
+          a.messages,
+          a.hasErrors,
+          tempJar,
+          tempDir
+        )()
         a
       }
       Some(artifact)
@@ -314,7 +328,8 @@ object JaxbGenerator extends Log {
       bindingFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
       rootFiles: SortedMap[FileAsset, HashedContent],
       fingerprint: FingerprintArtifact,
-      plugins: Seq[Plugin]
+      plugins: Seq[Plugin],
+      enableIntrospection: Boolean
   ) extends SourceGenerator.Inputs
 
   sealed trait JaxbType

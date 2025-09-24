@@ -83,6 +83,7 @@ public class CallWithArgsGenerator implements Opcodes {
   }
 
   private static void generatePrivateField(ClassWriter cw, String name, Type tpe) {
+    // TODO (OPTIMUS-76886): Use FieldInjector?
     FieldVisitor fv = cw.visitField(ACC_PRIVATE, name, tpe.getDescriptor(), null, null);
     fv.visitEnd();
   }

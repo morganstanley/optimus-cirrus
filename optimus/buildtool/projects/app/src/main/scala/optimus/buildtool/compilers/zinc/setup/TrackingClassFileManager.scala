@@ -20,7 +20,6 @@ import xsbti.VirtualFileRef
 import xsbti.compile.AnalysisContents
 import xsbti.compile.ClassFileManager
 
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 class TrackingClassFileManager(previousAnalysis: Option[AnalysisContents]) extends ClassFileManager {

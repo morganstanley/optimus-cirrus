@@ -19,6 +19,8 @@ package org.gradle.api.internal.tasks.testing.junit.result;
 
 import java.io.Closeable;
 import java.io.Writer;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 
 import org.gradle.api.Action;
@@ -57,4 +59,11 @@ public interface TestResultsProvider extends Closeable {
   Optional<CoverageResult> getCoverageResult();
 
   boolean isHasResults();
+
+  /** Returns a map of coverage results by scope. */
+  default Map<String, org.gradle.api.internal.tasks.testing.junit.result.CoverageResult>
+      getCoverageResultsByScope() {
+    return Collections
+        .emptyMap(); // Default implementation to avoid breaking existing implementations
+  }
 }

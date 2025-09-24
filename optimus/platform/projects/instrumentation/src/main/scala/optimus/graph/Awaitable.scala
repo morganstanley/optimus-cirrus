@@ -20,7 +20,7 @@ trait AwaitableContext
  *
  * Importantly, something that HasAwaitInfo is not necessarily launchable.
  */
-trait Awaitable {
+trait Awaitable extends DebugWaitChainItem {
   // internal state of the awaitable
   def getProfileId: Int
   def getLauncherStackHash: Long
@@ -30,6 +30,7 @@ trait Awaitable {
   // some properties related to displaying the stacks
   def underlyingAwaitable: Awaitable
   def elideChildFrame: Boolean
+  // Must be synced 1 to 1 with getprofileid
   def flameFrameName(extraMods: String): String
 
   // Lose a bit of resolution to keep IDs prettier and avoid having to deal with dashes

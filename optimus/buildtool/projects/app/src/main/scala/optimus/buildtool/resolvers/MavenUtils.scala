@@ -20,11 +20,11 @@ import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.files.BaseHttpAsset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarHttpAsset
 import optimus.buildtool.resolvers.HttpResponseUtils._
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils.isJarReadable
 import optimus.buildtool.utils.Hashing.hashFileContent
+import optimus.buildtool.utils.OsUtils
 import optimus.exceptions.RTException
 import optimus.platform._
 
@@ -32,9 +32,11 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 import java.net.URI
 import java.net.URL
+import java.nio.file.attribute.PosixFilePermission._
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.InvalidParameterException
+import scala.util.Try
 import scala.util.control.NonFatal
 
 @entity private[buildtool] object MavenUtils {
@@ -58,7 +60,6 @@ import scala.util.control.NonFatal
     urlStr.substring(urlStr.lastIndexOf("/") + 1, urlStr.length)
   }
 
-  // be used by Coursier maven repo .pom files fetch and our manually downloads: 1. unzipRepo 2. maven javadoc & sources
   @node def downloadUrl[T](
       url: URL,
       depCopier: DependencyCopier,
@@ -105,11 +106,10 @@ import scala.util.control.NonFatal
           case Left(e) => (r(e.toString), probingHttpResponse.headerInfo.code, false)
         }
       }
-      if (isSuccess) // add .pom/-sources.jar/-javadoc.jar/unzip.jar downloads trace
+      if (isSuccess) // add downloads trace
         DependencyDownloadTracker.addDownloadDuration(url.toString, durationInNanos)
       else
         DependencyDownloadTracker.addFailedDownloadDuration(s"${url.toString}, reason: $urlCode", durationInNanos)
-
       downloadResult
     }
   }
@@ -145,7 +145,7 @@ import scala.util.control.NonFatal
         .resolve(urlFilePath))
   }
 
-  def getLocal(httpAsset: JarHttpAsset, depCopyRoot: Directory): Option[FileAsset] = {
+  def getLocal(httpAsset: BaseHttpAsset, depCopyRoot: Directory): Option[FileAsset] = {
     val localAsset = httpLocalAsset(httpAsset, depCopyRoot)
     Some(localAsset).filter(checkLocalDisk)
   }
@@ -195,6 +195,20 @@ import scala.util.control.NonFatal
           if (af.configuration.isEmpty) DefaultConfiguration else af.configuration
         )
       }
+    }
+  }
+
+  def setExecutablePermissions(file: FileAsset): Unit = {
+    if (!OsUtils.isWindows) {
+      import scala.jdk.CollectionConverters._
+      Try {
+        val perms = Files
+          .getPosixFilePermissions(file.path)
+          .asScala
+          .concat(Set(OWNER_EXECUTE, GROUP_EXECUTE, OTHERS_EXECUTE))
+          .asJava
+        Files.setPosixFilePermissions(file.path, perms)
+      }.onFailure(log.warn(s"Unable to set executable permissions for ${file.path}", _))
     }
   }
 }

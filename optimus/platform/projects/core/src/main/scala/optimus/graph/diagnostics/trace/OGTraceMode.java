@@ -45,6 +45,7 @@ public class OGTraceMode {
   public static final OGEventsObserver recordingLight = new OGEventsRecordingLightObserver();
 
   private static final OGEventsObserver distributedTasks = new OGEventsDistributedTasksObserver();
+  public static final OGLivePGOObserver livePGO = new OGLivePGOObserver();
 
   // WARNING: if testNewHS, this will return hotspotsLight even if 'hotspots' is specified
   public static OGEventsObserver find(String name) {
@@ -76,7 +77,8 @@ public class OGTraceMode {
           light,
           environ,
           timelineLight,
-          distributedTasks
+          distributedTasks,
+          livePGO
         };
   }
 }

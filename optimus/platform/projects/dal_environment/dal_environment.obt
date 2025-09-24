@@ -14,16 +14,12 @@ main {
     modules = [
       // don't add more dependencies on optimus (even on platform.core) because this module needs to be buildable
       // on Java 11 and those modules will soon build on more modern Java
-      optimus.platform.breadcrumbs
       optimus.platform.core_config
       optimus.platform.stagingplugin
-      optimus.silverking.silverking
     ]
     libs = [
-      com.ms.watchtower.watchtower_core,
-      msjava.hdom
-      msjava.logbackutils
-      msjava.zkapi
+      msjava.rr-hdom
+      msjava.rr-zkapi
       ossjava.eaio-uuid-stephenc
       sam.zookeeper
     ]
@@ -33,5 +29,8 @@ main {
 internal {
   root = "src/internal"
   open = true
-  compile.modules += optimus.platform.dal_environment.main
+  compile.modules = [
+    optimus.platform.dal_environment.main
+    optimus.silverking.silverking
+  ]
 }

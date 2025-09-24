@@ -14,7 +14,6 @@ package optimus.buildtool.utils
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 class BlockingQueue[A] {
   val inner = new LinkedBlockingQueue[A]

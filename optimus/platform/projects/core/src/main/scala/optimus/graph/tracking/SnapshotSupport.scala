@@ -11,7 +11,6 @@
  */
 package optimus.graph.tracking
 
-import optimus.platform.EvaluationContext
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.SimpleValueTweak
@@ -19,6 +18,7 @@ import optimus.platform.inputs.loaders.FrozenNodeInputMap
 import optimus.platform.util.PrettyStringBuilder
 import optimus.ui.ScenarioReference
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.MurmurHash3
 
@@ -36,6 +36,7 @@ trait SnapshotSupport {
 
   // Any race condition is eventually consistent, and this is quick anyway
   @volatile private var _asBasicScenarioStack: ScenarioStack = _
+  @volatile private var _snapshotScenarioStack: SnapshotScenarioStack = _
 
   /**
    * Snapshot the state of the subtree of tracking scenarios beneath the consistent tracking root, returning a basic
@@ -51,27 +52,82 @@ trait SnapshotSupport {
     var snapshot = _asBasicScenarioStack
     if (snapshot eq null) {
       this.synchronized {
-        if (_asBasicScenarioStack eq null)
-          _asBasicScenarioStack = self.scenarioStack.asBasicScenarioStack // we cache the conversion to basic SS
         snapshot = _asBasicScenarioStack
+        if (snapshot eq null) {
+          snapshot = self.scenarioStack.asBasicScenarioStack // we cache the conversion to basic SS
+          _asBasicScenarioStack = snapshot
+        }
       }
     }
     val sss = consistentRoot.snapshotConsistentSubtree // snapshot from consistent root in case overlay runs in snapshot
     val currentSnapshotTweak = SimpleValueTweak(ScenarioReference.currentSnapshot$newNode)(sss)
-    snapshot.createChild(Scenario(currentSnapshotTweak), EvaluationContext.currentNode)
+    snapshot.createChild(Scenario(currentSnapshotTweak), classOf[SnapshotScenarioStack] /* id for debugger */ )
+  }
+
+  private[tracking] def snapshotConsistentSubtree: SnapshotScenarioStack = {
+    // Caching partly to avoid cost of building, but also to allow possibility of fast reference equality. This matters
+    // because the SnapshotScenarioStack ends up in a tweak which will be compared for equality during SSCacheID lookup
+    var snapshot = _snapshotScenarioStack
+    if (snapshot eq null) {
+      this.synchronized {
+        snapshot = _snapshotScenarioStack
+        if (snapshot eq null) {
+          snapshot = buildConsistentSubtree
+          _snapshotScenarioStack = snapshot
+        }
+      }
+    }
+    snapshot
+  }
+
+  // capture snapshots of our whole consistent subtree of scenarios in case they are needed for givenOverlay/evaluateIn
+  private def buildConsistentSubtree: SnapshotScenarioStack = {
+    val childSnapshots =
+      if (children.isEmpty) SnapshotScenarioStack.EmptyChildren
+      else {
+        val b = mutable.ArrayBuffer[SnapshotScenarioStack]()
+        val childIt = children.iterator
+        while (childIt.hasNext) {
+          val child = childIt.next()
+          // snapshot consistent children as they can be overlayed
+          if (!child.scenarioReference.introduceConcurrentSubtree) b += child.snapshotConsistentSubtree
+        }
+        b.toArray
+      }
+    val scenario = scenarioStack.nestScenariosUpTo(parentScenarioStack)
+    val tags = scenarioStack.siParams.nodeInputs.freeze
+    SnapshotScenarioStack(scenarioReference, scenario, childSnapshots, tags)
   }
 
   /**
-   * Invalidate the scenario stack on this scenario as well as on all child tracking scenarios. This should be called
-   * when tweaks are added or removed.
+   * Invalidate the scenario stack on this scenario as well as on all affected ancestors and descendants.
+   * This should be called when tweaks are added or removed.
    */
   private[tracking] def invalidateSnapshot(): Unit = {
+    invalidateChildSnapshots()
+    invalidateParentSnapshots()
+  }
+
+  private[tracking] def invalidateChildSnapshots(): Unit = {
+    // the basic scenarioStack depends on tweaks in all parents, so we must invalidate cache in all our transitive
+    // children
     _asBasicScenarioStack = null
-    children.foreach(_.invalidateSnapshot()) // invalidation should propagate down to all children
+    children.foreach(_.invalidateChildSnapshots())
+  }
+
+  private[tracking] def invalidateParentSnapshots(): Unit = {
+    // the snapshotScenarioStack depends on tweaks in _consistent_ children, so we must invalidate in our _consistent_
+    // parents
+    _snapshotScenarioStack = null
+    // if consistent with respect to our parent, it is consistent wrt. us
+    if (!scenarioReference.introduceConcurrentSubtree) {
+      parentDependencyTracker.foreach(_.invalidateParentSnapshots())
+    }
   }
 
   private[tracking] def disposeSnapshot(cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit = {
     _asBasicScenarioStack = null
+    _snapshotScenarioStack = null
     tweakContainer.doRemoveTweaks(Seq(ScenarioReference.currentSnapshot$newNode), cause, observer)
   }
 }
@@ -125,7 +181,7 @@ final case class SnapshotScenarioStack(
 
   /**
    * applies the scenarios from current snapshot up until child scenario ref and gives you the SnapshotScenarioStack of
-   * child (if child isn'tfound then it returns (null, null))
+   * child (if child isn't found then it returns (null, null))
    */
   private[optimus] def nestScenariosUpTo(scenRef: ScenarioReference): (Scenario, SnapshotScenarioStack) = {
     var scen = scenario
@@ -162,17 +218,21 @@ final case class SnapshotScenarioStack(
   /** note that we don't include pluginTags here (they should not affect node results or caching) */
   override def equals(obj: Any): Boolean = obj match {
     case s: SnapshotScenarioStack =>
-      s.scenario == scenario && s.children.sameElements(children) && s.ref == ref
+      (this eq s) || (s.ref == ref && s.scenario == scenario && s.children.sameElements(children))
     case _ => false
   }
 
-  override def hashCode(): Int = ref.hashCode * 17 + MurmurHash3.unorderedHash(children)
+  override def hashCode(): Int = ref.hashCode * 17 + scenario.hashCode + MurmurHash3.unorderedHash(children)
 
-  override def toString: String = ref.toString
+  override def toString: String = {
+    val childrenStr = if (children.nonEmpty) s" and ${children.length} immediate children" else ""
+    s"Snapshot($ref$childrenStr)"
+  }
 }
 
 object SnapshotScenarioStack {
-  val Dummy: SnapshotScenarioStack = SnapshotScenarioStack(ScenarioReference.Dummy, null, null, null)
+  private[tracking] val EmptyChildren = new Array[SnapshotScenarioStack](0)
+  val Dummy: SnapshotScenarioStack = SnapshotScenarioStack(ScenarioReference.Dummy, null, EmptyChildren, null)
 
   private[optimus] def current(ss: ScenarioStack): SnapshotScenarioStack = {
     val n = ScenarioReference.currentSnapshot$newNode

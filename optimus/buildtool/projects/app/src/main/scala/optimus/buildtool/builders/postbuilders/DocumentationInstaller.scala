@@ -31,7 +31,6 @@ import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 class DocumentationInstaller(

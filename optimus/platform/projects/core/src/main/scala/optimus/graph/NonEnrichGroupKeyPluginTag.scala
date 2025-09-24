@@ -12,10 +12,10 @@
 package optimus.graph
 
 /**
- * * Marker trait for a plugin tag of distriubtion param that will skip groupkey enrichment in batching decisions and batcher operation. These tags could
+ * * Marker trait for a plugin tag of distribution param that will skip groupkey enrichment in batching decisions and batcher operation. These tags could
  *   allow better batch sizes.
  * 1. This pluginType must be used by the leaf node plugin, that means no further distribution/batching/throttling/database querying
- *    are spawn by such node. Otherwise, because other pluginTypes are ignored, no distribution/batching/throttling/databse querying etc.
+ *    are spawn by such node. Otherwise, because other pluginTypes are ignored, no distribution/batching/throttling/database querying etc.
  *    will take effects on its descendants nodes.
  * 2. This pluginType must be used by the node plugin which doesn't recursively invoke itself, otherwise, a deadlock will happen.
  */

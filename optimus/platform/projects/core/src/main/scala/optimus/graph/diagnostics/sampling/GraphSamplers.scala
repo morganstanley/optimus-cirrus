@@ -24,6 +24,7 @@ import optimus.graph.diagnostics.messages.AccumulatedValue
 import optimus.graph.diagnostics.messages.Accumulating
 import optimus.graph.diagnostics.messages.AllOGCounters
 import optimus.graph.diagnostics.sampling.Cardinality.LogLogCounter
+import optimus.graph.gcmonitor.CumulativeGCStats
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.graph.tracking.monitoring.QueueStats
 import optimus.scalacompat.collection._
@@ -235,10 +236,10 @@ class GraphSamplers extends SamplerProvider {
     }
 
     // GC costs, according to GCMonitor
-    ss += new SamplingProfiler.Sampler[GCMonitor.CumulativeGCStats, GCMonitor.CumulativeGCStats](
+    ss += new SamplingProfiler.Sampler[CumulativeGCStats, CumulativeGCStats](
       sp,
       "GCMonitor cumulative",
-      snapper = _ => GCMonitor.instance.snapAndResetStatsForSamplingProfiler(),
+      snapper = _ => GCMonitor.instance.snapAndResetStats("SamplingProfiler"),
       process = (_, c) => c,
       publish = c => c.elems
     )

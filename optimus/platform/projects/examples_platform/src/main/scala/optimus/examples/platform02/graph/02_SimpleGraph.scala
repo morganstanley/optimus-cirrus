@@ -12,11 +12,12 @@
 package optimus.examples.platform02.graph
 
 import optimus.examples.platform.entities.SimpleCalcs
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform.dal.config.DalEnv
 import optimus.platform.dal.config.DalLocation
 import optimus.platform._
 
-object SimpleGraph extends OptimusApp {
+object SimpleGraph extends OptimusApp with PrintlnInterceptor {
   override def dalLocation: DalLocation = DalEnv.none
 
   @entersGraph override def run(): Unit = {

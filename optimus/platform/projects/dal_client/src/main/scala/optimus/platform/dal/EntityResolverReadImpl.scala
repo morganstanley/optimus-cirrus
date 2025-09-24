@@ -133,7 +133,7 @@ import scala.collection.immutable.Map.Map1
     val dsiResult = er.executor.executeQuery(er.dsi, cmd)
 
     mapResult(dsiResult) { case QueryEntityMetadataResult(meta) =>
-      Some(meta)
+      Option(meta)
     }.flatten
   }
 
@@ -1027,10 +1027,13 @@ trait EntityResolverReadImpl { this: DSIResolver =>
     val cmd = GetAssociatedEntities(ref, vt, tt, typeName)
 
     val dsiResult = executor.executeQuery(dsi, cmd)
+    val res = mapResult(dsiResult) { case SelectResult(pes) =>
+      pes
+    } getOrElse Nil
 
-    mapResult(dsiResult) { case SelectResult(pes) =>
-      pes.map(deserializeOne(DALImpl.TemporalContext(vt, tt))) toSet
-    } getOrElse Set.empty[Entity]
+    res.apar.map { f =>
+      deserializeOne(DALImpl.TemporalContext(vt, tt))(f)
+    } toSet
   }
 
   @node @scenarioIndependent
@@ -1257,6 +1260,7 @@ trait EntityResolverReadImpl { this: DSIResolver =>
     case o                      => Failure(new GeneralDALException(s"Unexpected DSI result type ${o.getClass.getName}"))
   }
 
+  @node @scenarioIndependent
   private[optimus] def deserializeOne(tc: TemporalContext)(e: PersistentEntity): Entity = {
     val storageInfo = DSIStorageInfo.fromPersistentEntity(e)
     val entity = tc.deserialize(e, storageInfo)

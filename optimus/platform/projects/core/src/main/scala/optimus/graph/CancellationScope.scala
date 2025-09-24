@@ -17,6 +17,7 @@ import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog._
 import optimus.platform.ScenarioStack
 
+import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
 
 /**
@@ -36,6 +37,7 @@ sealed abstract class CancellationScope(val _cancelOnException: Boolean) extends
   @volatile protected[graph] var cause: Throwable = _
   @transient protected var causeToAbortNodeWith: Throwable = _
   @transient final protected var uuid: UUID = _
+  @transient private[optimus] val sequenceId: Long = CancellationScope.sequenceIdCounter.getAndIncrement()
 
   final def isCancelled: Boolean = cause != null
   final def cancellationCause: Throwable = cause
@@ -147,6 +149,8 @@ object CancellationScope {
   private[graph] def fromUUID(id: UUID, cause: Throwable): CancellationScope = {
     internCache.get(id, _ => new NestedCancellationScope(id, cause))
   }
+
+  private val sequenceIdCounter = new AtomicLong()
 
   def newScope(): CancellationScope = new NestedCancellationScope(parent1 = NullCancellationScope, parent2 = null)
   def newScopeWithCancellationOption(enable: Boolean) =

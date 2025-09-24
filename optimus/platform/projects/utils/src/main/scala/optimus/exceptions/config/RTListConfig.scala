@@ -11,8 +11,6 @@
  */
 package optimus.exceptions.config
 
-import optimus.scalacompat.collection.ArrayToVarArgsOps
-
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -60,6 +58,8 @@ private[optimus] trait RTListConfigTrait {
 object RTListConfig extends RTListConfigTrait {
   private val log = getLogger(this)
 
+  val additionalRTExceptionsFromJavaOpt = sys.props.get("optimus.additional.rt.exceptions")
+
   private val propertyFile: Option[Path] = {
     def convertPathForCurrentOS(path: String): String = {
       val fixedPath = path.replace("/", File.separator).replace("\\", File.separator)
@@ -95,7 +95,7 @@ object RTListConfig extends RTListConfigTrait {
     props
   }
 
-  lazy val hasNoAdditions: Boolean = additionalRTExceptions.isEmpty
+  lazy val hasNoAdditions: Boolean = additionalRTExceptions.isEmpty && additionalRTExceptionsFromJavaOpt.isEmpty
 }
 
 import ExceptionMatcher.MatchingCriteria

@@ -26,7 +26,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OptimusBuildToolAssertions
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import optimus.scalacompat.collection._
 

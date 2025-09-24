@@ -16,7 +16,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoField._
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Future
 import ch.epfl.scala.bsp4j._
@@ -27,7 +26,6 @@ import optimus.buildtool.builders.StandardBuilder
 import optimus.buildtool.builders.TrackedWorkspace
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.compilers.venv.PythonEnvironment
-import optimus.buildtool.config.HasScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScalaVersionConfig
 import optimus.buildtool.config.ScopeId
@@ -55,18 +53,13 @@ import optimus.buildtool.trace.SyncTrace
 import optimus.buildtool.trace.TraceFilter
 import optimus.buildtool.utils.FileDiff
 import optimus.buildtool.utils.GitLog
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils
 import optimus.graph.CancellationScope
-import optimus.graph.CircularReferenceException
-import optimus.graph.NodeTask
-import optimus.graph.PropertyNode
 import optimus.platform._
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
-import scala.util.Try
 
 object BuildServerProtocolService {
   private val slog = getLogger(this)
@@ -75,51 +68,12 @@ object BuildServerProtocolService {
 
   val ConfigHash = "config-hash"
 
-  // default to true
-  private val enableConfigHashCheck = sys.props.get("optimus.buildtool.enableConfigHashCheck").forall(_.toBoolean)
-  // default to true
-  private[bsp] val buildSparseScopesOnImport =
-    sys.props.get("optimus.buildtool.buildSparseScopesOnImport").forall(_.toBoolean)
+  private val enableConfigHashCheck = OptimusBuildToolProperties.getOrTrue("enableConfigHashCheck")
+  private[bsp] val buildSparseScopesOnImport = OptimusBuildToolProperties.getOrTrue("buildSparseScopesOnImport")
 
   private def in(method: String, args: => Any = ""): Unit = ioLog.debug(s"IN: $method [$args]")
   private def out(method: String, result: => Any = ""): Unit = ioLog.debug(s"OUT: $method [$result]")
   private[bsp] def send(method: String, args: => Any = ""): Unit = ioLog.debug(s"SEND: $method [$args]")
-
-  object MethodHasScopeId {
-    def unapply(nt: NodeTask): Option[ScopeId] =
-      Try(nt.asInstanceOf[{ def id: ScopeId }].id).toOption
-  }
-
-  object EntityHasScopeId {
-    def unapply(nt: NodeTask): Option[ScopeId] =
-      Try(nt.asInstanceOf[PropertyNode[_]].entity.asInstanceOf[HasScopeId].id).toOption
-  }
-
-  @tailrec def unwrap(t: Throwable): Throwable = t match {
-    case ce: CompletionException if ce.getCause != null => unwrap(ce.getCause)
-    case _                                              => t
-  }
-
-  private[bsp] def translateException(message: String)(t: Throwable): (Throwable, Option[String]) = {
-    slog.error(message, t)
-    val unwrapped = unwrap(t)
-    val exceptionMessage = unwrapped match {
-      case cre: CircularReferenceException =>
-        val ids = cre.cycle.asScala
-          .collect {
-            case MethodHasScopeId(id) => id
-            case EntityHasScopeId(id) => id
-          }
-          .toIndexedSeq
-          .reverse
-        if (ids.nonEmpty) {
-          val deduped = ids.head +: ids.sliding(2).collect { case Seq(a, b) if a != b => b }.toIndexedSeq
-          Some(s"Circular dependency:\n\t${deduped.mkString(" ->\n\t")}")
-        } else None
-      case _ => None
-    }
-    (unwrapped, exceptionMessage)
-  }
 
   final case class PythonBspConfig(
       pythonEnabled: NodeFunction0[Boolean],
@@ -236,7 +190,7 @@ class BuildServerProtocolService(
     slog.warn(s"Cancelling all scopes", throwable)
     // Minimal logging in IntelliJ since we're expecting to output the full exception details separately anyway
     // Note that CircularReferenceException in particular has an extremely verbose toString
-    tracer.warn(s"Cancelling all scopes due to ${unwrap(throwable).getClass.getName}")
+    tracer.warn(s"Cancelling all scopes due to ${Utils.unwrap(throwable).getClass.getName}")
     cancellationScopes.forEach(_.cancel(throwable))
   }
 

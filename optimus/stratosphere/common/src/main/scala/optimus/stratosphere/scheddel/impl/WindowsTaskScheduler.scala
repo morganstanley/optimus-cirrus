@@ -18,7 +18,6 @@ import optimus.stratosphere.utils.DateTimeUtils.formatDateTime
 import optimus.stratosphere.utils.Text._
 
 import java.time.ZonedDateTime
-import scala.collection.immutable.Seq
 
 object TaskFrequency {
   val Daily = "*"

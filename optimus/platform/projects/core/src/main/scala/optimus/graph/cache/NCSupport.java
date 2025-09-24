@@ -24,6 +24,7 @@ import optimus.graph.OGTrace;
 import optimus.graph.PropertyNode;
 import optimus.graph.ProxyPropertyNode;
 import optimus.graph.RecordedTweakables;
+import optimus.graph.Settings;
 import optimus.graph.TweakTreeNode;
 import optimus.platform.NodeHash;
 import optimus.platform.ScenarioStack;
@@ -193,20 +194,47 @@ public class NCSupport {
    * Returns cachedValue if the value is usable directly from cachedValue key if the value needs to
    * be recomputed null if cannot answer the question at this point (obviously transient)
    */
-  static PropertyNode<?> isUsableWRTCancellationScope(
+  static PropertyNode<?> isUsableWRTCancelScopeAndEnv(
       PropertyNode<?> key, PropertyNode<?> cachedValue) {
-    if (cachedValue.isDoneWithUsableResult())
-      return cachedValue; // Even the scope got cancelled, we have the result already anyways
+    ScenarioStack keySS = key.scenarioStack();
+    ScenarioStack cachedSS = cachedValue.scenarioStack();
 
-    CancellationScope keyCS = key.scenarioStack().cancelScope();
-    CancellationScope cachedCS = cachedValue.scenarioStack().cancelScope();
+    // super-fast path: always usable if CancellationScope and RuntimeEnvironment match exactly
+    if (keySS.cancelScopeAndEnvId() == cachedSS.cancelScopeAndEnvId()) return cachedValue;
 
-    if (cachedCS == keyCS)
-      return cachedValue; // Even if the source is cancelled the destination is the same!
+    // if compatAllowCrossRuntimeCacheHits is NOT enabled, the SSCacheID already takes the runtime
+    // environment into account so we can safely ignore it here (that's the old behavior).
+    // see [[CROSS_RUNTIME_MATCHING]]
+    // n.b. we don't track access to the environment here - we're not using it, only comparing it
+    boolean sameEnv =
+        !Settings.compatAllowCrossRuntimeCacheHits || keySS.envId() == cachedSS.envId();
 
-    if (cachedCS.isCancelled() || cachedValue.isDoneWithExceptionToHide())
-      return key; // The source is cancelled and can't be reused (ever)
+    // if complete with usable result (i.e. not non-RT exception), CS doesn't matter at all
+    if (cachedValue.isDoneWithUsableResult()) {
+      // if same env or didn't access env then can reuse, otherwise cannot
+      if (sameEnv || !cachedValue.accessedRuntimeEnv()) return cachedValue;
+      else return key;
+    }
 
+    boolean sameCS = keySS.cancellationScopeId() == cachedSS.cancellationScopeId();
+
+    // not complete, or complete but with non-RT exception, so must check CS
+    if (sameCS) {
+      if (sameEnv) return cachedValue; // exact match for CS and env so always safe to re-use
+
+      // same CS but different env, so if we're done we can re-use if and only if the env wasn't
+      // actually accessed
+      if (cachedValue.isDone()) {
+        if (cachedValue.accessedRuntimeEnv()) return key;
+        else return cachedValue;
+      }
+    }
+
+    // different CS
+    if (cachedSS.cancelScope().isCancelled() || cachedValue.isDoneWithExceptionToHide())
+      return key; // The cached value is cancelled and can't be reused (ever)
+
+    // different CS and/or env, and the node isn't complete/cancelled yet
     return null; // Can't answer the question for now
   }
 
@@ -214,15 +242,15 @@ public class NCSupport {
    * Returns true if definitely can't use the value (false if we can use value or cannot determine
    * yet
    */
-  static <T> boolean isNotUsableWRTCancellationScope(
+  static <T> boolean isNotUsableWRTCancelScopeAndEnv(
       PropertyNode<T> key, PropertyNode<T> cachedValue) {
-    return isUsableWRTCancellationScope(key, cachedValue) == key;
+    return isUsableWRTCancelScopeAndEnv(key, cachedValue) == key;
   }
 
   /** Returns true when can re-use directly */
-  static boolean isDirectlyReusableWRTCancelScope(
+  static boolean isDirectlyReusableWRTCancelScopeAndEnv(
       PropertyNode<?> key, PropertyNode<?> cachedValue) {
-    return isUsableWRTCancellationScope(key, cachedValue) == cachedValue;
+    return isUsableWRTCancelScopeAndEnv(key, cachedValue) == cachedValue;
   }
 
   /** Return true for delayed proxies */

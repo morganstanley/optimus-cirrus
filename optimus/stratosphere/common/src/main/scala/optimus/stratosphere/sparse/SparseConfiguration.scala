@@ -18,7 +18,6 @@ import optimus.stratosphere.sparse.SparseConfiguration.isEnabledKey
 import optimus.stratosphere.utils.ConfigUtils
 
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 
 final case class SparseConfiguration(isEnabled: Boolean, profile: Option[SparseProfile]) {
   def save()(implicit ws: StratoWorkspaceCommon): SparseConfiguration = {
@@ -37,9 +36,24 @@ final case class SparseConfiguration(isEnabled: Boolean, profile: Option[SparseP
 
     this
   }
+
+  def toHumanReadableString: String =
+    if (isEnabled)
+      profile
+        .map { profile =>
+          val sep = ", "
+          val scopesPart = if (profile.scopes.nonEmpty) s"Scopes: ${profile.scopes.mkString(sep)}" else ""
+          val subProfilesPart =
+            if (profile.subProfiles.nonEmpty) s"Sub-profiles: ${profile.subProfiles.mkString(sep)}" else ""
+          Seq(s"Profile: '${profile.name}'", scopesPart, subProfilesPart).filterNot(_.isEmpty).mkString(sep)
+        }
+        .getOrElse(SparseConfiguration.AllModules)
+    else SparseConfiguration.AllModules
 }
 
 object SparseConfiguration {
+
+  val AllModules = "All Modules"
 
   protected val currentProfileKey = "currentProfile"
   protected val isEnabledKey = "isEnabled"

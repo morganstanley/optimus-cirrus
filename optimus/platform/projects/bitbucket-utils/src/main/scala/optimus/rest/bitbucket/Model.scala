@@ -17,7 +17,6 @@ import com.typesafe.config.ConfigFactory
 import optimus.rest.json.InstantJsonFormat
 import spray.json._
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 
 final case class PagedPrDataRequest(isLastPage: Boolean, values: Seq[BasePrData], nextPageStart: Option[Int])
@@ -419,6 +418,11 @@ final case class BuildStatuses(isLastPage: Boolean, values: Seq[BuildStatus], ne
     extends Paged[BuildStatus]
 object BuildStatuses extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[BuildStatuses] = jsonFormat3(BuildStatuses.apply)
+}
+
+final case class UpdateDescription(description: String, version: Int)
+object UpdateDescription extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[UpdateDescription] = jsonFormat2(UpdateDescription.apply)
 }
 
 object PRAction extends Enumeration {

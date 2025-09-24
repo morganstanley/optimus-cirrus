@@ -17,7 +17,7 @@ import scala.collection.StrictOptimizedSeqFactory
 import scala.collection.immutable
 import scala.collection.immutable.AbstractSeq
 import scala.collection.immutable.ArraySeq
-import scala.collection.immutable.IndexedSeqOps
+import scala.collection.immutable.SeqOps
 import scala.collection.immutable.StrictOptimizedSeqOps
 import scala.collection.mutable
 
@@ -43,8 +43,8 @@ import scala.collection.mutable
  */
 final class UnsafeImmutableBufferWrapper[+A](buf: mutable.Buffer[A])
     extends AbstractSeq[A]
-    with immutable.IndexedSeq[A]
-    with IndexedSeqOps[A, ArraySeq, UnsafeImmutableBufferWrapper[A]]
+    with immutable.Seq[A]
+    with SeqOps[A, ArraySeq, UnsafeImmutableBufferWrapper[A]]
     with StrictOptimizedSeqOps[A, ArraySeq, UnsafeImmutableBufferWrapper[A]]
     with Serializable {
 
@@ -57,9 +57,15 @@ final class UnsafeImmutableBufferWrapper[+A](buf: mutable.Buffer[A])
 
   override def iterableFactory: SeqFactory[ArraySeq] = ArraySeq.untagged
 
+  def iterator: Iterator[A] = buf.iterator
+
   def apply(i: Int): A = buf(i)
 
   def length: Int = buf.length
+
+  override def knownSize: Int = buf.knownSize
+
+  override def isEmpty: Boolean = buf.isEmpty
 
   override protected[this] def className: String = "UnsafeImmutableBufferWrapper"
 }
@@ -72,4 +78,13 @@ object UnsafeImmutableBufferWrapper extends StrictOptimizedSeqFactory[UnsafeImmu
 
   override def newBuilder[A]: mutable.Builder[A, UnsafeImmutableBufferWrapper[A]] =
     mutable.Buffer.newBuilder[A].mapResult(new UnsafeImmutableBufferWrapper(_))
+
+  implicit def buildFromUnsafeImmutableBufferWrapper[A0, A]
+      : BuildFrom[UnsafeImmutableBufferWrapper[A0], A, ArraySeq[A]] =
+    new BuildFrom[UnsafeImmutableBufferWrapper[A0], A, ArraySeq[A]] {
+      def fromSpecific(from: UnsafeImmutableBufferWrapper[A0])(it: IterableOnce[A]): ArraySeq[A] =
+        from.iterableFactory.from(it)
+      override def newBuilder(from: UnsafeImmutableBufferWrapper[A0]): mutable.Builder[A, ArraySeq[A]] =
+        from.iterableFactory.newBuilder[A]
+    }
 }

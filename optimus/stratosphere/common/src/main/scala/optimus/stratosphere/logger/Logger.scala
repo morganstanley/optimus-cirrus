@@ -33,10 +33,14 @@ object LogLines {
 object Logger {
   val ErrorMarker = "ERROR: "
   val WarningMarker = "WARNING: "
+
+  def addColorTo(text: String, color: Color)(implicit colors: ConsoleColors): String =
+    if (colors.enabled) ansi().fg(color).a(text).reset().toString else text
 }
 
 abstract class Logger(colors: ConsoleColors = ConsoleColors.Disabled) {
   import optimus.stratosphere.logger.Logger._
+  private implicit val _colors: ConsoleColors = colors
 
   def info(toLog: String): Unit
   def debug(toLog: String): Unit
@@ -56,9 +60,6 @@ abstract class Logger(colors: ConsoleColors = ConsoleColors.Disabled) {
            |$content${lines.trailingNewlines}""".stripMargin
     }
   }
-
-  private def addColorTo(text: String, color: Color): String =
-    if (colors.enabled) ansi().fg(color).a(text).reset().toString else text
 
   def highlight(toLog: String): Unit = info(addColorTo(toLog, colors.highlight))
 

@@ -17,10 +17,9 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent._
 
-import scala.annotation.tailrec
-
 object SymLinkSearch {
   private val analysedPath: ConcurrentHashMap[Path, Option[String]] = new ConcurrentHashMap()
+  private val isSymlink: ConcurrentHashMap[Path, Boolean] = new ConcurrentHashMap()
   private val granularityInDays: List[Int] =
     List(1, 2, 7, 10, 20, 30, 365, 2 * 365, 3 * 365, 4 * 365, 5 * 365).sorted
 }
@@ -31,9 +30,8 @@ trait SymLinkSearch {
   protected val cache: ConcurrentHashMap[Path, Option[String]] = analysedPath
   protected def getLastModifiedTime(path: Path): Instant =
     Files.getLastModifiedTime(path).toInstant
-  protected def isSymLink(p: Path): Boolean = Files.isSymbolicLink(p)
+  protected def isSymLink(p: Path): Boolean = isSymlink.computeIfAbsent(p, Files.isSymbolicLink)
 
-  @tailrec
   private def touchesSymLink(p: Path): Boolean =
     p.getParent != null && (isSymLink(p) || touchesSymLink(p.getParent))
 

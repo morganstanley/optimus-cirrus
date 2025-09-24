@@ -17,8 +17,6 @@ import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.config.ScopeId
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 /**
  * A set of actions to run after various stages of building. Does not build posts.
  */

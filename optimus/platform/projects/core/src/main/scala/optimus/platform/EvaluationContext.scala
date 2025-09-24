@@ -32,7 +32,7 @@ object EvaluationContext {
 
   private val verifyOffGraphNonFatal = System.getProperty("optimus.verifyOffGraph.nonFatal", "false").toBoolean
 
-  /** This is for experimental debugging UI support only (trying to provide a reasonable default. DON'T use it! */
+  /** This is for experimental debugging UI support only. Trying to provide a reasonable default. DON'T use it! */
   private[optimus] var lastDefaultScenarioStack: WeakReference[ScenarioStack] = _
 
   /** User should have no reason to call this method */
@@ -104,7 +104,7 @@ object EvaluationContext {
   }
 
   /** Returns true if the optimus context was ever initialized on this thread */
-  final def isInitialised: Boolean = null != OGSchedulerContext.current()
+  final def isInitialised: Boolean = null != OGSchedulerContext._TRACESUPPORT_unsafe_current()
 
   /** Initialize EC with minimal runtime (aka no dal!) */
   final def initializeWithoutRuntime(): Unit =

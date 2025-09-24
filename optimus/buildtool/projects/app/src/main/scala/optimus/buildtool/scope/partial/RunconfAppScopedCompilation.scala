@@ -26,7 +26,7 @@ import scala.collection.immutable.IndexedSeq
     override protected val scope: CompilationScope,
     override protected val sources: RunconfCompilationSources,
     runconfc: AsyncRunConfCompiler
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import scope._
 
   @node def messages: IndexedSeq[Artifact] =
@@ -51,8 +51,7 @@ import scala.collection.immutable.IndexedSeq
       installVersion = sources.installVersion,
       outputJar = pathBuilder
         .outputPathFor(id, sources.compilationFingerprint.hash, AT.CompiledRunconf, None)
-        .asJar,
-      upstreamAgents = upstream.agentsForOurRuntime
+        .asJar
     )
   }
 }

@@ -30,7 +30,6 @@ import optimus.buildtool.format.SetConfig
 import optimus.buildtool.format.Success
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 object DependencyLoader {
@@ -153,6 +152,22 @@ object DependencyLoader {
           Error(s"resolver name $invalid is invalid!", obtFile, config.origin().lineNumber())))
       }
 
+      def loadPublicationSettings(maybeConfig: Option[Config]): Result[PublicationSettings] = {
+        import PublicationSettingsKeys._
+        maybeConfig
+          .map { config =>
+            Success(
+              PublicationSettings(
+                name = config.optionalString(publicationName),
+                tpe = config.optionalString(tpe),
+                ext = config.optionalString(ext),
+                classifier = config.optionalString(classifier)
+              )
+            ).withProblems(config.checkExtraProperties(obtFile, Keys.publicationSettings))
+          }
+          .getOrElse(Success(PublicationSettings()))
+      }
+
       def loadBaseLibrary(fullConfig: Config) = {
         for {
           artifactExcludes <- loadExcludes(fullConfig, obtFile)
@@ -160,6 +175,7 @@ object DependencyLoader {
           version = loadVersion(obtFile, fullConfig).getOrElse("")
           predefinedResolvers = config.optionalStringList(Resolvers)
           resolvers <- loadResolvers(obtFile, config, predefinedResolvers)
+          publicationSettings <- loadPublicationSettings(config.optionalConfig(PublicationSettingsKeys.key))
         } yield DependencyDefinition(
           group = group,
           name = if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
@@ -167,7 +183,7 @@ object DependencyLoader {
           kind = kind,
           configuration =
             fullConfig.stringOrDefault(Configuration, default = if (isMaven) "" else DefaultConfiguration),
-          classifier = config.optionalString(Classifier),
+          publicationSettings = publicationSettings,
           excludes = artifactExcludes,
           variant = None,
           resolvers = resolvers,

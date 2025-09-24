@@ -15,7 +15,6 @@ import optimus.rest.RestApi
 import optimus.rest.UnsuccessfulRestCall
 import spray.json._
 
-import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -28,6 +27,12 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
 
   def getBasePrData(project: String, repo: String, prNumber: Long): BasePrData =
     handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)) }
+
+  def updatePrDescription(project: String, repo: String, prNumber: Long, description: String, version: Int): Int = {
+    val putUrl = apiPrUrl(project, repo, prNumber)
+    val data = UpdateDescription(description, version)
+    put[Id](putUrl, Some(data.toJson.toString())).id
+  }
 
   def getRecentPrData(project: String, repo: String, quantityWanted: Int = 500): Seq[BasePrData] = {
     val url = s"${apiPrsUrl(project, repo)}?state=ALL"

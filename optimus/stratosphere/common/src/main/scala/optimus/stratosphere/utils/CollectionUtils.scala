@@ -13,7 +13,6 @@ package optimus.stratosphere.utils
 
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object CollectionUtils {
   def splitByLength(elements: Seq[String], lengthLimit: Int): Seq[Seq[String]] = {

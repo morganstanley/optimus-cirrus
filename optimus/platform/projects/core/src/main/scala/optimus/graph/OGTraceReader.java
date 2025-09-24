@@ -619,7 +619,7 @@ public abstract class OGTraceReader {
       cur.visitedID = 1;
       if (cur.isActive(start, end) && !cur.isRunning(start, end)) preTasks.add(cur);
       if (cur.callers == null || cur.callers.size() != 1) break;
-      cur = cur.callers.get(0);
+      cur = cur.callers.getFirst();
     }
   }
 
@@ -677,8 +677,7 @@ public abstract class OGTraceReader {
     } else {
       OGTrace.log
           .javaLogger()
-          .info(
-              "Found " + branches.size() + " possible methods where concurrency could be improved");
+          .info("Found {} possible methods where concurrency could be improved", branches.size());
       for (Map.Entry<PNodeTaskInfo, ArrayList<PNodeTaskInfo>> entry : branches.entrySet()) {
         PNodeTaskInfo parentInfo = entry.getKey();
         for (PNodeTaskInfo childInfo : entry.getValue()) {
@@ -801,8 +800,9 @@ class OGTraceReaderLive extends OGTraceReader implements StoreTraceObserver {
   @Override
   protected void liveCatchUp() throws InterruptedException {
     LiveProcessorMessage msg;
+    // Place breakpoint on the while loop to be able to see all variables in the debugger
     //noinspection ConstantConditions
-    while ((msg = tablesQ.take()) != null) {
+    while ((msg = tablesQ.pollFirst(1, TimeUnit.SECONDS)) != null) {
       OGLocalTables.expungeRemovedThreads();
       processLiveMessage(msg);
     }
@@ -838,8 +838,9 @@ class OGTraceReaderLive extends OGTraceReader implements StoreTraceObserver {
       }
       // shouldn't need the timeout but let's follow good practice
       try {
-        latch.await(5000, MILLISECONDS);
+        latch.await(5_000, MILLISECONDS);
       } catch (InterruptedException e) {
+        //noinspection CallToPrintStackTrace
         e.printStackTrace();
       }
     }

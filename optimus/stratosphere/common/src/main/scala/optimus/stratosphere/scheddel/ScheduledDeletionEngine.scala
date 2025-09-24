@@ -23,7 +23,6 @@ import optimus.stratosphere.utils.EnvironmentUtils
 
 import java.nio.file.Path
 import java.time.ZonedDateTime
-import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
 

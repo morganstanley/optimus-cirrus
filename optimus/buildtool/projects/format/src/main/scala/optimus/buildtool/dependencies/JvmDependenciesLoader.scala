@@ -35,7 +35,6 @@ import optimus.buildtool.format.Warning
 import optimus.buildtool.format.WorkspaceStructure
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 object JvmDependenciesLoader {
@@ -58,6 +57,13 @@ object JvmDependenciesLoader {
   private[buildtool] val Variants = "variants"
   private[buildtool] val Name = "name"
   private[buildtool] val NativeDependencies = "nativeDependencies"
+  private[buildtool] object PublicationSettingsKeys {
+    val key = "publicationSettings"
+    val publicationName = "name"
+    val tpe = "tpe"
+    val classifier = "classifier"
+    val ext = "ext"
+  }
   private[buildtool] val Resolvers = "resolvers"
   private[buildtool] val Substitutions = "substitutions"
 
@@ -131,9 +137,9 @@ object JvmDependenciesLoader {
 
     def loadMultiSourceDeps(conf: Config, file: DependencyConfig, key: String): Result[MultiSourceDependencies] =
       if (conf.hasPath(key))
-        MultiSourceDependenciesLoader.load(conf.getConfig(key), file, loadedResolvers, scalaMajorVersion)
+        MultiSourceDependenciesLoader.load(conf, key, file, loadedResolvers, scalaMajorVersion)
       else
-        Success(MultiSourceDependencies(Nil)).withProblems(Seq(Warning(s"OBT file missing: ${file.path}", file)))
+        Success(MultiSourceDependencies(Nil, Nil)).withProblems(Seq(Warning(s"OBT file missing: ${file.path}", file)))
 
     def loadDependencySets(variantSets: Set[VariantSet]): Result[Set[DependencySet]] = {
       val configFiles = workspace.dependencySets.to(Seq)
@@ -231,14 +237,14 @@ object JvmDependenciesLoader {
             toMultiSource(extraLibs, JvmDependenciesConfig) ++
             toMultiSource(afsDeps.dependencies ++ afsDeps.extraLibs, DependenciesConfig) ++
             toMultiSource(mavenDeps.dependencies ++ mavenDeps.extraLibs, MavenDependenciesConfig) ++
-            toMultiSource(buildDeps.dependencies, BuildDependenciesConfig)
+            toMultiSource(buildDeps.dependencies, BuildDependenciesConfig),
+          globalSubstitutions
         ),
         dependencySets,
         variantSets,
         afsDeps.nativeDependencies,
         afsDeps.groups,
         globalExcludes ++ afsDeps.excludes ++ mavenDeps.excludes,
-        globalSubstitutions,
         mavenDeps.mavenDefinition,
         scalaMajorVersion
       )

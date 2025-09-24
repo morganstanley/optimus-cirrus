@@ -16,8 +16,6 @@ import optimus.buildtool.builders.postbuilders.installer.component.testplans._
 import optimus.buildtool.config.TestplanConfiguration
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 trait PythonTestplanInstaller { self: TestplanInstaller =>
 
   object PythonPathNames {

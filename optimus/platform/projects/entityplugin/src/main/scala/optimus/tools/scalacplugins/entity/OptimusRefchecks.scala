@@ -688,7 +688,14 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
     }
 
     private val validEmbeddableClasses: Set[Symbol] =
-      Set(ObjectClass, AnyClass, SerializableClass, rootMirror.requiredClass[java.io.Serializable], Enumeration)
+      Set(
+        ObjectClass,
+        AnyClass,
+        SerializableClass,
+        rootMirror.requiredClass[java.io.Serializable],
+        Enumeration,
+        Enumeration_Value,
+        Enumeration_Val)
     private val validNonOptimusEmbeddableClasses: Set[String] =
       StaticConfig.stringSet("validNonOptimusEmbeddableClasses")
 

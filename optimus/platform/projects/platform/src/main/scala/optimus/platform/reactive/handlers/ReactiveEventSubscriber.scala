@@ -11,7 +11,7 @@
  */
 package optimus.platform.reactive.handlers
 
-trait ReactiveEventSubscriber[-T <: ReactiveEvent] {
+trait ReactiveEventSubscriber[-T] {
   def published(t: T): Unit
 
   /** sends an error through the reactive pipeline including conflators */

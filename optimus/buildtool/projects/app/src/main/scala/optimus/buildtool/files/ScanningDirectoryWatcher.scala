@@ -51,7 +51,7 @@ private[buildtool] class ScanningDirectoryWatcher extends DirectoryWatcher with 
       maxDepth: Int): Unit = if (!PathUtils.isDisted(rootPath)) { // assume disted paths are immutable
     val scanner = Scanner(rootPath, dirFilter, notificationFilter, maxDepth)
     if (scanners.add(scanner)) {
-      log.debug(s"Registering path: $rootPath")
+      log.trace(s"Registering path: $rootPath")
       scanner.hasChanged()
     }
   }

@@ -15,6 +15,7 @@ import optimus.platform._
 
 import java.time.ZonedDateTime
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 
 // This entity shows a secondary key
 @stored @entity
@@ -30,7 +31,7 @@ class Person(val firstName: String, val secondName: String, @node val dob: Zoned
   @key def theKey = (firstName, secondName)
 }
 
-object DefiningKeys extends OptimusApp {
+object DefiningKeys extends OptimusApp with PrintlnInterceptor {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

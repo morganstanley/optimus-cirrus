@@ -132,6 +132,10 @@ final case class SStackHeader(contents: StringContents = classOf[SStackHeader]) 
   override def css = "background-color: #99dd8e; font-weight: bold;"
   override def withDefaultStringContents = SStackHeader()
 }
+final case class ResultHeader(contents: StringContents = classOf[ResultHeader]) extends StyledLeafHtmlNode {
+  override def css = "font-weight: bold;"
+  override def withDefaultStringContents = ResultHeader()
+}
 final case class ArgumentHeader(contents: StringContents = classOf[ArgumentHeader]) extends StyledLeafHtmlNode {
   override def css = "background-color: #c9c9ff; font-weight: bold;"
   override def withDefaultStringContents = ArgumentHeader()

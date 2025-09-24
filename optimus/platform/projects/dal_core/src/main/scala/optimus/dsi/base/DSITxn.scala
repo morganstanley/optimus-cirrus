@@ -21,6 +21,7 @@ import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.dsi.bitemporal.GeneratedAppEventResult
 import optimus.platform.dsi.bitemporal.InvalidateAllCurrentResult
 import optimus.platform.dsi.bitemporal.PutApplicationEventResult
+import optimus.platform.dsi.bitemporal.PrepareMonoTemporalResult
 import optimus.platform.dsi.bitemporal.Result
 import optimus.platform.dsi.bitemporal.VoidResult
 import optimus.platform.internal.SimpleStateHolder
@@ -74,6 +75,7 @@ object DSITxn {
         }
         pae.copy(appEvent = updateAppEvent(pae.appEvent, tt), beResults = bes)
       case ic: InvalidateAllCurrentResult => ic
+      case pmt: PrepareMonoTemporalResult => pmt
       case cs: CreateSlotsResult          => cs
       case atr: AccTableResult            => atr
       case VoidResult                     => VoidResult
@@ -150,6 +152,8 @@ final case class DSITxn[+A](result: A, actions: Seq[TxnAction]) {
       case _: FillWriteSlot             => OtherGroup // other
       case _: PutClassIdMapping         => OtherGroup // other
       case _: WorklogOnlyTxnAction      => OtherGroup // other
+      case _: PutClassInfoEntry         => EntityGroupingTimesliceGroup // entityGroupingTimeslice
+      case _: UpdateClassInfoEntry      => EntityGroupingTimesliceGroup // entityGroupingTimeslice
       case _: PutEntityGrouping         => EntityGroupingTimesliceGroup // entityGroupingTimeslice
       case _: UpdateEntityGrouping      => EntityGroupingTimesliceGroup // entityGroupingTimeslice
       case _: PutUniqueIndexGrouping    => EntityUniqueIndexGroupingTimesliceGroup // entityUniqueIndexGroupingTimeslice

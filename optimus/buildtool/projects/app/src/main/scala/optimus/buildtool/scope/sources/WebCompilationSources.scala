@@ -20,7 +20,6 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 
 @entity class WebCompilationSources(scope: CompilationScope) extends CompilationSources {
 
@@ -42,7 +41,7 @@ import scala.collection.immutable.Seq
       .merge[SourceUnitId]
     val fingerprint = scope.fingerprint(hashedFiles, tpe) ++ scope.webDependenciesFingerprint
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.WebFingerprint)
-    HashedSourcesImpl(Seq(tpe -> hashedFiles), Nil, fingerprintHash)
+    HashedSourcesImpl(Seq(tpe -> hashedFiles), fingerprintHash, fingerprint)
   }
 }
 

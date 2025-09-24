@@ -229,7 +229,7 @@ object InfoDumper extends Log {
       msgs = s"Exiting with code $code" :: msgs,
       crumbSource = crumbSource,
       description = "Shutdown",
-      heapDump = DiagnosticSettings.fullHeapDumpOnKill,
+      heapDump = DiagnosticSettings.heapDumpOnKill,
       taskDump = true,
       noMore = true,
       exceptions = exceptions
@@ -280,7 +280,7 @@ object InfoDumper extends Log {
             maxMethods = 100,
             maxTraces = 10,
             savePrefix = Some(prefix),
-            saveType = "jfr",
+            saveType = "ap",
             event = "cpu")
       }
       // dump full stack trace of passed in exception
@@ -353,7 +353,7 @@ object InfoDumper extends Log {
           ManagementFactory.getPlatformMBeanServer(),
           "com.sun.management:type=HotSpotDiagnostic",
           classOf[HotSpotDiagnosticMXBean])
-        mxBean.dumpHeap(path.toString, true)
+        mxBean.dumpHeap(path.toString, !DiagnosticSettings.fullHeapDumpOnKill)
 
         if (DiagnosticSettings.runOmatEnabled) {
           if (memoryDxCommand.nonEmpty) {

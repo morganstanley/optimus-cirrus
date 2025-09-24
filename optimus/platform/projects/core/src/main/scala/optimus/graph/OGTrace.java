@@ -182,8 +182,7 @@ public class OGTrace {
       if (acn.getId() != -1) {
         DiagnosticSettings.traceAvailable = false;
         log.javaLogger()
-            .error(
-                "optimus.graph is not instrumented, please contact optimus graph team for help");
+            .error("optimus.graph is not instrumented, please contact optimus graph team for help");
       }
     }
   }
@@ -264,6 +263,14 @@ public class OGTrace {
     for (var consumer : consumers) {
       raiseTraceModeChanged(consumer);
     }
+  }
+
+  /**
+   * user API for applications that are cycle based to inform live PGO about the end of each cycle
+   * If live PGO is not enabled this is a no op
+   */
+  public static void reportEndCycle() {
+    observer.markEndOfCycle();
   }
 
   private static void raiseTraceModeChanged(
@@ -469,7 +476,7 @@ public class OGTrace {
   public static void startupSetupComplete(StartupEvent startupEvent) {
     StartupEventCounter.reportCompleted(startupEvent);
     long time = OGTrace.nanoTime();
-    log.javaLogger().debug("startupSetupComplete at " + time);
+    log.javaLogger().debug("startupSetupComplete at {}", time);
     OGSchedulerTimes.preOptimusStartupComplete(time);
   }
 
@@ -479,7 +486,7 @@ public class OGTrace {
    */
   public static void startupOptimusInitComplete() {
     long time = OGTrace.nanoTime();
-    log.javaLogger().debug("startupOptimusInitComplete at " + time);
+    log.javaLogger().debug("startupOptimusInitComplete at {}", time);
     OGSchedulerTimes.optimusStartupComplete(time);
   }
 
@@ -489,7 +496,7 @@ public class OGTrace {
    */
   public static void startupAppInitComplete() {
     long time = OGTrace.nanoTime();
-    log.javaLogger().debug("startupAppInitComplete at " + time);
+    log.javaLogger().debug("startupAppInitComplete at {}", time);
     OGSchedulerTimes.postOptimusAppStartupComplete(time);
   }
 
@@ -548,7 +555,7 @@ public class OGTrace {
       var doneInTime = latch.await(timeoutMS, MILLISECONDS);
       if (!doneInTime)
         log.javaLogger()
-            .warn("Scheduler still busy after " + (cumulativeMS * 1e-3) + "s: \n" + scheduler);
+            .warn("Scheduler still busy after {}s: \n{}", cumulativeMS * 1e-3, scheduler);
       return doneInTime;
     } catch (InterruptedException ignored) {
     }
@@ -660,12 +667,12 @@ public class OGTrace {
 
   @SuppressWarnings("unused")
   public static void classLoadCallback(Thread t, Class<?> k) {
-    log.javaLogger().debug("JVMTI classLoad for " + k.getName() + " on thread " + t.getName());
+    log.javaLogger().debug("JVMTI classLoad for {} on thread {}", k.getName(), t.getName());
   }
 
   @SuppressWarnings("unused")
   public static void classPrepareCallback(Thread t, Class<?> k) {
-    log.javaLogger().debug("JVMTI classPrepare for " + k.getName() + " on thread " + t.getName());
+    log.javaLogger().debug("JVMTI classPrepare for {} on thread {}", k.getName(), t.getName());
   }
 
   @SuppressWarnings("unused")
@@ -676,6 +683,6 @@ public class OGTrace {
 
   @SuppressWarnings("unused")
   public static void threadEndCallback(Thread t) {
-    log.javaLogger().debug("JVMTI thread end for thread " + t.getName());
+    log.javaLogger().debug("JVMTI thread end for thread {}", t.getName());
   }
 }

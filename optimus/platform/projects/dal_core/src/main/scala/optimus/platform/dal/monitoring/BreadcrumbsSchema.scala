@@ -177,6 +177,7 @@ object BreadcrumbsSchema {
       final val entityType = "entityType"
       final val asset = "asset"
       final val partition = "partition"
+      final val transformerName = "transformerName"
       final val dbType = "dbType"
       final val eref = "eref"
       final val entityClass = "entityClass"
@@ -326,6 +327,7 @@ object BreadcrumbsSchema {
       final val zkPath = "zk_path"
       final val pollerPerThreadFlag = "poller_per_thread_flag"
       final val batchCommitSize = "batch_commit_size"
+      final val kafkaPublishTimeout = "kafka_publish_timeout"
       final val propagateCpsFlag = "propagate_cps_flag"
       final val waitInMillisForConnectionIssues = "wait_in_millis_for_connection_issues"
       final val enableLeaderWatcherOnSelf = "enable_leader_watcher"
@@ -430,4 +432,17 @@ object BreadcrumbsSchema {
     }
   }
 
+  object Encryption {
+    object Properties {
+      final val className = "className"
+      final val expectedFieldsNotEncrypted = "expectedFieldsNotEncrypted"
+      final val notConfiguredFieldsEncrypted = "notConfiguredFieldsEncrypted"
+      final val actualEncryptedFields = "actualEncryptedFields"
+      final val expectedEncryptedFields = "expectedEncryptedFields"
+      final val isActualEncryptedFieldsNonEmpty = "isActualEncryptedFieldsNonEmpty"
+      final val crumbType = "type"
+      final val eref = "eref"
+      final val exception = "exception"
+    }
+  }
 }

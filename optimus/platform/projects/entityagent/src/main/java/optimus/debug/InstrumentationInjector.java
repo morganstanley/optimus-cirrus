@@ -16,6 +16,9 @@ import static optimus.debug.EntityInstrumentationType.none;
 import static optimus.debug.EntityInstrumentationType.recordConstructedAt;
 import static optimus.debug.InstrumentationConfig.*;
 
+import static optimus.graph.DiagnosticSettings.enableCastTracing;
+import static optimus.graph.DiagnosticSettings.enableEqTracing;
+import static optimus.graph.DiagnosticSettings.enableNaNWarnings;
 import static org.objectweb.asm.Opcodes.ACC_INTERFACE;
 import static org.objectweb.asm.Opcodes.ASM9;
 
@@ -24,6 +27,7 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 import java.util.function.BiPredicate;
 
+import optimus.FieldInjector;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassReaderEx;
 import org.objectweb.asm.ClassVisitor;
@@ -47,9 +51,34 @@ public class InstrumentationInjector implements ClassFileTransformer {
       byte[] bytes)
       throws IllegalClassFormatException {
     ClassPatch patch = forClass(className);
+    // If restricted to a specific classLoader which is not the one
+    // passed in here, then disable transform:
+    if (patch != null
+        && patch.restrictToClassLoader != null
+        && patch.restrictToClassLoader != loader) patch = null;
+
     if (patch == null && !instrumentAnyGroups()) return bytes;
 
     var crSource = new ClassReaderEx(bytes);
+
+    if ((enableNaNWarnings || enableEqTracing || enableCastTracing)
+        && loader != null
+        && !"scala/runtime/Statics".equals(className)) {
+      // While double comparison effects scala/runtime/Statics it's basically ignorable
+      var firstPass =
+          new InstrumentationByteCodeVisitors.CV(
+              null, enableNaNWarnings, enableEqTracing, enableCastTracing);
+      crSource.accept(firstPass, 0);
+      if (firstPass.needTransform) {
+        var cw = new ClassWriter(crSource, 0);
+        var rewrite =
+            new InstrumentationByteCodeVisitors.CV(
+                cw, enableNaNWarnings, enableEqTracing, enableCastTracing);
+        crSource.accept(rewrite, 0);
+        bytes = cw.toByteArray();
+        crSource = new ClassReaderEx(bytes);
+      }
+    }
 
     var entityInstrType = instrumentAllEntities;
     if (entityInstrType != none && shouldInstrumentEntity(className, crSource)) {
@@ -94,8 +123,14 @@ public class InstrumentationInjector implements ClassFileTransformer {
 
     if (patch == null) return bytes;
 
-    ClassWriter cw = new ClassWriter(crSource, ClassWriter.COMPUTE_FRAMES);
-    ClassVisitor cv = new InstrumentationInjectorAdapter(patch, className, cw);
+    var cw = new ClassWriter(crSource, ClassWriter.COMPUTE_FRAMES);
+    ClassVisitor cv = cw;
+    {
+      for (var injected : patch.injectedFields) {
+        cv = new FieldInjector(injected.fields, injected.implInterface, cv);
+      }
+      cv = new InstrumentationInjectorAdapter(patch, className, cv);
+    }
     crSource.accept(cv, ClassReader.SKIP_FRAMES);
     return cw.toByteArray();
   }

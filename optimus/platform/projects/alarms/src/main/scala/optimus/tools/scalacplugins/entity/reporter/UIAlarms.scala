@@ -87,7 +87,8 @@ object UIAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
     63205,
     "Invalid type of a handler (%s). " +
       "A ui handler must be either a @handle function or a gesture.")
-  val OPTION_CONVERSION_BINDING = warning0(
-    63208,
-    "Using default implicit converter from Option[T] to T is not safe. Consider using your own implicit converter.")
+  val INVALID_ASSIGN_TYPE = abort2(
+    63209,
+    "Invalid assign type, expected: (%s), actual: (%s), that means we failed to find the implicit converters for those 2 types, and the UI's default converters is not enough."
+  )
 }

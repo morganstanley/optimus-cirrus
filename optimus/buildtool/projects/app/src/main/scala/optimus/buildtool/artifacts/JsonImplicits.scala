@@ -27,6 +27,7 @@ import java.net.URI
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.github.plokhotnyuk.jsoniter_scala.macros.CodecMakerConfig
+import optimus.buildtool.compilers.venv.RuffCheckOutput
 import optimus.buildtool.resolvers.DependencyInfo
 import org.apache.commons.lang3.StringUtils
 
@@ -67,6 +68,8 @@ private[buildtool] object JsonImplicits {
   implicit val processorMetadataValueCodec: JsonValueCodec[ProcessorMetadata] =
     JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(65536))
   implicit val pythonMetadataValueCodec: JsonValueCodec[PythonMetadata] =
+    JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(65536))
+  implicit val ruffOutputValueCodec: JsonValueCodec[Seq[RuffCheckOutput]] =
     JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(65536))
   implicit val messagesMetadataValueCodec: JsonValueCodec[MessagesMetadata] =
     JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(65536))

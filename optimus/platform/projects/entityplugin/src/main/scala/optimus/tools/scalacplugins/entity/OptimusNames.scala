@@ -160,7 +160,7 @@ trait OptimusNames {
     val allowConstructorDefaultValuesInVersioning: TermName = newTermName("allowConstructorDefaultValuesInVersioning")
 
     val auto: TermName = newTermName("auto")
-    val Async: TermName = newTermName("Async")
+    val AsyncInternals: TermName = newTermName("AsyncInternals")
     val expect: TermName = newTermName("expect")
 
     val assert: TermName = newTermName("assert")

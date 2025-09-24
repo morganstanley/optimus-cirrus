@@ -47,8 +47,8 @@ final case class PropertyInfoToken(name: String, klass: Class[_], isModule: Bool
 }
 
 private object PropertyInfoUtils {
-  val propertyInfoType: universe.Type = typeOf[PropertyInfo[_]]
-  val propertyInfoSymbol: universe.Symbol = propertyInfoType.typeSymbol
+  private def propertyInfoType: universe.Type = typeOf[PropertyInfo[_]]
+  lazy val propertyInfoSymbol: universe.Symbol = propertyInfoType.typeSymbol
 }
 
 /**
@@ -67,11 +67,6 @@ class PropertyInfo[R](_name: String, flags: Long = 0L, val annotations: Seq[Stat
   final def setEntityInfo(entityInfo: OptimusInfo): Unit = {
     this.entityInfo = entityInfo
     this.profile = NodeTrace.registerWithLinkUp(this)
-    if (needPicklers) {
-      val typeTagOfR = this.typeTag
-      this.pickler = Registry.picklerOf(typeTagOfR)
-      this.unpickler = Registry.unpicklerOf(typeTagOfR)
-    }
   }
 
   private def needPicklers: Boolean =
@@ -103,8 +98,8 @@ class PropertyInfo[R](_name: String, flags: Long = 0L, val annotations: Seq[Stat
   }
 
   // TODO (OPTIMUS-0000): Do they really need to retain their types? If not they can be moved down to NodeTaskInfo
-  var pickler: Pickler[R] = _
-  var unpickler: Unpickler[R] = _
+  lazy val pickler: Pickler[R] = if (needPicklers) Registry.picklerOf(this.typeTag) else null
+  lazy val unpickler: Unpickler[R] = if (needPicklers) Registry.unpicklerOf(this.typeTag) else null
 
   // TODO (OPTIMUS-0000): deal with this in a uniform way (e.g. flag)
   def isChildToParent: Boolean = false
@@ -216,7 +211,7 @@ class GenPropertyInfo(name: String, flags: Long, annotations: Seq[StaticAnnotati
 // (e.g. if a tweak handler is defined)
 // These properties may still be tweakable on an instance level.  PropertyInfo.isTweakable will tell you this.
 // TwkPropertyInfoN (below) extends these and adds Property-level tweak support.
-class PropertyInfo0[E <: Storable, R](name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
+class PropertyInfo0[E, R](name: String, flags: Long, annotations: Seq[StaticAnnotation] = Nil)
     extends DefPropertyInfo0[E, E => Boolean, E => R, R](name, flags, annotations)
 class PropertyInfo1[E, P1, R](name: String, flags: Long)
     extends DefPropertyInfo[E, (E, P1) => Boolean, (E, P1) => R, R](name, flags)

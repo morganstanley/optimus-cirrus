@@ -13,8 +13,6 @@ package optimus.buildtool.config
 
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 
-import scala.collection.immutable.Seq
-
 final case class WebConfiguration(
     mode: NpmBuildMode,
     libs: Seq[String],

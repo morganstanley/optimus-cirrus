@@ -34,7 +34,6 @@ import optimus.buildtool.utils.Jars
 import optimus.platform._
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 
 sealed trait PythonInstallerConfiguration
 final object InstallTpa extends PythonInstallerConfiguration

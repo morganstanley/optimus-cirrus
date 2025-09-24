@@ -24,6 +24,7 @@ import optimus.graph.TweakNode;
 import optimus.graph.cache.NCPolicy;
 import optimus.platform.ScenarioStack;
 import optimus.platform.storable.Entity;
+import optimus.platform.util.PrettyStringBuilder;
 
 public class PNodeTaskLive extends PNodeTask {
   private final NodeTask ntsk; // For live traces this points to a underlying NodeTask
@@ -61,6 +62,14 @@ public class PNodeTaskLive extends PNodeTask {
   @Override
   public String stateAsString() {
     return ntsk.stateAsString();
+  }
+
+  @Override
+  public String stateAsDetailedString(boolean html) {
+    PrettyStringBuilder sb = new PrettyStringBuilder(html);
+    // discard the result and just use the detailed string builder
+    ntsk.stateAsString(sb);
+    return html ? "<html>" + sb + "</html>" : sb.toString();
   }
 
   @Override
@@ -175,6 +184,13 @@ public class PNodeTaskLive extends PNodeTask {
   @Override
   public String propertyFlagsAsString() {
     return ntsk.executionInfo().flagsAsString();
+  }
+
+  @Override
+  public String propertyFlagsAsDetailedString(boolean html) {
+    PrettyStringBuilder sb = new PrettyStringBuilder(html);
+    ntsk.executionInfo().flagsAsStringVerbose(sb);
+    return html ? "<html>" + sb + "</html>" : sb.toString();
   }
 
   @Override

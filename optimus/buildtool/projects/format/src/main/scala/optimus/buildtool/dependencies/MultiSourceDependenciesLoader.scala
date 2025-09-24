@@ -14,6 +14,7 @@ package optimus.buildtool.dependencies
 import com.typesafe.config._
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
+import optimus.buildtool.dependencies.JvmDependenciesLoader.loadSubstitutions
 import optimus.buildtool.dependencies.MultiSourceDependency.MultipleAfsError
 import optimus.buildtool.format.ConfigUtils.ConfOps
 import optimus.buildtool.format.DependencyConfig
@@ -31,7 +32,6 @@ import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.format.Success
 import optimus.buildtool.utils.FormatUtils.distinctLast
 
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
 
@@ -222,11 +222,13 @@ object MultiSourceDependenciesLoader {
   }
 
   def load(
-      dependenciesConfig: Config,
+      config: Config,
+      dependenciesKey: String,
       obtFile: DependencyConfig,
       loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]): Result[MultiSourceDependencies] = {
-    Result.tryWith(obtFile, dependenciesConfig) {
+    Result.tryWith(obtFile, config) {
+      val dependenciesConfig = config.getConfig(dependenciesKey)
       val jvmKeyConfigs = dependenciesConfig.nested(obtFile).getOrElse(Nil)
       val multiSourceDeps = Result
         .sequence(jvmKeyConfigs.map { case (strName, depConfig) =>
@@ -272,9 +274,10 @@ object MultiSourceDependenciesLoader {
             } yield NestedDefinitions(allDeps, "obt.jvm.loaded", strName, depConfig.origin().lineNumber())
         }.toIndexedSeq)
 
-      multiSourceDeps
-        .withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
-        .map(nestedDefinitions => MultiSourceDependencies(nestedDefinitions.flatMap(_.loaded)))
+      for {
+        nestedDefinitions <- multiSourceDeps.withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
+        substitutions <- loadSubstitutions(config, obtFile)
+      } yield MultiSourceDependencies(nestedDefinitions.flatMap(_.loaded), substitutions)
     }
   }
 }

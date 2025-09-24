@@ -22,15 +22,13 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 
 final case class GlobalConfig(
-    scalaPath: Directory,
     javaPath: Directory,
     installVersion: String,
     obtVersion: String,
-    scalaVersion: String,
+    scalaVersion: ScalaVersion,
     stratoVersion: String,
     workspaceName: String,
     workspaceRoot: Directory,
@@ -51,7 +49,7 @@ final case class GlobalConfig(
       installVersion = installVersion,
       obtVersion = obtVersion,
       stratosphereVersion = stratoVersion,
-      scalaVersion: String)
+      scalaVersion.value)
 
   val genericRunnerConfig: GenericRunnerConfiguration =
     GenericRunnerConfiguration(genericRunnerAppDirOverride = genericRunnerAppDirOverride)
@@ -72,7 +70,6 @@ final case class GlobalConfig(
       installVersion: String
   ): GlobalConfig = {
     val stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
-    val scalaPath = Directory(mapDepCopyPath(depCopyRoot, stratoConfig.scalaHome, normalizeLib = false))
     // don't use stratoConfig.scalaHome (for now) -- java.home is the version we use to compile java (set by OBT runscript)
     val javaPath = Directory(mapDepCopyPath(depCopyRoot, tweakedJavaHome.path.toString, normalizeLib = false))
     val pythonEnabled = stratoConfig.config.booleanOrDefault("internal.obt.python-enabled", default = false)
@@ -96,7 +93,6 @@ final case class GlobalConfig(
     )
 
     GlobalConfig(
-      scalaPath = scalaPath,
       javaPath = javaPath,
       installVersion = installVersion,
       obtVersion = stratoConfig.obtVersion,

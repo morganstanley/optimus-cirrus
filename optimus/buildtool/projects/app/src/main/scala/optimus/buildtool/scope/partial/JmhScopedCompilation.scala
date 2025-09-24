@@ -49,7 +49,7 @@ import scala.collection.immutable.IndexedSeq
       val jmhDep = DependencyDefinition("ossjava", "jmh", "_", LocalDefinition, configuration = "bytecode")
       val r = externalDependencyResolver.resolveDependencies(DependencyDefinitions(Nil, jmhDep :: Nil))
       assert(r.messages isEmpty, r.messages)
-      r.resolvedArtifacts
+      r.resolvedClassFileArtifacts
     }
     AsyncJmhCompiler.Inputs(
       localArtifacts = (scala.classes ++ java.classes).filter(!_.isInstanceOf[FingerprintArtifact]),

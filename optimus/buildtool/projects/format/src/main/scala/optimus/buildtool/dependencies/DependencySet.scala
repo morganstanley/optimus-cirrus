@@ -13,8 +13,6 @@ package optimus.buildtool.dependencies
 
 import optimus.buildtool.config.DependencyDefinition
 
-import scala.collection.immutable.Seq
-
 final case class DependencySetId(name: String)
 
 final case class DependencySet(

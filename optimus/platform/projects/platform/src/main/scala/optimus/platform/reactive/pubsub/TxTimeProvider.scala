@@ -56,7 +56,7 @@ private[reactive] class TxTimeProvider(val partition: Partition) {
         msg match {
           case HeartbeatMessage(tt) =>
             tryUpdateTT(tt)
-          case StreamCreationSucceeded(tt) =>
+          case StreamCreationSucceeded(tt, _) =>
             log.info(s"streamId($streamId): ticking now stream connected for partition ${partition}")
             tryUpdateTT(tt)
 
@@ -85,7 +85,7 @@ private[reactive] class TxTimeProvider(val partition: Partition) {
             unexpected(msg)
           case MultiPartitionStreamCreationFailed(partitionedSubs) =>
             unexpected(msg)
-          case SubscriptionChangeSucceeded(changeRequestId, tt) =>
+          case SubscriptionChangeSucceeded(changeRequestId, tt, _) =>
             unexpected(msg)
           case SubscriptionChangeFailed(changeRequestId, tt) =>
             unexpected(msg)
@@ -105,7 +105,7 @@ private[reactive] class TxTimeProvider(val partition: Partition) {
       log.error(s"streamId($streamId): $msg", throwable)
       try
         if (notifyGlobalStatus) {
-          val failedEvent = InputFailedEvent(Some(streamId), msg, StatusError(throwable, NoEventCause))
+          val failedEvent = InputFailedEvent(Some(streamId), msg, StatusError(throwable))
           GlobalStatusSource.publish(PubSubTickingTxTimeFailedEvent(failedEvent))
         }
       finally destroy(streamId)

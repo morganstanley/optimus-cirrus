@@ -68,6 +68,13 @@ class Tweak private[optimus] (
     throw new RuntimeException("Tweak.bind is not supported for tweaks with handlers! Tweak: " + target.toString())
   }
 
+  final def target(keyExtractor: TweakKeyExtractor, keyValue: Any): Tweak = {
+    val propInfo = underlyingTarget.propertyInfo
+    val fullKey = ExtractorTweakableKey(keyValue, propInfo)
+    val target = new TweakKeyExtractorTarget(propInfo, keyExtractor, fullKey)
+    new Tweak(target, tweakTemplate)
+  }
+
   private[optimus] final def bind(evaluateIn: Int): Tweak =
     if (evaluateIn == this.evaluateIn) this
     else new Tweak(target, tweakTemplate, evaluateIn, flags, initSite)

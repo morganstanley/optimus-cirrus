@@ -40,7 +40,7 @@ object ConcurrencyTable {
   )
 
   def minimumUnitCostResultToRows(mcr: MinimumUnitCostResult): Iterable[ConcurrencyViewRow] = {
-    val r = ArrayBuffer[ConcurrencyViewRow](mcr.syncPoints.map(new SyncPointNodeView(_)): _*)
+    val r = ArrayBuffer.from[ConcurrencyViewRow](mcr.syncPoints.map(new SyncPointNodeView(_)))
     r ++= mcr.sourceEntries.map(new ChildEntryNodeView(_))
     r
   }

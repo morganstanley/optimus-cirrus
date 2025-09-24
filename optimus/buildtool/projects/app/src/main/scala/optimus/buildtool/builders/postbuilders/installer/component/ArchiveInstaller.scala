@@ -42,7 +42,6 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
 
 class IntellijPluginInstaller(installer: Installer, archiveInstaller: ArchiveInstaller) extends ComponentInstaller {

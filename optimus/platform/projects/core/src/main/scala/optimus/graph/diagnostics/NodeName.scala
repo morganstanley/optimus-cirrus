@@ -20,6 +20,7 @@ import optimus.graph.OGTrace
 import optimus.graph.ProxyPropertyNode
 import optimus.graph.SourceLocator
 import optimus.graph.TweakNode
+import optimus.graph.diagnostics.ap.StackAnalysis.CleanName
 import optimus.graph.loom.LNodeClsID
 import optimus.graph.loom.LoomConfig.COLUMN_NA
 import optimus.graph.loom.LPropertyDescriptor
@@ -187,26 +188,7 @@ object NodeName {
     if (pkgName == null || pkgName.isEmpty) name + modifier else pkgName + "." + name + modifier
   }
 
-  /**
-   * Completely generic method to shorten package name to 1 char per package name So optimus.graph.console becomes o.g.c
-   */
-  def shortPackageName(pkgName: String): String = {
-    if (pkgName == null || pkgName.length < 2) ""
-    else {
-      val prefix = new JStringBuilder
-      prefix.append(pkgName.charAt(0))
-      var i: Int = 1
-      while (i < pkgName.length - 1) {
-        if (pkgName.charAt(i) == '.') {
-          prefix.append('.').append(pkgName.charAt(i + 1))
-          i += 1 // eat next char
-        }
-        i += 1
-      }
-      prefix.append('.')
-      prefix.toString
-    }
-  }
+  def shortPackageName(pkgName: String): String = CleanName.shortPackageName(pkgName)
 
   def fromNodeCls(nodeCls: Class[_]): NodeName = fromNodeCls(nodeCls, "")
   def fromNodeCls(nodeCls: Class[_], modifier: String): NodeName = {

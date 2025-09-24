@@ -17,12 +17,15 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.gradle.api.Action;
+import org.gradle.api.internal.tasks.testing.junit.result.CoverageResult;
 import org.gradle.api.tasks.testing.TestResult.ResultType;
 import org.gradle.internal.ErroringAction;
 import org.gradle.internal.html.SimpleHtmlWriter;
 import org.gradle.reporting.ReportRenderer;
 import org.gradle.reporting.TabbedPageRenderer;
 import org.gradle.reporting.TabsRenderer;
+import java.util.Map;
+import java.nio.file.Path;
 
 import java.io.IOException;
 import java.net.URL;
@@ -204,32 +207,102 @@ abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRe
         htmlWriter.startElement("p").characters("successful tests").endElement();
         htmlWriter.endElement();
         htmlWriter.endElement();
-        if (!results.getCoverageResultType().equals(ResultType.SKIPPED)) {
-          htmlWriter.startElement("td");
-          htmlWriter
-              .startElement("div")
-              .attribute("class", "infoBox " + results.getCoverageStatusClass() + " successRate")
-              .attribute("id", "coverageRate");
-          htmlWriter
-              .startElement("div")
-              .attribute("class", "percent")
-              .characters(results.getFormattedActualCoverageRate())
-              .endElement();
-          htmlWriter.startElement("p").characters("actual coverage").endElement();
-          htmlWriter
-              .startElement("a")
-              .attribute("href", results.getCoverageLink())
-              .attribute("target", "_blank")
-              .characters("expected: " + results.getFormattedExpectedCoverageRate())
-              .endElement();
-          htmlWriter.endElement();
-          htmlWriter.endElement();
-        }
         htmlWriter.endElement();
         htmlWriter.endElement();
         htmlWriter.endElement();
       }
     };
+  }
+
+  private void renderCoverage(SimpleHtmlWriter htmlWriter) throws IOException {
+
+    // Add the title "Test Coverage" with spacing
+    htmlWriter
+        .startElement("h1")
+        .attribute("style", "margin-top:40px; margin-bottom: 20px;") // Add spacing below the title
+        .characters("Test Coverage")
+        .endElement();
+
+    htmlWriter.startElement("table").attribute("class", "coverageTable");
+    ;
+
+    htmlWriter.startElement("thead");
+    htmlWriter.startElement("tr");
+    htmlWriter
+        .startElement("th")
+        .attribute("style", "padding: 5px; text-align: left;")
+        .characters("Project")
+        .endElement();
+    htmlWriter
+        .startElement("th")
+        .attribute("style", "padding: 5px; text-align: left;")
+        .characters("Actual(%)")
+        .endElement();
+    htmlWriter
+        .startElement("th")
+        .attribute("style", "padding: 5px; text-align: left;")
+        .characters("Expected(%)")
+        .endElement();
+    htmlWriter
+        .startElement("th")
+        .attribute("style", "padding: 5px; text-align: left;")
+        .characters("Comments")
+        .endElement();
+    htmlWriter.endElement(); // tr
+
+    // Add a line after the header
+    htmlWriter.startElement("tr");
+    htmlWriter
+        .startElement("td")
+        .attribute("colspan", "5")
+        .attribute("style", "border-top: 1px solid #ccc;")
+        .endElement();
+    htmlWriter.endElement(); // tr
+    htmlWriter.endElement(); // thead
+
+    htmlWriter.startElement("tbody");
+
+    for (Map.Entry<String, CoverageResult> entry :
+        getResults().getCoverageResultsByScope().entrySet()) {
+      String projectName = entry.getKey();
+      CoverageResult coverage = entry.getValue();
+      String failureStyle = coverage.isFailure() ? "color: red;" : "color: green;";
+      String reportLink = coverage.getReportLink().map(Path::toString).orElse("#");
+
+      htmlWriter.startElement("tr");
+      htmlWriter
+          .startElement("td")
+          .attribute("class", "success")
+          .attribute("style", "padding: 5px; text-align: left;" + failureStyle);
+      // Make project name a hyperlink
+      htmlWriter
+          .startElement("a")
+          .attribute("href", reportLink)
+          .attribute("target", "_blank")
+          .characters(projectName)
+          .endElement();
+      htmlWriter.endElement(); // td
+
+      htmlWriter
+          .startElement("td")
+          .attribute("style", "padding: 5px; text-align: left;")
+          .characters(String.valueOf(coverage.getActualPct()))
+          .endElement();
+      htmlWriter
+          .startElement("td")
+          .attribute("style", "padding: 5px; text-align: left;")
+          .characters(String.valueOf(coverage.getExpectedPct()))
+          .endElement();
+      htmlWriter
+          .startElement("td")
+          .attribute("style", "padding: 5px; text-align: left; " + failureStyle)
+          .characters(coverage.getMessage() != null ? coverage.getMessage() : "N/A")
+          .endElement();
+      htmlWriter.endElement(); // tr
+    }
+
+    htmlWriter.endElement(); // tbody
+    htmlWriter.endElement(); // table
   }
 
   @Override
@@ -238,8 +311,17 @@ abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRe
       @Override
       public void render(T model, SimpleHtmlWriter htmlWriter) throws IOException {
         PageRenderer.this.results = model;
+
+        htmlWriter.startElement("div").attribute("style", "margin-top: 20px;").endElement();
+        if (!getResults().getCoverageResultsByScope().isEmpty()) {
+          renderCoverage(htmlWriter);
+        }
+        htmlWriter.endElement(); // End shared-style div
+
         tabsRenderer.clear();
         registerTabs();
+        // Wrap renderTabs and renderCoverage in a shared container
+        htmlWriter.startElement("div").attribute("class", "shared-style");
         renderTabs(htmlWriter);
       }
     };

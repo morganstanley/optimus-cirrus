@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object Take extends LegacyOptimusApp {
+object Take extends LegacyOptimusApp with PrintlnInterceptor {
 
   // This example demonstrates 'take', 'takeFirst', 'takeRight'
   // and 'takeDistinct' methods

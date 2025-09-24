@@ -35,10 +35,10 @@ main {
       optimus.platform.versioning_runtime
     ]
     libs = [
-      msjava.base,
-      msjava.msnet,
-      msjava.protobufutils,
-      msjava.zkapi,
+      msjava.rr-base,
+      msjava.rr-msnet,
+      msjava.rr-protobufutils,
+      msjava.rr-zkapi,
       ossjava.guava,
       ossjava.iharder-base64,
       ossjava.jsr305-annotations,
@@ -50,8 +50,8 @@ main {
   }
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.unsafe
   runtime.libs = [
-    msjava.dbpool,
-    msjava.directory,
+    msjava.rr-dbpool,
+    msjava.rr-directory,
     mskdb.kjava,
     ossjava.args4j,
     ossjava.commons-io,

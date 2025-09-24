@@ -20,8 +20,6 @@ import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 import optimus.scalacompat.collection._
 
-import scala.collection.immutable.Seq
-
 final case class MetaBundleReport(
     @named("metadata_creator") metadataCreator: String,
     @named("metadata_version") metadataVersion: String,

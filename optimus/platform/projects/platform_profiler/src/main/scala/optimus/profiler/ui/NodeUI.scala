@@ -11,41 +11,27 @@
  */
 package optimus.profiler.ui
 
-import java.awt.Color
-import java.awt.Component
 import java.awt.EventQueue
-import java.awt.Graphics
-import java.awt.Graphics2D
-import java.awt.RenderingHints
 import java.awt.event.ActionEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.lang.{Boolean => JBoolean}
 import java.util.concurrent.TimeUnit
 import java.util.prefs.Preferences
-import javax.swing.Icon
 import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JFrame
 import javax.swing.JLabel
 import javax.swing.JPanel
-import javax.swing.JToggleButton
 import javax.swing.UIManager
 import optimus.core.CoreAPI
 import optimus.graph.DiagnosticSettings
 import optimus.graph.JMXConnection
 import optimus.graph.NodeTrace
 import optimus.graph.OGSchedulerTimes
-import optimus.graph.OGTrace
-import optimus.graph.diagnostics.Debugger
 import optimus.graph.diagnostics.SchedulerProfileEntry
-import optimus.graph.diagnostics.pgo.Profiler
-import optimus.graph.diagnostics.trace.OGEventsObserver
-import optimus.graph.diagnostics.trace.OGTraceMode
-import optimus.platform.inputs.GraphInputConfiguration
 import optimus.profiler.DebuggerUI
-import optimus.profiler.ui.common.JMenu2
-import optimus.profiler.ui.common.JPopupMenu2
+import optimus.profiler.ui.controls.RecStopControls
 
 /**
  * Helper methods for graph debugger/profiler UI
@@ -53,13 +39,6 @@ import optimus.profiler.ui.common.JPopupMenu2
 object NodeUI {
 
   def isInitialized: Boolean = lookAndFeelInitialized
-
-  object TimelineMenu {
-    val ENABLE = "Enable"
-    val NODE_DETALS = "Node Details"
-    val CACHE_DETAILS = "Cache Details"
-    val NODE_EDGES = "Node Edges"
-  }
 
   private[this] var lookAndFeelInitialized = false
   private[this] def initLookAndFeel(): Unit = {
@@ -106,89 +85,7 @@ object NodeUI {
     frame.setVisible(true)
   }
 
-  def createCollectPickerComponent: JToggleButton = {
-    class XToggleButton extends JToggleButton("Select recording profile") {
-      val menu = new JPopupMenu2
-      var state = 0 // 0 -> never collected, 1 -> collecting, 2 -> prev collected, paused now....
-      val iconSize = 18
-
-      object icon extends Icon {
-        override def paintIcon(c: Component, g1: Graphics, x: Int, y: Int): Unit = {
-          val g = g1.asInstanceOf[Graphics2D]
-          g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-          if (state == 0 || state == 2) {
-            g.setColor(Color.black)
-            val width = iconSize / 3
-            g.fillRect(x, y + 1, width, iconSize)
-            g.fillRect(x + width + width / 2, y + 1, width, iconSize)
-          } else if (state == 1) {
-            g.setColor(Color.red)
-            g.fillOval(x, y + 1, iconSize, iconSize)
-          }
-        }
-        override def getIconWidth: Int = iconSize + 2
-        override def getIconHeight: Int = iconSize + 2
-      }
-
-      setIcon(icon)
-
-      val advModes = new JMenu2("More")
-      for (mode <- OGTraceMode.modes if mode != OGTraceMode.none) {
-        val addToMenu = if (mode.includeInUI()) menu else advModes
-        val subMenu = addToMenu.addMenu(mode.title, startProfiler(mode), enable = true)
-        subMenu.setToolTipText(mode.description)
-      }
-
-      Debugger.registerAdvancedCommandChangedCallback(b =>
-        if (b) {
-          menu.addSeparator()
-          menu.add(advModes)
-        } else {
-          menu.remove(advModes)
-          menu.remove(menu.getComponentCount - 1)
-        })
-
-      OGTrace.registerOnTraceModeChanged((prevMode, newMode) =>
-        NodeUI.invokeLater(onTraceModeChanged(prevMode, newMode)))
-      onTraceModeChanged(OGTrace.getTraceMode, OGTrace.getTraceMode)
-
-      def onTraceModeChanged(availableMode: OGEventsObserver, newMode: OGEventsObserver): Unit = {
-        if (newMode eq OGTraceMode.none) {
-          if (state != 0) {
-            setText("Recorded: " + availableMode.title)
-            state = 2
-          }
-        } else {
-          state = 1
-          setText("Recording: " + newMode.title)
-          setToolTipText(newMode.description)
-        }
-        setSelected(state == 1)
-        this.repaint()
-      }
-
-      def startProfiler(mode: OGEventsObserver): Unit = {
-        Profiler.resetAll()
-        GraphInputConfiguration.setTraceMode(mode)
-      }
-
-      override def processMouseEvent(e: MouseEvent): Unit = {
-        if (e.getID == MouseEvent.MOUSE_PRESSED && e.getButton == MouseEvent.BUTTON1) {
-          if (state != 1) {
-            menu.show(this, 0, this.getHeight)
-            super.processMouseEvent(e)
-          } else {
-            GraphInputConfiguration.setTraceMode(OGTraceMode.none)
-          }
-        } else {
-          super.processMouseEvent(e)
-        }
-      }
-    }
-
-    val button = new XToggleButton()
-    button
-  }
+  def createRecStopPanel: RecStopControls = RecStopControls.create
 
   /** Creates profiling scenario stack usage checkbox, that auto updates with the others */
   def createIsProfilingSSUsageComponent(pref: Preferences): JCheckBox = {

@@ -31,12 +31,7 @@ import optimus.graph.cache.Caches
 import optimus.graph.cache.CauseProfiler
 import optimus.graph.cache.NCPolicy
 import optimus.graph.cache.NodeCache
-import optimus.graph.diagnostics.DbgPreference
-import optimus.graph.diagnostics.MarkTweakDependency
-import optimus.graph.diagnostics.NodeName
-import optimus.graph.diagnostics.PNodeTask
-import optimus.graph.diagnostics.PNodeTaskInfo
-import optimus.graph.diagnostics.SelectionFlags
+import optimus.graph.diagnostics._
 import optimus.graph.diagnostics.trace.ReuseHistogram
 import optimus.profiler.DebuggerUI
 import optimus.profiler.ProfilerUI
@@ -57,6 +52,31 @@ import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 
 object HotspotsTable {
+  private[ui] def getCacheStatsFromReader(reader: OGTraceReader): Map[String, (Int, Int)] = {
+    def removeProxiesFromCallChain(task: PNodeTask): Seq[PNodeTask] =
+      if (!task.isProxy) Seq(task)
+      else {
+        val (proxyCallers, nonProxyCallers) = task.getCallers.asScala.partition(_.isProxy)
+        proxyCallers.map(removeProxiesFromCallChain).foreach(nonProxyCallers.addAll(_))
+        nonProxyCallers.to(ArraySeq)
+      }
+
+    val hits = mutable.Map.empty[PNodeTask, Int]
+    val allTasks = reader.getRawTasks(true, true, false, false, false).asScala
+    val tasksToCare = allTasks.filter(task => !task.isProxy && task.isCacheable)
+    // removing proxies from call chain so we get accurate cache hit statistics later
+    tasksToCare.foreach(task => {
+      val (proxyCallers, nonProxyCallers) = task.getCallers.asScala.partition(_.isProxy)
+      proxyCallers.map(removeProxiesFromCallChain).foreach(nonProxyCallers.addAll(_))
+      task.callers = new util.ArrayList(nonProxyCallers.asJava)
+    })
+    tasksToCare.foreach(task => hits(task) = task.getCallers.size - 1)
+    hits.groupBy { case (key, _) => key.toPrettyName(true, true) }.map { case (nti, hitInfo) =>
+      val nHits = hitInfo.values.sum
+      val nMisses = hitInfo.size
+      nti -> (nHits, nMisses)
+    }
+  }
 
   val nodeCacheSectionColor: Color = Color.decode("#F7A79D")
   val distinctSectionColor: Color = Color.decode("#D0B3C9")
@@ -1031,7 +1051,7 @@ class HotspotsTable(reader: OGTraceReader)
   if (!reader.isLive) cmdRefresh()
 
   def cmdRefresh(): Unit = {
-    val pntis = reader.getHotspots(_aggregateProxies).asScala
+    val pntis = reader.getHotspots(_aggregateProxies).asScalaUnsafeImmutable
     setList(ArrayBuffer(pntis: _*))
   }
 

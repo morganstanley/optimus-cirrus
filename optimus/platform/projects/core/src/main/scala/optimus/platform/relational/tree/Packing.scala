@@ -11,8 +11,6 @@
  */
 package optimus.platform.relational.tree
 
-import optimus.scalacompat.collection.ArrayToVarArgsOps
-
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import java.nio.ByteBuffer
 

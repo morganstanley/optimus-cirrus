@@ -22,8 +22,6 @@ import optimus.buildtool.runconf.RunConfId
 import optimus.buildtool.runconf.ScopedName
 import optimus.buildtool.runconf.Template
 
-import scala.collection.immutable.Seq
-
 // invalidates whole cache if base key changes
 // for example if syntheticProperties change, we don't want to cache any config that was resolved based on them
 class BaseKeyCache[BaseKey, Key, Value] {

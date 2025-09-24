@@ -12,6 +12,7 @@
 package optimus.platform.relational.dal.pubsub
 
 import optimus.platform.cm.Known
+import optimus.platform.dsi.expressions.PropertyLabels
 import optimus.platform.relational.RelationalException
 import optimus.platform.relational.data.tree.ColumnElement
 import optimus.platform.relational.data.tree.ContainsElement
@@ -34,8 +35,11 @@ object ClientSideFilterRewriter {
 
 class ClientSideFilterRewriter(p: ParameterElement) extends DbQueryTreeVisitor {
   override protected def handleColumn(column: ColumnElement): RelationElement = {
-    val desc = new RuntimeFieldDescriptor(p.rowTypeInfo, column.name, column.rowTypeInfo)
-    ElementFactory.makeMemberAccess(p, desc)
+    if (column.name == PropertyLabels.EntityRef) p
+    else {
+      val desc = new RuntimeFieldDescriptor(p.rowTypeInfo, column.name, column.rowTypeInfo)
+      ElementFactory.makeMemberAccess(p, desc)
+    }
   }
 
   override protected def handleContains(contains: ContainsElement): RelationElement = {

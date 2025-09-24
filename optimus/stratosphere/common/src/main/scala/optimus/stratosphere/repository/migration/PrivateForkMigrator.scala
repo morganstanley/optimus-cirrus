@@ -38,7 +38,9 @@ final class PrivateForkMigrator(ws: StratoWorkspaceCommon, origin: RemoteSpec) {
       if (shouldCreateNewFork) {
         switchFork()
       }
-      new HistoryStitch(ws).undoAll()
+      if (ws.config.hasPath("history-merges")) {
+        new HistoryStitch(ws).undoAll()
+      }
       saveWorkspaceMigrated()
     }
   }

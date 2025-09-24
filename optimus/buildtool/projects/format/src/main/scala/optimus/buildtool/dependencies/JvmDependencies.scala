@@ -16,15 +16,15 @@ import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyGroup
 import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.ModuleSet
+import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.NativeDependencyDefinition
-import optimus.buildtool.config.Substitution
 import optimus.buildtool.dependencies.DependencyLoader.mavenScalaLibName
 import optimus.buildtool.format.DependenciesConfig
 import optimus.buildtool.format.DependencyConfig
 import optimus.buildtool.format.MavenDefinition
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 trait JvmDependencies {
   def dependencies: MultiSourceDependencies
@@ -33,7 +33,6 @@ trait JvmDependencies {
   def nativeDependencies: Map[String, NativeDependencyDefinition]
   val groups: Seq[DependencyGroup]
   def globalExcludes: Seq[Exclude]
-  def globalSubstitutions: Seq[Substitution]
   def mavenDefinition: MavenDefinition
   def scalaMajorVersion: Option[String]
 
@@ -81,34 +80,48 @@ trait JvmDependencies {
       s.id -> dependencyMap(s.dependencies, Nil, onlyMavenKeys = false)
     }.toMap
 
-  def forId(
-      id: String,
-      moduleSet: Option[ModuleSet] = None,
-      fromMavenLibs: Boolean = false
-  ): Seq[DependencyDefinition] = {
-    val dependencies =
-      if (fromMavenLibs) mavenDepsMap // maven only projects or maven release build
-      else allDepsMap
+  private val lookupCache = new ConcurrentHashMap[(Option[ModuleSetId], Boolean), JvmDependencyLookup]()
+  private val moduleSetDepsCache = new ConcurrentHashMap[ModuleSetId, Map[String, Seq[DependencyDefinition]]]()
 
-    val variantSetDeps = moduleSet.map(_.variantSets.flatMap(variantSetsMap.get).flatten.toMap).getOrElse(Map.empty)
-    val dependencySetDeps =
-      moduleSet
-        .map(_.transitiveNonVariantDependencySets.flatMap(dependencySetsMap.get).flatten.toMap)
-        .getOrElse(Map.empty)
+  def lookup(moduleSet: Option[ModuleSet] = None, fromMavenLibs: Boolean = false): JvmDependencyLookup =
+    lookupCache.computeIfAbsent(
+      (moduleSet.map(_.id), fromMavenLibs),
+      { _ =>
+        val dependencies =
+          if (fromMavenLibs) mavenDepsMap // maven only projects or maven release build
+          else allDepsMap
 
-    val allDeps = dependencies ++ dependencySetDeps ++ variantSetDeps
-    scalaMajorVersion match {
-      case Some(scalaStr) =>
-        allDeps
-          .get(id)
-          .orElse(allDeps.get(mavenScalaLibName(id, scalaStr)))
-          .getOrElse(Nil)
-      case None => allDeps.getOrElse(id, Nil)
-    }
-  }
+        val moduleSetDeps = moduleSet
+          .map(ms =>
+            moduleSetDepsCache.computeIfAbsent(
+              ms.id,
+              { _ =>
+                val dependencySetDeps =
+                  ms.transitiveNonVariantDependencySets.flatMap(dependencySetsMap.get).flatten.toMap
+                val variantSetDeps = ms.variantSets.flatMap(variantSetsMap.get).flatten.toMap
+                dependencySetDeps ++ variantSetDeps
+              }
+            ))
+          .getOrElse(Map.empty)
+
+        val allDeps = dependencies ++ moduleSetDeps
+        new JvmDependencyLookup(allDeps, scalaMajorVersion)
+      }
+    )
 
   lazy val versionsConfig: Config = JvmDependenciesLoader.versionsAsConfig(dependencies.preferred)
 
+}
+
+class JvmDependencyLookup(allDeps: Map[String, Seq[DependencyDefinition]], scalaMajorVersion: Option[String]) {
+  def forId(id: String): Seq[DependencyDefinition] = scalaMajorVersion match {
+    case Some(scalaStr) =>
+      allDeps
+        .get(id)
+        .orElse(allDeps.get(mavenScalaLibName(id, scalaStr)))
+        .getOrElse(Nil)
+    case None => allDeps.getOrElse(id, Nil)
+  }
 }
 
 final case class JvmDependenciesImpl(
@@ -118,18 +131,16 @@ final case class JvmDependenciesImpl(
     nativeDependencies: Map[String, NativeDependencyDefinition],
     groups: Seq[DependencyGroup],
     globalExcludes: Seq[Exclude],
-    globalSubstitutions: Seq[Substitution],
     mavenDefinition: MavenDefinition,
     scalaMajorVersion: Option[String]
 ) extends JvmDependencies
 
 object JvmDependencies {
   val empty: JvmDependencies = JvmDependenciesImpl(
-    MultiSourceDependencies(Nil),
+    MultiSourceDependencies(Nil, Nil),
     Set.empty,
     Set.empty,
     Map.empty,
-    Seq.empty,
     Seq.empty,
     Seq.empty,
     MavenDefinition.empty,

@@ -15,11 +15,11 @@ import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.generators.GeneratorType
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Jars
 
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 object CachedMetadata {
@@ -73,6 +73,7 @@ final case class ElectronMetadata(
     extends CachedMetadata
 
 final case class GeneratedSourceMetadata(
+    generatorType: GeneratorType,
     generatorName: String,
     sourcePath: RelativePath,
     messages: Seq[CompilationMessage],

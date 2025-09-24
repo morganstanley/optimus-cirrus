@@ -37,6 +37,7 @@ import scala.jdk.CollectionConverters._
  *     for which the child scenarioStack is being created (and cached)
  */
 object CacheIDs {
+
   def createWeakCache(): ConcurrentMap[AnyRef, ScenarioStack] =
     Caffeine.newBuilder.weakValues().build[AnyRef, ScenarioStack]().asMap()
 
@@ -45,7 +46,10 @@ object CacheIDs {
 
   @deprecating(
     "Temporary implementation to aggressively clear the caches for GUI instances leaking old scenarios in the cache. Also used in stress tests to reset between runs")
-  def clear(): Unit = global.clear()
+  def debugClear(): Unit = global.clear()
+
+  @deprecating("Temporary implementation to clear a specific scenario cache based on the cache key (used in testing)")
+  def debugClearKey(key: ScenarioStackCacheKey): Unit = global.remove(key)
 
   private val removedCacheIDs = new ReferenceQueue[SSCacheID]()
   private[optimus] def putIfAbsent(key: ScenarioStackCacheKey, newCacheID: SSCacheID): SSCacheID = {
@@ -155,7 +159,9 @@ final private[optimus] class SSCacheKey(val parentID: Long, private var _scenari
 
 private[optimus] object SSCacheID {
 
-  val cacheIDGenerator = new AtomicLong()
+  private val cacheIDGenerator = new AtomicLong()
+
+  val commonRoot = new SSCacheID()
 
   /** creates a new SSCacheID with a unique ID but no tweaks */
   final def newUnique(): SSCacheID = new SSCacheID()
@@ -210,7 +216,7 @@ sealed private[optimus] class SSCacheID {
   // noinspection HashCodeUsesVar (id is basically a val, but during deserialization needs to be updated)
   override def hashCode(): Int = id.asInstanceOf[Int]
 
-  def tweakMaskString = tweakMask.stringEncoded()
+  def tweakMaskString: String = tweakMask.stringEncoded()
   def size: Int = tweaks.size()
 
   def this(original: SSCacheID) = {
@@ -418,7 +424,7 @@ final private[optimus] class MutableSSCacheID extends SSCacheID {
     changed.result()
   }
 
-  var modifyOnWrite: Boolean = _
+  private var modifyOnWrite: Boolean = _
 
   /** Creates a new id, but copies expanded tweaks and the copy is read-only */
   override def dup: SSCacheID = {

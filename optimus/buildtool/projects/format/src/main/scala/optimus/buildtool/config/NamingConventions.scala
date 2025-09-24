@@ -22,8 +22,6 @@ import scala.util.matching.Regex
 object NamingConventions {
   import AfsNamingConventions._
 
-  val ConfigPrefix = "optimus.buildtool"
-
   lazy val AfsDist: Directory = Directory(Paths.get(AfsDistStr))
 
   val MsWebDependencyMeta = "@morgan-stanley/"
@@ -134,6 +132,7 @@ object NamingConventions {
 
   // Generated only by BSP after compilation; to find latest pathing jar compiled for all scopes
   val ClassPathMapping = "classpath-mapping.txt"
+  val SourceArtifactMapping = "source-artifact-mapping.txt"
   // Generated all the time except when mischief is activated; to find latest artifact for
   // all scopes and for all artifact types
   val FreezerMapping = "freezer-mapping.txt"
@@ -175,7 +174,11 @@ object NamingConventions {
   private[buildtool] def toPathingJarName(baseName: String): String =
     s"$baseName-runtimeAppPathing.jar"
 
+  private[buildtool] def toSourceJarName(baseName: String): String =
+    s"$baseName.src.jar"
+
   def pathingJarName(scopeId: ScopeId): String = toPathingJarName(baseNameForScope(scopeId))
+  def sourceJarName(scopeId: ScopeId): String = toSourceJarName(baseNameForScope(scopeId))
 
   def scopeOutputName(scopeId: ScopeId, suffix: String = "jar"): String =
     if (suffix.nonEmpty) s"${baseNameForScope(scopeId)}.$suffix" else baseNameForScope(scopeId)
@@ -301,5 +304,12 @@ object NamingConventions {
   def isTextExtension(extn: String): Boolean = textFileExtns(extn)
 
   def isWindowsTextExtension(extn: String): Boolean = windowsTextFileExtns(extn)
+
+  sealed trait ContentType
+  object ContentType {
+    case object Text extends ContentType
+    case object WindowsText extends ContentType
+    case object Binary extends ContentType
+  }
 
 }

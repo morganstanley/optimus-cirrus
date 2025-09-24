@@ -97,6 +97,9 @@ class PathsOpts protected (val path: Path) {
     path.resolve(dir)
   }
 
+  def setReadable(readable: Boolean, ownerOnly: Boolean = false) =
+    path.toFile.setReadable( /* readable = */ readable, /* ownerOnly = */ ownerOnly)
+
   def watch(events: WatchEvent.Kind[_]*)(body: Seq[Path] => Unit): Thread = {
     val watchService = FileSystems.getDefault.newWatchService()
     path.getParent.register(watchService, events: _*)

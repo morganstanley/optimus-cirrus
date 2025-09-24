@@ -13,12 +13,20 @@ package optimus.platform.dsi
 
 import optimus.dsi.base.RegisteredIndexConfig
 import optimus.graph.DiagnosticSettings
+import optimus.platform.internal.SimpleGlobalStateHolder
 import optimus.platform.internal.SimpleStateHolder
 import optimus.platform.storable.SerializedEntity
 
 import scala.collection.immutable.SortedSet
 
-sealed abstract class Feature(val value: Feature.Id)
+sealed abstract class Feature(val value: Feature.Id) {
+  def prop = s"optimus.dsi.feature.${this.getClass.getSimpleName.stripSuffix("$")}"
+  def defaultEnabled: Boolean = true
+  def enabled: Boolean = DiagnosticSettings.getBoolProperty(prop, defaultEnabled)
+  def enable(): Unit = System.setProperty(prop, "true")
+  def disable(): Unit = System.setProperty(prop, "false")
+  def clear(): Unit = System.clearProperty(prop)
+}
 
 object Feature {
   type Id = Int
@@ -44,12 +52,24 @@ object Feature {
   case object TypedReferences extends Feature(19)
   case object LeadWriterPartitioning extends Feature(20)
   case object ClientSideAppEventReferenceAssignment extends Feature(21)
-  case object EstablishAllRolesWithSession extends Feature(22)
+  case object EstablishAllRolesWithSession extends Feature(22) {
+    override def prop: String = "optimus.dsi.server.enableEstablishAllRolesWithSession"
+  }
   case object ExecuteRefQueryWithVersionedRef extends Feature(23)
   case object PartitionedServerTime extends Feature(24)
   case object SupportUniqueIndexViolationException extends Feature(25)
-  case object SupportCreateNewSession extends Feature(26)
-  case object EmitEntityReferenceStats extends Feature(27)
+  case object SupportCreateNewSession extends Feature(26) {
+    override def prop: String = EnableCreateNewSessionState.defaultEnableCreateNewSession.toString
+    override def defaultEnabled: Boolean = EnableCreateNewSessionState.defaultEnableCreateNewSession
+    override def enable(): Unit = EnableCreateNewSessionState.enableCreateNewSession
+    override def disable(): Unit = EnableCreateNewSessionState.disableCreateNewSession
+  }
+  case object EmitEntityReferenceStats extends Feature(27) {
+    override def prop: String = EntityReferenceStatsCollectorState.enableProp
+    override def defaultEnabled: Boolean = EntityReferenceStatsCollectorState.defaultEnabled
+    override def enable(): Unit = EntityReferenceStatsCollectorState.enableEntityReferenceStatsCollection()
+    override def disable(): Unit = EntityReferenceStatsCollectorState.resetEntityReferenceStatsCollection()
+  }
   // Note: This pubsub feature was assigned value 28 before, but we had to rework protocol
   // around it so that value CANNOT be used again.
   case object PubSubChunkedNotifications extends Feature(29)
@@ -71,7 +91,9 @@ object Feature {
   case object ValidTimeLineWithBounds extends Feature(value = 39)
   case object TransactionTimelineWithBounds extends Feature(value = 40)
   case object CountGroupings extends Feature(value = 41)
-  case object SupportsRevertOp extends Feature(value = 42)
+  case object SupportsRevertOp extends Feature(value = 42) {
+    override def prop: String = "optimus.dsi.server.supportsRevertOp"
+  }
 
   /**
    * If server supports registered indexes feature, then it will send the list of entities that supports the feature.
@@ -84,6 +106,8 @@ object Feature {
   final case class RegisteredIndexes(supportedEntities: Set[SerializedEntity.TypeRef])
       extends Feature(value = RegisteredIndexes.value) {
     def supports(entity: SerializedEntity.TypeRef): Boolean = supportedEntities.contains(entity)
+    override def prop: String = RegisteredIndexConfig.EnableProp
+    override def defaultEnabled: Boolean = RegisteredIndexConfig.registeredIndexesEnabledDefaultValue
   }
 
   case object AtNowMaxCatchup extends Feature(value = 44)
@@ -99,8 +123,11 @@ object Feature {
 
   case object RoleMembershipQueryWithClientSessionInfo extends Feature(value = 49)
 
-  // TODO (OPTIMUS-71946): remove this once monoTemporal feature is fully supported
   case object SupportMonoTemporal extends Feature(value = 50)
+
+  case object PubSubReferenceNotification extends Feature(value = 51) { override def defaultEnabled = false }
+
+  case object VersionedReferenceQuery extends Feature(value = 52)
 
   def fromValue(value: Id, registeredEntities: Set[SerializedEntity.TypeRef] = Set.empty): Feature = value match {
     case 1  => ExtendedChunkedResponses
@@ -149,6 +176,8 @@ object Feature {
     case 48 => SerializedKeyBasedFilterForAccelerator
     case 49 => RoleMembershipQueryWithClientSessionInfo
     case 50 => SupportMonoTemporal
+    case 51 => PubSubReferenceNotification
+    case 52 => VersionedReferenceQuery
     case _  => Unknown(value)
   }
 
@@ -164,9 +193,10 @@ final case class SupportedFeatures(features: SortedSet[Feature]) {
   def supports(feature: Feature): Boolean = features contains feature
   def intersect(other: SupportedFeatures): SupportedFeatures = SupportedFeatures(features.intersect(other.features))
   def diff(other: SupportedFeatures): SupportedFeatures = SupportedFeatures(features.diff(other.features))
+  def enabled: SupportedFeatures = SupportedFeatures(features.filter(_.enabled))
 }
 
-object SupportedFeatures extends SimpleStateHolder(() => new SupportedFeaturesConfigValues) {
+object SupportedFeatures extends SimpleGlobalStateHolder(() => new SupportedFeaturesConfigValues) {
   def apply(features: Feature*): SupportedFeatures = apply(SortedSet.empty[Feature] ++ features)
   def apply(features: Iterable[Feature]): SupportedFeatures = apply(SortedSet.empty[Feature] ++ features)
   def apply(): SupportedFeatures = apply(SortedSet.empty[Feature])
@@ -181,8 +211,8 @@ object SupportedFeatures extends SimpleStateHolder(() => new SupportedFeaturesCo
     else None
   }
 
-  // lazy to avoid classloading on initialization before it's needed
-  lazy val All: SupportedFeatures = FeatureSets.All
+  // lazy to avoid initialization before it's needed
+  def All: SupportedFeatures = FeatureSets.All
   lazy val None: SupportedFeatures = FeatureSets.None
 
   def setEnableSyncOutOfOrderReception(value: Boolean): Unit = getState.synchronized {
@@ -223,8 +253,9 @@ class EntityReferenceStatsCollectorState {
 }
 
 object EntityReferenceStatsCollectorState extends SimpleStateHolder(() => new EntityReferenceStatsCollectorState) {
-  private val defaultEnableEmitEntityReferenceStats =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.enableEmitEntityReferenceStats", false)
+  private[dsi] val enableProp = "optimus.dsi.enableEmitEntityReferenceStats"
+  private[dsi] val defaultEnabled = false
+  private val defaultEnableEmitEntityReferenceStats = DiagnosticSettings.getBoolProperty(enableProp, defaultEnabled)
 
   def enableEntityReferenceStatsCollection(): Unit = getState.emitEntityReferenceStatsEnabled = true
 
@@ -235,83 +266,65 @@ object EntityReferenceStatsCollectorState extends SimpleStateHolder(() => new En
 }
 
 private object FeatureSets {
-  // Since this file is shared by both server and client code, keeping the EstablishAllRolesWithSession enabled by default,
-  // On brokers we need to disable it explicitly by setting this flag as false.
-  private val enableEstablishAllRolesWithSession =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.server.enableEstablishAllRolesWithSession", true)
-
-  private val enableExecuteRefQueryWithVref =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.server.enableExecuteRefQueryWithVref", true)
-
-  private val supportsRevertOp =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.server.supportsRevertOp", true)
-
-  private val disableTypeInfoQueries =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.server.disableTypeInfoQueries", false)
-
-  private val disableSerializedKeyBasedFilterForAccelerator =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.server.disableSerializedKeyBasedFilterForAccelerator", false)
-
-  private val enableSupportMonoTemporal =
-    DiagnosticSettings.getBoolProperty("optimus.dsi.enableSupportMonoTemporal", false)
 
   // avoid class loading on startup
-  lazy val All: SupportedFeatures = {
-    val allFeatures = SupportedFeatures(
-      Set(
-        Feature.ExtendedChunkedResponses,
-        Feature.RangeQuery,
-        Feature.RangeVersionQuery,
-        Feature.ParseSessionEstablishmentErrors,
-        Feature.OutOfOrderReception,
-        Feature.PropagateEntitlementCheckFailed,
-        Feature.ClasspathRegistration,
-        Feature.ValidTimeLineLazyLoadEntity,
-        Feature.SerializeKeyWithRefFilter,
-        Feature.BreadcrumbTracking,
-        Feature.DalActionCheck,
-        Feature.BatchLevelErrorResults,
-        Feature.DalOnBehalf,
-        Feature.NonReaderBrokerException,
-        Feature.BrokerUriResolutionForNonDefaultContext,
-        Feature.TypedReferences,
-        Feature.LeadWriterPartitioning,
-        Feature.ClientSideAppEventReferenceAssignment,
-        Feature.PartitionedServerTime,
-        Feature.SupportUniqueIndexViolationException,
-        Feature.PubSubChunkedNotifications,
-        Feature.LastWitnessedTxTimeOfClient,
-        Feature.PubSubOutOfLineNotificationEntry,
-        Feature.Lz4Compression,
-        Feature.DeltaUpdatePriqlApi,
-        Feature.EstablishSessionInPrcClient,
-        Feature.GetTemporalSpaceWithFilter,
-        Feature.GetEventTransactionsApi,
-        Feature.SilverKingAllReplicasExcluded,
-        Feature.SamplingQuery,
-        Feature.ValidTimeLineWithBounds,
-        Feature.TransactionTimelineWithBounds,
-        Feature.CountGroupings,
-        Feature.AtNowMaxCatchup,
-        Feature.AsyncPartitionedWrite,
-        Feature.SetStreamsACLs,
-        Feature.RoleMembershipQueryWithClientSessionInfo
-      ) ++ (if (RegisteredIndexConfig.areRegisteredIndexesEnabled) Set(Feature.RegisteredIndexes.empty) else Set.empty)
-        ++ (if (enableEstablishAllRolesWithSession) Set(Feature.EstablishAllRolesWithSession) else Set.empty)
-        ++ (if (enableExecuteRefQueryWithVref) Set(Feature.ExecuteRefQueryWithVersionedRef) else Set.empty)
-        ++ (if (supportsRevertOp) Set(Feature.SupportsRevertOp) else Set.empty)
-        ++ (if (EnableCreateNewSessionState.isCreateNewSessionEnabled) Set(Feature.SupportCreateNewSession)
-            else Set.empty)
-        ++ (if (EntityReferenceStatsCollectorState.isEntityReferenceStatsCollectionEnabled)
-              Set(Feature.EmitEntityReferenceStats)
-            else Set.empty)
-        ++ (if (!disableTypeInfoQueries) Set(Feature.EventEntitiesWithType) else Set.empty)
-        ++ (if (!disableSerializedKeyBasedFilterForAccelerator) Set(Feature.SerializedKeyBasedFilterForAccelerator)
-            else Set.empty)
-        ++ (if (enableSupportMonoTemporal) Set(Feature.SupportMonoTemporal) else Set.empty)
+  private lazy val allFeatures = SupportedFeatures(
+    Set(
+      Feature.ExtendedChunkedResponses,
+      Feature.RangeQuery,
+      Feature.RangeVersionQuery,
+      Feature.ParseSessionEstablishmentErrors,
+      Feature.OutOfOrderReception,
+      Feature.PropagateEntitlementCheckFailed,
+      Feature.ClasspathRegistration,
+      Feature.ValidTimeLineLazyLoadEntity,
+      Feature.SerializeKeyWithRefFilter,
+      Feature.BreadcrumbTracking,
+      Feature.DalActionCheck,
+      Feature.BatchLevelErrorResults,
+      Feature.DalOnBehalf,
+      Feature.NonReaderBrokerException,
+      Feature.BrokerUriResolutionForNonDefaultContext,
+      Feature.TypedReferences,
+      Feature.LeadWriterPartitioning,
+      Feature.ClientSideAppEventReferenceAssignment,
+      Feature.PartitionedServerTime,
+      Feature.SupportUniqueIndexViolationException,
+      Feature.PubSubChunkedNotifications,
+      Feature.LastWitnessedTxTimeOfClient,
+      Feature.PubSubOutOfLineNotificationEntry,
+      Feature.Lz4Compression,
+      Feature.DeltaUpdatePriqlApi,
+      Feature.EstablishSessionInPrcClient,
+      Feature.GetTemporalSpaceWithFilter,
+      Feature.GetEventTransactionsApi,
+      Feature.SilverKingAllReplicasExcluded,
+      Feature.SamplingQuery,
+      Feature.ValidTimeLineWithBounds,
+      Feature.TransactionTimelineWithBounds,
+      Feature.CountGroupings,
+      Feature.AtNowMaxCatchup,
+      Feature.AsyncPartitionedWrite,
+      Feature.SetStreamsACLs,
+      Feature.RoleMembershipQueryWithClientSessionInfo,
+      Feature.EstablishAllRolesWithSession,
+      Feature.ExecuteRefQueryWithVersionedRef,
+      Feature.RegisteredIndexes.empty,
+      Feature.SupportCreateNewSession,
+      Feature.EmitEntityReferenceStats,
+      Feature.EventEntitiesWithType,
+      Feature.SerializedKeyBasedFilterForAccelerator,
+      Feature.SupportsRevertOp,
+      Feature.SupportMonoTemporal,
+      Feature.PubSubReferenceNotification,
+      Feature.VersionedReferenceQuery
     )
-    validate(allFeatures)
-    allFeatures
+  )
+
+  def All: SupportedFeatures = {
+    val allEnabled = allFeatures.enabled
+    validate(allEnabled)
+    allEnabled
   }
 
   val None: SupportedFeatures = SupportedFeatures()
@@ -335,7 +348,7 @@ private object FeatureSets {
 }
 
 final class SupportedFeaturesConfigValues() {
-  private lazy val allSupportedFeatures = FeatureSets.All
+  private def allSupportedFeatures = FeatureSets.All
   private lazy val syncSupportedFeatures = FeatureSets.All.diff(SupportedFeatures(Feature.OutOfOrderReception))
   private var features: SupportedFeatures = _
 

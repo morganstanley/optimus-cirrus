@@ -22,7 +22,6 @@ import optimus.buildtool.resolvers.DependencyInfo
 import optimus.platform._
 
 import scala.util.matching.Regex
-import scala.collection.immutable.Seq
 
 @entity class ConfigurationValidator(scopeId: ScopeId, forbiddenDependencies: Seq[ForbiddenDependencyConfiguration]) {
 

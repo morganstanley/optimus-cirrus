@@ -26,7 +26,6 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.scope.ScopedCompilation
 
 import java.io.File
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger

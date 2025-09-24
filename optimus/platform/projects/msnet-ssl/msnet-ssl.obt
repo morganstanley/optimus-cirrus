@@ -10,12 +10,13 @@
 main {
   compile {
     libs = [
-      msjava.msnet
+      msjava.rr-msnet
       netty-afscompat.handler
     ]
     mavenLibs = [
       com.ms.infra.rr.msnet
       io.netty.netty-handler
+      javax.inject.javax.inject
     ]
   }
   installIvy = true

@@ -24,7 +24,6 @@ import java.nio.file.attribute.PosixFilePermission
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.mutable.ListBuffer
 import scala.util.Using
 

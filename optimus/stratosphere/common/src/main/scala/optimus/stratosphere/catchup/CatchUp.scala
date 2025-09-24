@@ -16,6 +16,7 @@ import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.repository.migration.PrivateForkMigrator
 import optimus.stratosphere.sparse.SparseUtils
+import optimus.stratosphere.timing.Timed
 import optimus.stratosphere.updater.GitUpdater
 import optimus.stratosphere.utils.GitUtils
 import optimus.stratosphere.utils.IntervalPrinter.timeThis
@@ -23,7 +24,6 @@ import optimus.stratosphere.utils.IntervalPrinter.timeThis
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.io.Source
 import scala.util.Failure
 import scala.util.Success
@@ -63,7 +63,8 @@ class CatchUp(
     doUserConfirm: String => Boolean,
     displayProgressBar: Double => Unit,
     isCanceled: () => Boolean,
-    args: CatchUpParams) {
+    args: CatchUpParams)
+    extends Timed {
 
   private val logger = ws.log
 
@@ -79,22 +80,34 @@ class CatchUp(
     val currBranch = getCurrentBranch()
     logger.info(s"Current branch: $currBranch")
 
-    checkWorkspaceState(currBranch)
-    step(CatchupProgress.repoStateChecked)
+    measureTime("repoStateCheck") {
+      checkWorkspaceState(currBranch)
+      step(CatchupProgress.repoStateChecked)
+    }
 
-    val remoteToUse = prepareRemoteForCatchup()
-    step(CatchupProgress.fetchFinished)
+    val remoteToUse = measureTime("fetch") {
+      val remoteToUse = prepareRemoteForCatchup()
+      step(CatchupProgress.fetchFinished)
+      remoteToUse
+    }
 
-    val bestRef = findBestRef(remoteToUse)
-    step(CatchupProgress.cacheFound)
+    val bestRef = measureTime("findCache") {
+      val bestRef = findBestRef(remoteToUse)
+      step(CatchupProgress.cacheFound)
+      bestRef
+    }
 
     bestRef match {
       case Some(gitRef) =>
-        catchupWithCommit(remoteToUse, currBranch, gitRef)
-        step(CatchupProgress.rebased, canCancel = false)
+        measureTime("rebase") {
+          catchupWithCommit(remoteToUse, currBranch, gitRef)
+          step(CatchupProgress.rebased, canCancel = false)
+        }
 
-        SparseUtils.refresh()(ws)
-        step(CatchupProgress.sparseRefreshed, canCancel = false)
+        measureTime("refresh") {
+          SparseUtils.refresh()(ws)
+          step(CatchupProgress.sparseRefreshed, canCancel = false)
+        }
       case _ =>
         abort(s"No good commit was found in $branchToUse from $remoteName.")
     }
@@ -301,12 +314,13 @@ class CatchUp(
     fetchCodetreeArchiveRepo(archiveRemoteName)
     val commitsDiff = calculateDiffWithArchivedHistory(archiveRemoteName, currentBranch)
     if (commitsDiff.isEmpty) {
-      throw new StratosphereException(
-        s"There is nothing to migrate on branch '$currentBranch'. Please cut a new one from '$branchToUse'")
+      logger.info("No commits to migrate, resetting current branch to match the remote...")
+      gitUtil.resetKeep(commit)
+    } else {
+      logger.info("Applying commits on a new baseline...")
+      gitUtil.resetKeep(commit)
+      gitUtil.cherryPick(commitsDiff)
     }
-    gitUtil.resetKeep(commit)
-    logger.info("Applying commits on a new baseline...")
-    gitUtil.cherryPick(commitsDiff)
   }
 
   private def fetchCodetreeArchiveRepo(remoteName: String): Unit = {
@@ -326,7 +340,7 @@ class CatchUp(
     logger.info("Calculating diff with archived history...")
     val result = gitUtil
       .runGit("log", s"$archiveRemoteName/$branchToUse..$currentBranch", "--format=%H", "--no-merges")
-    Source.fromString(result).getLines().to(Seq)
+    Source.fromString(result).getLines().to(Seq).reverse
   }
 
   private def step(fraction: Double, canCancel: Boolean = true): Unit = {

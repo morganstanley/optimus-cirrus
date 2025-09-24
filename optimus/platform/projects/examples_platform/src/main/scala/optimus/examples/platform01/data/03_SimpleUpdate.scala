@@ -12,10 +12,10 @@
 package optimus.examples.platform01.data
 
 import optimus.examples.platform.entities.SimpleEntity
-
 import org.kohsuke.args4j._
 import optimus.platform._
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 
 class SupplyEntityNameAndValueArgs extends SupplyEntityNameArgs {
   @Option(name = "-a", aliases = Array("--amount"), usage = "Set amount to")
@@ -25,7 +25,7 @@ class SupplyEntityNameAndValueArgs extends SupplyEntityNameArgs {
   var value: Double = patch.MilliInstant.now.getEpochSecond().toDouble
 }
 
-object SimpleUpdate extends LegacyOptimusApp[SupplyEntityNameAndValueArgs] {
+object SimpleUpdate extends LegacyOptimusApp[SupplyEntityNameAndValueArgs] with PrintlnInterceptor {
   val simpleEntity = SimpleEntity.get(cmdLine.name)
 
   given(simpleEntity.amount := cmdLine.amount, simpleEntity.value := cmdLine.value) {

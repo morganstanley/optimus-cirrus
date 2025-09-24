@@ -16,6 +16,7 @@ import optimus.entity.EntityInfo
 import optimus.entity.StorableInfo
 import optimus.graph.AlreadyCompletedPropertyNode
 import optimus.graph._
+import optimus.platform.AdvancedUtils.disableFeatures
 import optimus.platform._
 import optimus.platform.AsyncImplicits._
 import optimus.platform.dal.DALEventInfo
@@ -29,7 +30,6 @@ import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType.methodType
 import java.lang.reflect.Field
-import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 object ReflectivePicklingImpl {
@@ -130,7 +130,7 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       ref: Reference): Unpickled = {
     val inst = unsafe.allocateInstance(info.runtimeClass).asInstanceOf[Unpickled]
     initMetadata(inst, is, initInfo, info, ref)
-    unpickleFill(info, is, forceUnpickle, incomplete = false, inst)
+    unpickleFill(info, is.newMutStream, forceUnpickle, incomplete = false, inst)
     inst
   }
 
@@ -151,44 +151,61 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
    */
   private def unpickleFill(
       info: StorableInfo,
-      is: PickledInputStream,
+      is: PickledInputStreamMut,
       forceUnpickle: Boolean,
       incomplete: Boolean,
       inst: Unpickled): Unit = {
-    info.unsafeFieldInfo
-      // TODO (OPTIMUS-22294): Asyncing the closure triggers sync stack detection.  Apparently sync stacks are ok.
-      .asyncOff
-      .foreach { case UnsafeFieldInfo(pinfo, storageKind, initMethod, fieldReader, fieldSetter) =>
-        if (storageKind == UnsafeFieldInfo.StorageKind.Node) {
-          // handle Entity/Option[Entity]/Collection[Entity] cases for traits. For now, we're still
-          // using the old-style LPR approach for traits
-          val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
-          if (hasValue || !incomplete) {
-            val value: PropertyNode[_] = {
+    // TODO (OPTIMUS-78287):  When this JIRA ir resolved, we can remove the logic to disablePicklingInterning. We
+    // currently have to disable it because of the combination of the below:
+    // 1- unpickleFill can be called with a PickledInputStream that contains heap entities because features such sa
+    // MyEntity.copyUnique uses unpickling (through CopyHelper.copyHelp) when creating copies and some of the
+    // properties could be heap entities or types that contain heap entities.
+    // 2- The legacy persist blocks will mutate these heap entities to change their flavor from applied to hybrid
+    // If we were to intern heap entities, we could find that (2) happens for them and we would end up mutating
+    // interned instances which creates undefined behaviour in a number of code-paths
+    // If "inst" is a temporary entity, that means we are using unpickling for a heap entity and if the root
+    // entity is a heap entity then it could point to heap entities (For a DAL entity, this would be impossible).
+    // so inst.dal$isTemporary is the condition when we want to disable interning.
+    val inits = disableFeatures(suppressSyncStackDetection = true, disablePicklingInterning = inst.dal$isTemporary) {
+      info.unsafeFieldInfo
+        // TODO (OPTIMUS-22294): Asyncing the closure triggers sync stack detection.  Apparently sync stacks are ok.
+        .asyncOff
+        .flatMap { case UnsafeFieldInfo(pinfo, storageKind, initMethod, fieldReader, fieldSetter) =>
+          if (storageKind == UnsafeFieldInfo.StorageKind.Node) {
+            // handle Entity/Option[Entity]/Collection[Entity] cases for traits. For now, we're still
+            // using the old-style LPR approach for traits
+            val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
+            if (hasValue || !incomplete) {
               if (hasValue) {
-                if (forceUnpickle) new AlreadyCompletedPropertyNode(is.value, inst.asInstanceOf[Entity], pinfo)
-                else
-                  new LazyPickledReference(
-                    is.value,
-                    pinfo.unpickler.asInstanceOf[Unpickler[AnyRef]],
-                    inst.asInstanceOf[Entity],
-                    pinfo,
-                    null)
+                val value: PropertyNode[_] =
+                  if (forceUnpickle) new AlreadyCompletedPropertyNode(is.value, inst.asInstanceOf[Entity], pinfo)
+                  else
+                    new LazyPickledReference(
+                      is.value,
+                      pinfo.unpickler.asInstanceOf[Unpickler[AnyRef]],
+                      inst.asInstanceOf[Entity],
+                      pinfo,
+                      null)
+                fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascription is not optional
+                None
               } else {
                 if (initMethod.isDefined)
-                  new AlreadyCompletedPropertyNode(initMethod.get.invoke(inst), inst.asInstanceOf[Entity], pinfo)
-                else missingProperty(pinfo.name)
+                  Some(() => {
+                    val value: PropertyNode[_] =
+                      new AlreadyCompletedPropertyNode(initMethod.get.invoke(inst), inst.asInstanceOf[Entity], pinfo)
+                    fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascription is not optional
+                  })
+                else {
+                  missingProperty(pinfo.name)
+                  None
+                }
               }
-            }
-
-            fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascription is not optional
-          }
-        } else if (storageKind == UnsafeFieldInfo.StorageKind.LazyPickled) { // handle Entity/Option[Entity]/Collection[Entity] cases
-          val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
-          if (hasValue || !incomplete) {
-            val value = {
+            } else None
+          } else if (storageKind == UnsafeFieldInfo.StorageKind.LazyPickled) { // handle Entity/Option[Entity]/Collection[Entity] cases
+            val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
+            if (hasValue || !incomplete) {
               if (hasValue) {
-                if (forceUnpickle) {
+                val value = if (forceUnpickle) {
                   is.value
                 } else {
                   // Field is a complex type that contains an @entity. This could be a collection, tuple, embeddable
@@ -213,44 +230,59 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
                       throw new UnpickleException(is.value, "AnyRef")
                   }
                 }
-              } else {
-                if (initMethod.isDefined)
-                  initMethod.get.invoke(inst)
-                else missingProperty(pinfo.name)
+                fieldSetter.invokeExact(inst, value: Any): Unit // Type ascriptions are not optional
+                None
+              } else if (initMethod.isDefined)
+                Some(() => {
+                  val value = initMethod.get.invoke(inst)
+                  fieldSetter.invokeExact(inst, value: Any): Unit // Type ascriptions are not optional
+                })
+              else {
+                missingProperty(pinfo.name)
+                None
               }
-            }
-
-            fieldSetter.invokeExact(inst, value: Any): Unit // Type ascriptions are not optional
-          }
-        } else { // handle non-entity types - primary types, embeddable, Option/Collection of such types
-          val hasValue = is.seek(pinfo.name, pinfo.unpickler)
-          if (hasValue || !incomplete) {
-            val value = {
-              if (hasValue) is.value
-              else if (initMethod.isDefined) initMethod.get.invoke(inst)
-              else if (!incomplete) missingProperty(pinfo.name)
-            }
-
-            try {
-              fieldSetter.invokeExact(inst, value): Unit // Type ascription is not optional
-            } catch {
-              case NonFatal(e) =>
-                throw new IncompatibleVersionException(
-                  s"Failed to unpickle field $pinfo (typeTag: ${pinfo.typeTag}) with value '$value'",
-                  e)
-            }
+            } else None
+          } else { // handle non-entity types - primary types, embeddable, Option/Collection of such types
+            val hasValue = is.seek(pinfo.name, pinfo.unpickler)
+            def setValue(value: Any) =
+              try {
+                fieldSetter.invokeExact(inst, value): Unit // Type ascription is not optional
+              } catch {
+                case NonFatal(e) =>
+                  throw new IncompatibleVersionException(
+                    s"Failed to unpickle field $pinfo (typeTag: ${pinfo.typeTag}) with value '$value'",
+                    e)
+              }
+            if (hasValue || !incomplete) {
+              if (hasValue) {
+                setValue(is.value)
+                None
+              } else if (initMethod.isDefined) {
+                Some(() => setValue(initMethod.get.invoke(inst)))
+              } else if (!incomplete) {
+                missingProperty(pinfo.name)
+                None
+              } else None
+            } else None
           }
         }
-      }
+    }
+    inits.asyncOff.foreach(_.apply())
   }
 
-  protected def resolveSetter(lookup: MethodHandles.Lookup, fld: Field, isVal: Boolean): MethodHandle = {
+  protected def resolveSetter(
+      lookup: MethodHandles.Lookup,
+      fld: Field,
+      isVal: Boolean,
+      eInfo: StorableInfo,
+      propIndex: Int): MethodHandle = {
     val setter = lookup.unreflectSetter(fld).asType(setterMType)
-    val intern = isVal && !fld.getType.isPrimitive && fld.getAnnotation(classOf[_intern]) != null
-    if (intern)
-      MethodHandles.filterArguments(setter, 1, CoreHelpers.intern_mh)
-    else
-      setter
+    if (isVal && !fld.getType.isPrimitive) {
+      val mh =
+        if (fld.getAnnotation(classOf[_intern]) != null) CoreHelpers.intern_mh
+        else MethodHandles.insertArguments(eInfo.maybeIntern_mh, 1, propIndex)
+      MethodHandles.filterArguments(setter, 1, mh)
+    } else setter
   }
 
   protected def resolveReader(lookup: MethodHandles.Lookup, pinfo: PropertyInfo[_], sk: StorageKind): MethodHandle = {
@@ -263,19 +295,6 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
   protected final def propertyInfoNotFoundError(which: String, where: Class[_]): Unit = {
     log.error(
       s"Can't find property $which in $where. Deserializing such an object will doubtlessly disappoint. (12000)")
-  }
-
-  private def warnOnDangerousReactiveUpdate(
-      inst: Unpickled,
-      pinfo: PropertyInfo[_],
-      reader: MethodHandle,
-      current: Any): Unit = {
-    val info =
-      try {
-        val prev = reader.invokeExact(inst): AnyRef
-        s"$inst.${pinfo.name}: $prev => $current"
-      } catch { case t: Throwable => s"<error: ${t.getMessage}>" }
-    log.warn("Dangerous Reactive Update for " + info)
   }
 }
 
@@ -304,70 +323,74 @@ object ReflectiveEntityPicklingImpl // used in [core]o.p.pickling.ReflectiveEnti
   def prepareMeta(info: EntityInfo): Seq[UnsafeFieldInfo] = {
     val allInfos = getAllParents(info)
     val props = allInfos.flatMap { _.runtimeClass.getDeclaredFields }
-    props flatMap { p =>
-      val name = p.getName
-      val endIndex = Math.max(name.lastIndexOf("$impl"), name.lastIndexOf("$backing"))
-      val beginIndex = {
-        // handle the places we put package name as part of the property name to avoid name conflict
-        val res = name.lastIndexOf("$$")
-        if (res > 0) res + 2 else 0
-      }
-      if (endIndex > 0) {
-        val pname = name.substring(beginIndex, endIndex)
-        val initMethod = info.runtimeClass.getMethods.find(m => m.getName == pname + "$init")
-        val pinfo: Option[PropertyInfo[_]] = {
-          val pinfos = allInfos.collect {
-            case i if i.propertyMetadata.contains(pname) => i.propertyMetadata(pname)
-          }
-
-          if (pinfos.nonEmpty) {
-            // search for the stored property first
-            val storedPinfo = pinfos.find(_.isStored)
-            if (storedPinfo.isDefined) Some(storedPinfo.get)
-            else if (initMethod.isDefined) {
-              // if we can't find a stored property in the whole inheritance chain, (e.g. @transient val)
-              // using the first found property with $init method as workaround
-              Some(pinfos.head) // could be headOption, but this shows our certainty that it's here
-            } else {
-              // we can't find a way to initialize the transient val property, throw
-              throw new IllegalStateException(
-                s"Can't find storeable property $pname or init method in ${info.runtimeClass.getName}")
+    val lookup = MethodHandles.lookup()
+    props
+      .flatMap { p =>
+        val name = p.getName
+        val endIndex = Math.max(name.lastIndexOf("$impl"), name.lastIndexOf("$backing"))
+        val beginIndex = {
+          // handle the places we put package name as part of the property name to avoid name conflict
+          val res = name.lastIndexOf("$$")
+          if (res > 0) res + 2 else 0
+        }
+        if (endIndex > 0) {
+          val pname = name.substring(beginIndex, endIndex)
+          val initMethod = info.runtimeClass.getMethods.find(m => m.getName == pname + "$init")
+          val pinfoOpt: Option[PropertyInfo[_]] = {
+            val pinfos = allInfos.collect {
+              case i if i.propertyMetadata.contains(pname) => i.propertyMetadata(pname)
             }
-          } else {
-            // we don't find any property info named as such value, (e.g. val definition in non-entity trait)
-            // we don't have a way to get the initialization logic, throw
-            // (well, think very hard about throwing and wish we could. the day will come; oh yes, it will come.)
-            propertyInfoNotFoundError(pname, info.runtimeClass)
-            None
+
+            if (pinfos.nonEmpty) {
+              // search for the stored property first
+              val storedPinfo = pinfos.find(_.isStored)
+              if (storedPinfo.isDefined) Some(storedPinfo.get)
+              else if (initMethod.isDefined) {
+                // if we can't find a stored property in the whole inheritance chain, (e.g. @transient val)
+                // using the first found property with $init method as workaround
+                Some(pinfos.head) // could be headOption, but this shows our certainty that it's here
+              } else {
+                // we can't find a way to initialize the transient val property, throw
+                throw new IllegalStateException(
+                  s"Can't find storeable property $pname or init method in ${info.runtimeClass.getName}")
+              }
+            } else {
+              // we don't find any property info named as such value, (e.g. val definition in non-entity trait)
+              // we don't have a way to get the initialization logic, throw
+              // (well, think very hard about throwing and wish we could. the day will come; oh yes, it will come.)
+              propertyInfoNotFoundError(pname, info.runtimeClass)
+              None
+            }
           }
-        }
 
-        pinfo map { pinfo =>
-          val lookup = MethodHandles.lookup()
-          p.setAccessible(true)
+          pinfoOpt.map { pinfo =>
+            p.setAccessible(true)
 
-          val nodeKind =
-            if ((classOf[Node[_]] isAssignableFrom p.getType))
-              StorageKind.Node
-            else if (java.lang.reflect.Modifier.isVolatile(p.getModifiers)) {
-              // implying that this $impl field is for an lazypickled value from the volatile attribute
-              // We will improve this by using a PropertyInfo flag instead.
-              StorageKind.LazyPickled
-            } else if (pinfo.isTweakable) StorageKind.Tweakable
-            else StorageKind.Val
+            val nodeKind =
+              if ((classOf[Node[_]] isAssignableFrom p.getType))
+                StorageKind.Node
+              else if (java.lang.reflect.Modifier.isVolatile(p.getModifiers)) {
+                // implying that this $impl field is for an lazypickled value from the volatile attribute
+                // We will improve this by using a PropertyInfo flag instead.
+                StorageKind.LazyPickled
+              } else if (pinfo.isTweakable) StorageKind.Tweakable
+              else StorageKind.Val
 
-          UnsafeFieldInfo(
-            pinfo,
-            nodeKind,
-            initMethod,
-            resolveReader(lookup, pinfo, nodeKind),
-            resolveSetter(lookup, p, nodeKind == StorageKind.Val)
-          )
-        }
-      } else None
-    }
+            (p, pinfo, initMethod, nodeKind)
+          }
+        } else None
+      }
+      .zipWithIndex
+      .map { case ((p, pinfo, initMethod, nodeKind), propIndex) =>
+        UnsafeFieldInfo(
+          pinfo,
+          nodeKind,
+          initMethod,
+          resolveReader(lookup, pinfo, nodeKind),
+          resolveSetter(lookup, p, nodeKind == StorageKind.Val, info, propIndex)
+        )
+      }
   }
-
 }
 
 object ReflectiveEventPickling
@@ -395,34 +418,40 @@ object ReflectiveEventPickling
   def prepareMeta(info: EventInfo): Seq[UnsafeFieldInfo] = {
     val allInfos = getAllParents(info)
     val props = allInfos.flatMap { _.runtimeClass.getDeclaredFields }
-    props filter (_.getName != "validTime") flatMap { p =>
-      val name = p.getName
-      val beginIndex = {
-        // handle the places we put package name as part of the property name to avoid name conflict
-        val res = name.lastIndexOf("$$")
-        if (res > 0) res + 2 else 0
-      }
-      val pname = (if (beginIndex > 0) name.substring(beginIndex) else name) stripSuffix "$impl" stripSuffix "$backing"
-      val initMethod = info.runtimeClass.getMethods.find(m => m.getName == pname + "$init")
-      val pinfo = allInfos.collectFirst {
-        case i
-            if i.propertyMetadata.contains(pname) &&
-              // we may have override @node val, should always pickup the last stored property definition
-              // and check the initMethod to handle @transient val
-              (i.propertyMetadata(pname).isStored || initMethod.isDefined) =>
-          i.propertyMetadata(pname)
-      }
+    val lookup = MethodHandles.lookup()
+    props
+      .filter(_.getName != "validTime")
+      .flatMap { p =>
+        val name = p.getName
+        val beginIndex = {
+          // handle the places we put package name as part of the property name to avoid name conflict
+          val res = name.lastIndexOf("$$")
+          if (res > 0) res + 2 else 0
+        }
+        val pname =
+          (if (beginIndex > 0) name.substring(beginIndex) else name) stripSuffix "$impl" stripSuffix "$backing"
+        val initMethod = info.runtimeClass.getMethods.find(m => m.getName == pname + "$init")
+        val pinfo = allInfos.collectFirst {
+          case i
+              if i.propertyMetadata.contains(pname) &&
+                // we may have override @node val, should always pickup the last stored property definition
+                // and check the initMethod to handle @transient val
+                (i.propertyMetadata(pname).isStored || initMethod.isDefined) =>
+            i.propertyMetadata(pname)
+        }
 
-      pinfo match {
-        case None => propertyInfoNotFoundError(name, info.runtimeClass); None
-        case Some(pinfo) =>
-          val lookup = MethodHandles.lookup()
-          p.setAccessible(true)
-          val getField = resolveReader(lookup, pinfo, StorageKind.Val)
-          val setField = resolveSetter(lookup, p, isVal = true)
-          Some(UnsafeFieldInfo(pinfo, StorageKind.Val, initMethod, getField, setField))
+        pinfo match {
+          case None        => propertyInfoNotFoundError(name, info.runtimeClass); None
+          case Some(pInfo) => Some(p, initMethod, pInfo)
+        }
       }
-    }
+      .zipWithIndex
+      .map { case ((p, initMethod, pinfo), propIndex) =>
+        p.setAccessible(true)
+        val getField = resolveReader(lookup, pinfo, StorageKind.Val)
+        val setField = resolveSetter(lookup, p, isVal = true, info, propIndex)
+        UnsafeFieldInfo(pinfo, StorageKind.Val, initMethod, getField, setField)
+      }
   }
   private val validTimeType = methodType(classOf[Unit], classOf[BusinessEvent], classOf[java.time.Instant])
   def getValidTimeHandle(event: Class[_]): MethodHandle = {

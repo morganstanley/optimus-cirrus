@@ -12,8 +12,8 @@
 package optimus.platform.debugger
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
 
 /**
  * A class used to serialize data about methods which are used to restart optimus nodes in the IJ debugger.
@@ -21,7 +21,7 @@ import com.fasterxml.jackson.module.scala.ScalaObjectMapper
 final case class OptimusCutPoint(className: String, methodName: String)
 
 object OptimusCutPoint {
-  private val mapper = new ObjectMapper() with ScalaObjectMapper
+  private val mapper = new ObjectMapper() with ClassTagExtensions
   mapper.registerModule(DefaultScalaModule)
 
   def write(elem: OptimusCutPoint): String =

@@ -28,8 +28,6 @@ import org.objectweb.asm.tree.ClassNode;
 /** In doubt see: var byteCode = BiopsyLab.byteCodeAsString(cw.toByteArray()); */
 public class LoomInjector implements ClassFileTransformer {
 
-  public static ClassNodeReporter classNodeReporter; // for test-only purposes!
-
   @Override
   public byte[] transform(
       ClassLoader loader,
@@ -51,12 +49,12 @@ public class LoomInjector implements ClassFileTransformer {
     try {
       cls.accept(cw);
     } catch (Exception e) {
-      LMessage.fatal(e.getMessage());
+      LMessage.fatal(className, e);
       throw e;
     }
 
-    // used for testing purposes only!
-    if (classNodeReporter != null) classNodeReporter.report(cls);
+    // Used for testing only!
+    if (adapter.debugRetainModifiedByteCode()) ClassNodeReporter.report(cls);
 
     // [SEE_LOOM_CM_PLAYGROUND]
     // consider uncommenting these lines for easier debugging

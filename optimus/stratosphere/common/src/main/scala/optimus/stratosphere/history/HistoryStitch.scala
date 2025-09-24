@@ -11,11 +11,15 @@
  */
 package optimus.stratosphere.history
 import com.typesafe.config.Config
+import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
+import optimus.stratosphere.history.HistoryStitch.failedFetchMessage
+import optimus.stratosphere.history.HistoryStitch.failedReplaceMessage
 import optimus.stratosphere.utils.GitUtils
 import optimus.stratosphere.utils.RemoteUrl
 
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
 final case class Replacement(repo: String, from: String, to: String)
 
@@ -67,6 +71,9 @@ final class HistoryStitch(ws: StratoWorkspaceCommon) {
     }
 
   def stitch(name: String): Unit = {
+    def errorMatchesPattern(patternGenerator: String => Regex, commit: String, e: StratosphereException): Boolean =
+      patternGenerator(commit).findFirstIn(e.getMessage).isDefined
+
     val merge = config(name)
     merge.requires.foreach(stitch)
     ws.log.info(s"Applying ${merge.name}...")
@@ -77,15 +84,43 @@ final class HistoryStitch(ws: StratoWorkspaceCommon) {
       .foreach { case (replacement, i) =>
         val remoteName = merge.remoteName(i)
         if (!allRemotes.exists(_.name == remoteName))
-          git.addRemote(remoteName, RemoteUrl(replacement.repo))
-        else
+          git.addRemoteNoTags(remoteName, RemoteUrl(replacement.repo))
+        else {
           git.setRemote(remoteName, RemoteUrl(replacement.repo))
+          git.disableTags(remoteName)
+        }
         ws.log.info("Fetching commits...")
-        git.fetch(remoteName, replacement.to)
+        try {
+          git.fetch(remoteName, replacement.to)
+        } catch {
+          // we just want to provide more specific logging in case commit does not exist on the remote
+          // we still rethrow it to have more details logged (in case we need it) and to exit command
+          case e: StratosphereException if errorMatchesPattern(failedFetchMessage, replacement.to, e) =>
+            ws.log.error(
+              s"Fetch failed. It seems that ${replacement.to} does not exists on ${replacement.repo}. " +
+                s"Make sure you have provided a correct commit.")
+            throw e
+        }
         ws.log.info(s"Replacing ${replacement.from} with ${replacement.to}...")
-        git.replace(replacement.from, replacement.to)
+        try {
+          git.replace(replacement.from, replacement.to)
+        } catch {
+          // we just want to provide more specific logging in case commit does not exist on the remote
+          // we still rethrow it to have more details logged (in case we need it) and to exit command
+          case e: StratosphereException if errorMatchesPattern(failedReplaceMessage, replacement.from, e) =>
+            ws.log.error(
+              s"Replace failed. It seems that ${replacement.from} does not exist locally. " +
+                s"Make sure you have provided a correct commit.")
+            throw e
+        }
       }
   }
 
   def mergeNames: Seq[String] = config.keys.toSeq
+}
+
+object HistoryStitch {
+  private[history] def failedFetchMessage(commit: String): Regex = s"remote error: upload-pack: not our ref $commit".r
+  private[history] def failedReplaceMessage(commit: String): Regex =
+    s"'$commit' points to a replace(d|ment) object of type '\\((NULL|null)\\)'".r
 }

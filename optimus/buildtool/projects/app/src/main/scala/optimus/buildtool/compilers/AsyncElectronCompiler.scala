@@ -42,7 +42,6 @@ import optimus.platform._
 
 import java.io.PrintWriter
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity trait AsyncElectronCompiler {

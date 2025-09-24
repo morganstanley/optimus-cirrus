@@ -33,8 +33,6 @@ import optimus.utils.FileUtils
 import optimus.utils.MiscUtils.Endoish._
 import optimus.utils.OptimusStringUtils
 
-import java.net.URLEncoder
-import java.nio.file.Files
 import java.nio.file.Path
 
 private[sampling] final case class StacksAndCounts(rawDump: String, preSplit: Iterable[TimedStack], dtStopped: Long)
@@ -45,6 +43,12 @@ trait StackSampler {
   def start(sp: SamplingProfiler): Unit
   def shutdown(): Unit
   def drainToIterable(sp: SamplingProfiler): Iterable[TimedStack]
+
+  // Domain-specific frame formatting provided through service loader
+  def classToFrame(clz: Class[_], method: String): String = ""
+
+  def cleanClassName(clz: String): String = ""
+
 }
 
 class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers: Iterable[StackSampler])
@@ -52,6 +56,9 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
     with Log
     with OptimusStringUtils {
   import AsyncProfilerSampler._
+
+  val cstack = sp.propertyUtils.get("optimus.sampling.ap.cstack", "dwarf")
+  val disableAsyncProfilerOnShutdown = sp.propertyUtils.get("optimus.sampling.ap.disable.on.shutdown", true)
 
   val stackAnalysis = new StackAnalysis(sp)
 
@@ -71,44 +78,33 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
 
   var runningJfr: Option[Path] = None
   var jfrFileSize: Long = 0
-  val pyroUploader = if (pyroUrl.isEmpty) None else Some(new PyroUploader(pyroUrl, pyroVersion))
+  var profiling = false
 
   override def shutdown(): Unit = {
     log.info(s"Shutting down async profiler sampling")
-    AsyncProfilerIntegration.shutdown()
+    if (disableAsyncProfilerOnShutdown)
+      AsyncProfilerIntegration.shutdownPermanently()
     extraStackSamplers.foreach(_.shutdown())
-    pyroUploader.foreach(_.shutdown())
   }
 
   override protected def snap(firstTime: Boolean): StacksAndCounts = {
+    profiling &= !firstTime
     try {
       // Harvest stacks only every apPeriod, unless we're shutting down.
       jfrFileSize = 0
       val tStop = System.nanoTime()
-      val apDump = if (!firstTime && ((sp.nSnaps % apPeriod) == 0 || !sp.stillPulsing)) {
+      val apDump = if (profiling && ((sp.nSnaps % apPeriod) == 0 || !sp.stillPulsing)) {
         // Specify the jfr dump file iff we specified one at start
-        val stopCmd = runningJfr.fold("stop")(jfr => s"stop,file=$jfr") + s",loglevel=${apLogLevel}"
-        AsyncProfilerIntegration.command(stopCmd)
-        val apDump = AsyncProfilerIntegration.dumpMemoized()
-        runningJfr.foreach { jfr =>
-          if (uploadJfr && Files.exists(jfr)) {
-            jfrFileSize = Files.size(jfr)
-            var canonical = true
-            for {
-              upload <- pyroUploader
-              inst <- sp.publishAppInstances
-            } {
-              upload.jfr(
-                sp.snappedMeta,
-                inst,
-                sp.previousSnapTime,
-                sp.currentSnapTime,
-                jfr,
-                canonical,
-                delete = !saveJfr)
-              canonical = false
-            }
-          }
+        val apDump = if (continuous) {
+          // Not restarting, but still clearing stack storage, so we may need to re-store some node stacks.
+          AsyncProfilerIntegration.resetSavedStacks()
+          // With "dbuf", we'll switch a-p to new, empty stack storage and return the contents of the old
+          AsyncProfilerIntegration.execute("collapsed,memoframes,total,dbuf")
+        } else {
+          val stopCmd = runningJfr.fold("stop")(jfr => s"stop,file=$jfr") + s",loglevel=${apLogLevel}"
+          AsyncProfilerIntegration.command(stopCmd)
+          // Retain frame name cache for 10 cycles
+          AsyncProfilerIntegration.execute("collapsed,memoframes,total,mcache=10")
         }
         apDump
       } else ""
@@ -116,15 +112,17 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
       // Start stacks every apPeriod, unless shutting down
       if (!sp.stillPulsing)
         runningJfr = None
-      else if (firstTime || (sp.nSnaps % apPeriod) == 0) {
-        runningJfr = if (uploadJfr || saveJfr) {
+      else if (!profiling || (sp.nSnaps % apPeriod) == 0) {
+        runningJfr = if (saveJfr) {
           val jfr = FileUtils.tmpPath("ap", "jfr")
           AsyncProfilerIntegration.command(s"$apStartCmd,file=$jfr")
           Some(jfr)
         } else {
-          AsyncProfilerIntegration.command(apStartCmd)
+          if (!continuous || !profiling)
+            AsyncProfilerIntegration.command(apStartCmd)
           None
         }
+        profiling = true
       }
 
       // Total time spent from right before stopping AP until it's been restarted.
@@ -149,37 +147,11 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
       case Some(_) =>
         val parsed =
           stackAnalysis
-            .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks, uploadFolded)
+            .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks)
             .copy(dtStopped = curr.dtStopped)
         if (parsed.timers.samples.values.sum > inactiveThreshNs)
           sp.recordActivity()
-        stackUpload(parsed.stacks)
         parsed.applyIf(!stacksToCrumbs)(_.copy(stacks = Nil))
-    }
-  }
-
-  private def stackUpload(stacks: Seq[StackData]): Unit = {
-    if (uploadFolded) stackPyroUpload(stacks)
-  }
-
-  private def stackPyroUpload(stacks: Seq[StackData]): Unit = {
-    for {
-      upload <- pyroUploader
-      inst <- sp.publishAppInstances
-    } {
-      val byType = stacks.groupBy(_.tpe)
-      byType.foreach { case (tpe, stacks) =>
-        val foldedStacks = stacks.map(_.folded).mkString("\n")
-        val pyroTpe = URLEncoder.encode(tpe, "UTF-8")
-        upload.folded(
-          sp.snappedMeta,
-          inst,
-          sp.previousSnapTime,
-          sp.currentSnapTime,
-          pyroTpe,
-          foldedStacks,
-          canonical = true)
-      }
     }
   }
 
@@ -220,7 +192,7 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   // memoframes - memoize frames with integer identifier
   lazy val apStartCmd: String = {
     val event = AsyncProfilerIntegration.containerSafeEvent(settings("event"))
-    s"start,event=$event,cstack=dwarf,etypeframes,persist,jemalloc,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
+    s"start,event=$event,cstack=$cstack,etypeframes,persist,jemalloc,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
   }
 
 }
@@ -229,12 +201,13 @@ object FlameTreatment {
   import optimus.breadcrumbs.crumbs.PropertyUnits._
 
   def units(source: String): Units = {
+    val sourceWithoutRev = source.stripPrefix("Rev")
     if (
-      source.startsWith(Alloc) ||
-      source.startsWith(Free) ||
-      source.startsWith(Live)
+      sourceWithoutRev.startsWith(Alloc) ||
+      sourceWithoutRev.startsWith(Free) ||
+      sourceWithoutRev.startsWith(Live)
     ) Bytes
-    else if (source.startsWith(CacheHit)) Count
+    else if (sourceWithoutRev.startsWith(CacheHit)) Count
     else Nanoseconds
   }
 
@@ -252,23 +225,19 @@ object FlameTreatment {
 }
 
 object AsyncProfilerSampler extends Log {
-
-  private val pyroUrl = PropertyUtils.get("optimus.sampling.pyro.url", "")
-  // keeping it for compatibility reasons until we fully test the newest version of pyroscope
-  private val pyroVersion = PropertyUtils.get("optimus.sampling.pyro.latest", false)
   val apInterval = PropertyUtils.get("optimus.sampling.stacks.interval", "10ms")
   private val apPeriod = PropertyUtils.get("optimus.sampling.stacks.nsnaps", 1)
-  private val uploadJfr = pyroUrl.nonEmpty && PropertyUtils.get("optimus.sampling.pyro.jfr", false)
-  val stacksToCrumbs = PropertyUtils.get("optimus.sampling.stacks.splunk", !pyroUrl.nonEmpty)
+  val stacksToCrumbs = PropertyUtils.get("optimus.sampling.stacks.splunk", true)
   val numPrunedStacks = PropertyUtils.get("optimus.sampling.stacks", 100)
-  private val uploadFolded = pyroUrl.nonEmpty && !uploadJfr
   private val saveJfr = PropertyUtils.get("optimus.sampling.jfr", false)
   val apLogLevel = PropertyUtils.get("optimus.sampling.async.profiler.log.level", "ERROR")
   val childProfilingFrequency = PropertyUtils.get("optimus.sampling.profile.child.frequency", 5)
   val allowChildProfiling = PropertyUtils.get("optimus.sampling.profile.child", false)
+  val cstack = PropertyUtils.get("optimus.sampling.ap.cstack", "dwarf")
+  private val continuous = PropertyUtils.get("optimus.sampling.ap.continuous", false)
+  assert(!(saveJfr && continuous), "Continuous sampling incompatible with saving jfr.")
 
   private val spDefaults =
     s"await=${DiagnosticSettings.awaitStacks}" +
       ":event=cpu,alloc=10m,lock=99m,live"
-
 }

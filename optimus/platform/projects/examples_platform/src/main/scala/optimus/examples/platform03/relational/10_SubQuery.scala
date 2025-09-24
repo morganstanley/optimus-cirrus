@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object SubQuery extends LegacyOptimusApp {
+object SubQuery extends LegacyOptimusApp with PrintlnInterceptor {
 
   /**
    * Example demonstrates use of sub queries which can either be executed immediately or stored along with result data

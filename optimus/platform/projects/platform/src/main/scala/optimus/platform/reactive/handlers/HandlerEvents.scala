@@ -14,7 +14,6 @@ package optimus.platform.reactive.handlers
 import optimus.dsi.notification.NotificationEntry
 import optimus.dsi.notification.NotificationType
 import optimus.graph.tracking.EventCause
-import optimus.graph.tracking.WithEventCause
 import optimus.platform.BusinessEvent
 import optimus.platform.ContainedEvent
 import optimus.platform.TimeInterval
@@ -32,9 +31,7 @@ import java.time.Instant
 /**
  * the base type of all event data that is passed to handlers
  */
-sealed trait ReactiveEvent extends WithEventCause {
-  override def eventCause: Option[EventCause] = None
-}
+sealed trait ReactiveEvent
 
 /**
  * base for all "true" events. Excludes [[SignalAsEvent]]
@@ -44,9 +41,7 @@ sealed trait BaseReactiveEvent extends ReactiveEvent
 /**
  * events generated outside of the core optimus platform should inherit from this type, which is not sealed
  */
-trait UserReactiveEvent extends BaseReactiveEvent {
-  override final def eventCause: Option[EventCause] = None
-}
+trait UserReactiveEvent extends BaseReactiveEvent
 
 /**
  * SignalAsEvent covers the case where the handler views the impact of the event in terms of the changes to some data
@@ -79,13 +74,11 @@ sealed trait ContainedEventChangedSignal[+V <: BusinessEvent with ContainedEvent
    * Self-contained Event, this would be the BusinessEventReference
    */
   val id: BusinessEventReference
-  protected[reactive] val commitId: Long
 }
 
 final case class ContainedEventInsertedSignal[V <: BusinessEvent with ContainedEvent](
     id: BusinessEventReference,
     value: V,
-    protected[reactive] val commitId: Long
 ) extends ContainedEventChangedSignal[V]
 
 /**
@@ -93,18 +86,21 @@ final case class ContainedEventInsertedSignal[V <: BusinessEvent with ContainedE
  */
 sealed trait ContainedEventSignalAsEvent[+V <: BusinessEvent with ContainedEvent] extends ReactiveEvent {
   def data: ContainedEventChangedSignal[V]
+  private[reactive] def commitId: Long
 }
 
 /**
  * This update is from @event(contained=true) subscription.
  */
 final case class ContainedEventSignalUpdated[+V <: BusinessEvent with ContainedEvent](
-    data: ContainedEventChangedSignal[V]
+    data: ContainedEventChangedSignal[V],
+    private[reactive] val commitId: Long
 ) extends ContainedEventSignalAsEvent[V]
 
 /** Entity from Upsertable (delayed) Transaction. */
 sealed trait TransactionEntitySignalAsEvent[+V] extends ReactiveEvent {
   def data: Seq[TransactionEntityChangedSignal[V]]
+  private[reactive] def commitId: Long
 }
 
 /**
@@ -114,12 +110,13 @@ final case class TransactionEntitySignalUpdate[+V <: Entity](
     streamId: String,
     tt: Instant,
     override val data: Seq[TransactionEntityChangedSignal[V]],
-    protected[reactive] val commitId: Long
+    private[reactive] val commitId: Long
 ) extends TransactionEntitySignalAsEvent[V]
 
 /** BusinessEvent from Upsertable (delayed) Transaction. */
 sealed trait TransactionEventSignalAsEvent[+V <: BusinessEvent] extends ReactiveEvent {
   def data: TransactionEventChangedSignal[V]
+  private[reactive] def commitId: Long
 }
 
 /**
@@ -139,13 +136,11 @@ sealed trait TransactionEventChangedSignal[+V <: BusinessEvent] {
    * Transaction Event, this would be the BusinessEventReference
    */
   val id: BusinessEventReference
-  protected[reactive] val commitId: Long
 }
 
 final case class TransactionEventInsertedSignal[V <: BusinessEvent](
     id: BusinessEventReference,
     value: V,
-    protected[reactive] val commitId: Long
 ) extends TransactionEventChangedSignal[V]
 
 sealed trait TransactionEntityChangedSignal[+V] {
@@ -165,27 +160,37 @@ final case class TransactionEntityInsertedSignal[+V <: Entity](
   override val id: EntityReference = value.dal$entityRef
 }
 
+sealed trait StreamEvent[+R]
+object StreamEvent {
+
+  /**
+   * Single value received over a stream.
+   */
+  final case class Value[R](r: R) extends StreamEvent[R]
+
+  // TODO (OPTIMUS-75668): Add other events of interests here, if needed.
+}
+
 object SimpleEvents {
   final case class SimpleValueEvent[T](value: T) extends BaseReactiveEvent
 }
 
 trait StateChangeEvent extends ReactiveEvent
 object StateChangeEvent {
-  // TODO (OPTIMUS-23402): add cause to all of these
   final case object StatusInitialising extends StateChangeEvent
   final case object StatusStarted extends StateChangeEvent
   final case object StatusOperational extends StateChangeEvent
   final case object StatusStopped extends StateChangeEvent
-  final case class StatusError(reason: Throwable, cause_ : EventCause, event: Option[ReactiveEvent] = None)
-      extends StateChangeEvent {
-    override def eventCause: Option[EventCause] = Some(cause_)
+  final case class StatusError(reason: Throwable, event: Option[Any] = None) extends StateChangeEvent
+  object StatusError {
+    // TODO (OPTIMUS-65703): Will remove the now unused parameter in a later PR.
+    def unapply(x: StatusError): Option[(Throwable, Null, Option[Any])] = Some((x.reason, null, x.event))
   }
 }
 
 trait GlobalStatusEvent extends ReactiveEvent {
   type DetailType <: GlobalStateEvent
   val detail: DetailType
-  override def eventCause = detail.eventCause
 }
 
 final case class InputFailedStatusEvent(override val detail: InputFailedEvent) extends GlobalStatusEvent {

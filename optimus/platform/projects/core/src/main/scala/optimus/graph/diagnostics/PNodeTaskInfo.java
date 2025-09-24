@@ -33,6 +33,7 @@ import optimus.graph.cache.NCSupport;
 import optimus.graph.cache.NodeCCache;
 import optimus.graph.diagnostics.trace.ReuseHistogram;
 import optimus.platform.storable.EmbeddableCtrNodeSupport;
+import optimus.platform.util.PrettyStringBuilder;
 
 /**
  * Summary of execution for all NodeTasks that report executionInfo as the same NodeTaskInfo ~201
@@ -473,8 +474,10 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
     return NodeTaskInfo.flagsAsString(flags);
   }
 
-  public final String flagsAsStringVerbose() {
-    return NodeTaskInfo.flagsAsStringVerbose(flags, cachePolicy);
+  public final String flagsAsStringVerbose(boolean html) {
+    PrettyStringBuilder sb = new PrettyStringBuilder(html);
+    NodeTaskInfo.flagsAsStringVerbose(flags, cachePolicy, sb);
+    return html ? "<html>" + sb + "</html>" : sb.toString();
   }
 
   @Override

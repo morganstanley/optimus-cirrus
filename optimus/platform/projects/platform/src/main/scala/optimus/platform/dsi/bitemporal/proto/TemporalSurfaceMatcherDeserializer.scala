@@ -73,7 +73,7 @@ object TemporalSurfaceMatcherDeserializer
       proto.getListsOfRelationElementsCount == 0,
       s"Expected 0 ListOfRelationalElements for FOR_CLASS matcher but got ${proto.getListsOfRelationElementsList}")
     TemporalSurfaceMatchers.forClass(
-      proto.getFqnsList.asScala
+      proto.getFqnsList.asScalaUnsafeImmutable
         .map { fqn: FqnProto =>
           getEcb(fqn.getFqClassName)
         }
@@ -88,9 +88,10 @@ object TemporalSurfaceMatcherDeserializer
     require(
       proto.getListsOfRelationElementsCount == 0,
       s"Expected 0 ListOfRelationalElements for FOR_CLASS matcher but got ${proto.getListsOfRelationElementsList}")
-    TemporalSurfaceMatchers.forQuery(proto.getNamespacesList.asScala.map(fromProto(_)).map { n: NamespaceWrapper =>
-      from(Namespace(n.namespace, n.includesSubPackage))
-    }: _*)
+    TemporalSurfaceMatchers.forQuery(
+      proto.getNamespacesList.asScalaUnsafeImmutable.map(fromProto(_)).map { n: NamespaceWrapper =>
+        from(Namespace(n.namespace, n.includesSubPackage))
+      }: _*)
   }
 
   private[this] def getForPriqlTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {

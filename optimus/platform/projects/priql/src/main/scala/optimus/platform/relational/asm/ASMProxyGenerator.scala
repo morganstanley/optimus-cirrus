@@ -16,8 +16,8 @@ import java.lang.reflect.Modifier
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.util
-
 import msjava.slf4jutils.scalalog
+import msjava.slf4jutils.scalalog.Logger
 import optimus.graph.Settings
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm._
@@ -42,13 +42,13 @@ final class ASMProxyGenerator(mainType: TypeInfo[_], extType: TypeInfo[_]) exten
   val majorExtBaseDesc = s"L$majorExtBase;"
 
   val concreteType = if (extType.concreteClass.isDefined) extType else mainType
-  val concreteBase = concreteType.concreteClass.map(Type.getInternalName(_)).getOrElse(Object)
+  val concreteBase = concreteType.concreteClass.map(Type.getInternalName).getOrElse(Object)
   val pathDependentClass = findPathDependentClass(concreteType)
-  val isEntity = concreteType.concreteClass.map(EntityClass.isAssignableFrom(_)).getOrElse(false)
+  val isEntity = concreteType.concreteClass.exists(EntityClass.isAssignableFrom)
   val interfaces = Set(mainType, extType).flatMap(_.interfaces).toList
   require(interfaces.forall(!EntityClass.isAssignableFrom(_)), "Trait derived from Entity is not supported!")
 
-  val proxyFinals = {
+  private lazy val proxyFinals = {
     // all methods in interfaces, should be either abstract or annotated with '@ProxyFinalModifier final'
     val result = new mutable.ListBuffer[Method]
     val identities = new mutable.HashMap[String, Method]
@@ -64,7 +64,7 @@ final class ASMProxyGenerator(mainType: TypeInfo[_], extType: TypeInfo[_]) exten
             throw new RelationalUnsupportedException(
               s"$memSym of ${clsSym.fullName} must be marked as '@ProxyFinalModifier final'!")
           val meth = jcm.methodToJava(memSym.asInstanceOf[internal.Symbols#MethodSymbol])
-          identities.put(methodIdentity(meth), meth).foreach { case m =>
+          identities.put(methodIdentity(meth), meth).foreach { m =>
             throw new RelationalUnsupportedException(
               s"Duplicate '@ProxyFinalModifier final def ${m.getName}' on ${meth.getDeclaringClass} and ${m.getDeclaringClass}")
           }
@@ -578,15 +578,15 @@ final class ASMProxyGenerator(mainType: TypeInfo[_], extType: TypeInfo[_]) exten
 object ASMProxyGenerator {
   import scala.util.Properties
 
-  val log = scalalog.getLogger[ASMProxyGenerator.type]
+  val log: Logger = scalalog.getLogger[ASMProxyGenerator.type]
   // since we won't have 2.10, 2.08 anyway !!!
   val isScala212OrLater = !Properties.versionNumberString.startsWith("2.11")
 
-  private val ProxyFinalModifierType = weakTypeOf[ProxyFinalModifier]
+  private lazy val ProxyFinalModifierType = weakTypeOf[ProxyFinalModifier]
 
   private def methodIdentity(m: Method): String = {
-    val parameters = m.getParameterTypes()
-    if (parameters.length == 0) s"${m.getName}()"
+    val parameters = m.getParameterTypes
+    if (parameters.isEmpty) s"${m.getName}()"
     else parameters.map(Type.getDescriptor).mkString(s"${m.getName}(", "", ")")
   }
 

@@ -15,8 +15,6 @@ import optimus.buildtool.config.JavacConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.dependencies.JdkDependencies
 
-import scala.collection.immutable.Seq
-
 final case class InheritableJavacConfiguration(
     options: Seq[String],
     release: Option[Int],

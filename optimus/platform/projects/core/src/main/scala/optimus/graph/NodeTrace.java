@@ -47,6 +47,9 @@ public class NodeTrace {
   public static final ArrayList<PNodeTask> empty = new ArrayList<>();
 
   private static final int N_TASK_INFOS = 1024;
+
+  // will have nulls for profile ids that were allocated on the fly for nodes without private
+  // NodeTaskInfo and executionInfo will == NodeTaskInfo.Default
   private static NodeTaskInfo[] taskInfos = new NodeTaskInfo[N_TASK_INFOS];
   private static final Object taskInfosLock = new Object();
 

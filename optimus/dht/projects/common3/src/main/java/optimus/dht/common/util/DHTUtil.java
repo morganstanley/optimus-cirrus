@@ -120,31 +120,24 @@ public class DHTUtil {
   private static String getPublicCloudName() {
     if (Files.exists(PUBLIC_CLOUD_MARKER)) {
       String fqdn = getFQDN();
-      return Splitter.on('.').split(fqdn).iterator().next();
+      var clusterName = System.getenv("OPTIMUS_GRID_CLUSTER_NAME");
+      var podName = Splitter.on('.').split(fqdn).iterator().next();
+      return clusterName != null ? podName + "/" + clusterName : podName;
     }
     return null;
   }
 
   private static String getTreadmillId() {
-    // note: TM2 and TM3 use different envvars
-
     final String cell = System.getenv("TREADMILL_CELL");
     if (cell == null) {
       return null; // no treadmill
     }
 
-    final String name = System.getenv("TREADMILL_NAME");
-    if (name != null) {
-      // TM2
-      return cell + "/" + name;
-    } else {
-      // TM3
-      return cell
-          + "/"
-          + System.getenv("TREADMILL_APP")
-          + "#"
-          + System.getenv("TREADMILL_INSTANCEID");
-    }
+    return cell
+        + "/"
+        + System.getenv("TREADMILL_APP")
+        + "#"
+        + System.getenv("TREADMILL_INSTANCEID");
   }
 
   public static String randomAlphanumeric(int length) {

@@ -18,6 +18,7 @@ import static optimus.graph.loom.compiler.Op.IS_CTOR;
 import static optimus.graph.loom.compiler.Op.IS_NODE;
 import java.util.Collections;
 import java.util.List;
+import optimus.graph.loom.CompilerArgs;
 import optimus.graph.loom.LoomAdapter;
 import optimus.graph.loom.TransformableMethod;
 import org.objectweb.asm.Label;
@@ -25,6 +26,7 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FrameNode;
+import org.objectweb.asm.tree.IincInsnNode;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
 import org.objectweb.asm.tree.LdcInsnNode;
@@ -58,6 +60,7 @@ public class Parser implements Opcodes {
         }
       };
 
+  private final CompilerArgs compilerArgs;
   private final MethodNode method;
   private final AbstractInsnNode[] insns;
 
@@ -65,6 +68,7 @@ public class Parser implements Opcodes {
 
   public Parser(TransformableMethod tmethod, LoomAdapter adapter) {
     this.method = tmethod.method;
+    this.compilerArgs = tmethod.compilerArgs;
     this.insns = method.instructions.toArray();
     this.state = new DCFlowGraph(tmethod, adapter);
   }
@@ -125,26 +129,46 @@ public class Parser implements Opcodes {
     var op = handleOp(i, POP_NOTHING_NA, true, localOp.resultType);
     op.valueGroup = localOp.valueGroup; // Value moved
     if (localOp instanceof Op.Param) curBlock.availOps.add(op);
-    else if (localOp.blockOwner != curBlock) {
+    else {
       localOp.addConsumer(op);
+      if (localOp.blockOwner != curBlock) {
+        curBlock.addReadVar(op);
 
+        // Branch can't be scheduled until the localOp completes [SEE_BLOCK_VAR_DEPENDENCY]
+        localOp.addDependency(localOp.blockOwner.lastOp);
+      }
+    }
+  }
+
+  void incVar(AbstractInsnNode i) {
+    var vi = (IincInsnNode) i;
+    var localOp = state.getVar(vi.var);
+    var op = newOp(i);
+    op.popCount = POP_NOTHING_NA;
+    op.resultType = localOp.resultType;
+    op.valueGroup = localOp.valueGroup; // REVIEW
+    localOp.addConsumer(op);
+    if (localOp.blockOwner != curBlock) {
       curBlock.addReadVar(op);
-
-      // Branch can't be scheduled until the localOp completes [SEE_BLOCK_VAR_DEPENDENCY]
       localOp.addDependency(localOp.blockOwner.lastOp);
-    } else localOp.addConsumer(op);
+    }
+    state.updateVar(vi.var, op);
   }
 
   /** If block.targets where not set before (like cond jump) it will be set here */
   private void switchBlockTo(Block block, Block[] targets, Op.Branch exitOp, int popCount) {
     if (curBlock == block) return;
-    // Complete block ...
+    // Complete current block ...
     if (curBlock != null) {
+      curBlock.outVars = state.outVarTypes();
+
       if (exitOp == null) exitOp = newBranch(null, true);
       curBlock.lastOp = exitOp;
+
       exitOp.targets = targets;
       curBlock.setTargets(targets);
       for (var target : targets) target.setStack(curBlock, popCount);
+
       handleOp(exitOp, curBlock.stackCount, false); // Eat an entire stack
     }
     lastOp = null;
@@ -186,13 +210,19 @@ public class Parser implements Opcodes {
     // TODO (OPTIMUS-66991): Revisit the -1, ideally we want to only flag non-primitive args...
     var mutatesArgMask = isNode ? 0 : -1;
     var isCtor = opCode == INVOKESPECIAL && ((MethodInsnNode) insn).name.equals("<init>");
-    var globalMutation = state.compilerArgs.assumeGlobalMutation;
+    var globalMutation = compilerArgs.assumeGlobalMutation;
     var flags = (isNode ? IS_NODE : globalMutation ? MUTATES_GLOBAL : 0) | (isCtor ? IS_CTOR : 0);
     handleOp(insn, removeFromStack, hasResult, returnType, flags, mutatesArgMask);
   }
 
   void handleArrayStore(AbstractInsnNode i) {
     handleOp(i, 3, false, null, 0, 0x1);
+  }
+
+  void handleObjectArrayLoad(AbstractInsnNode i) {
+    var arrayOp = curBlock.stack[curBlock.stackCount - 2];
+    var arrayElementType = arrayOp.op.resultType.getElementType();
+    handleOp(i, 2, true, arrayElementType);
   }
 
   void handleDup(AbstractInsnNode i) {
@@ -297,6 +327,7 @@ public class Parser implements Opcodes {
     return op;
   }
 
+  /** Almost like `execute`, pop off stack and place the result on the stack */
   private void handleOp(Op newOp, int popCount, boolean hasResult) {
     // Notice -1 i.e. POP_NOTHING_NA is a valid count, meaning not available and nothing to pop
     newOp.popCount = popCount;
@@ -314,7 +345,7 @@ public class Parser implements Opcodes {
         arg.addConsumer(newOp);
       }
     if (hasResult) curBlock.pushStack(newOp, warnOnUnexpectedStackSize);
-    if (state.compilerArgs.enqueueEarlier && newOp.isNode()) markAsHigherPriority(newOp);
+    if (compilerArgs.enqueueEarlier && newOp.isNode()) markAsHigherPriority(newOp);
   }
 
   private boolean isNodeCall(AbstractInsnNode i) {

@@ -11,22 +11,21 @@
  */
 package optimus.buildtool.compilers.zinc
 
-import java.io.File
-import java.net.URLClassLoader
 import java.util.concurrent.ConcurrentHashMap
-
 import sbt.internal.inc.classpath.ClassLoaderCache
+import sbt.internal.inc.classpath.ClasspathUtil
+import java.nio.file.Path
 
 private[buildtool] object ZincClassLoaderCaches extends ZincClassLoaderCaches
 private[buildtool] class ZincClassLoaderCaches {
   lazy val classLoaderCache = Some(new ClassLoaderCache(null: ClassLoader))
 
-  private val classLoaders: ConcurrentHashMap[Seq[File], ClassLoader] = new ConcurrentHashMap
+  private val classLoaders: ConcurrentHashMap[Seq[Path], ClassLoader] = new ConcurrentHashMap
 
   // null by default, so it's not parented to the current classloader, because we want isolation
-  def classLoaderFor(scalaClasspath: Seq[File], parent: ClassLoader = null): ClassLoader =
+  def classLoaderFor(scalaClasspath: Seq[Path], parent: ClassLoader = ClasspathUtil.rootLoader): ClassLoader =
     classLoaders.computeIfAbsent(
       scalaClasspath,
-      cp => new URLClassLoader(scalaClasspath.map(_.toURI.toURL).toArray, parent)
+      cp => ClasspathUtil.toLoader(cp.toList, parent)
     )
 }

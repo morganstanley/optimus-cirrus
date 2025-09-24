@@ -29,25 +29,11 @@
 package optimus.platform.util.json
 
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
-
-import java.io.StringWriter
-
-// Copied from Jackson 2.13.x for forwards source compat for easier migration
-object ClassTagExtensions {
-  def ::(o: JsonMapper): JsonMapper with ScalaObjectMapper = new Mixin(o)
-  def ::(o: ObjectMapper): ObjectMapper with ScalaObjectMapper = new ObjectMapperMixin(o)
-
-  final class Mixin private[ClassTagExtensions] (mapper: JsonMapper) extends JsonMapper(mapper) with ScalaObjectMapper
-
-  final class ObjectMapperMixin private[ClassTagExtensions] (mapper: ObjectMapper)
-      extends ObjectMapper(mapper)
-      with ScalaObjectMapper
-}
 
 object DefaultJsonMapper {
 
@@ -56,13 +42,19 @@ object DefaultJsonMapper {
     .addModule(DefaultScalaModule)
 
   // !!! This one needs to be `def` as clients modify it !!!
-  def legacy: JsonMapper with ScalaObjectMapper =
+  def legacy: JsonMapper with ClassTagExtensions =
     legacyBuilder.build() :: ClassTagExtensions
 
-  def withJavaTimeBuilder: JsonMapper.Builder = legacyBuilder.addModule(new JavaTimeModule)
+  def withJavaTimeBuilder: JsonMapper.Builder = legacyBuilder
+    .addModule(new JavaTimeModule)
 
-  def withJavaTime: JsonMapper with ScalaObjectMapper =
+  def withJavaTime: JsonMapper with ClassTagExtensions =
     withJavaTimeBuilder.build() :: ClassTagExtensions
+
+  def withJavaTimeNumericTimestampDisabled: JsonMapper with ClassTagExtensions =
+    withJavaTimeBuilder
+      .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+      .build() :: ClassTagExtensions
 }
 
 object JsonSerializer {
@@ -72,8 +64,6 @@ object JsonSerializer {
     prettyPrinter.indentObjectsWith(DefaultPrettyPrinter.NopIndenter.instance)
     prettyPrinter.indentArraysWith(DefaultPrettyPrinter.FixedSpaceIndenter.instance)
 
-    val writer = new StringWriter()
-    DefaultJsonMapper.legacy.writer(prettyPrinter).writeValue(writer, m)
-    writer.toString
+    DefaultJsonMapper.legacy.writer(prettyPrinter).writeValueAsString(m)
   }
 }

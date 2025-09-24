@@ -75,16 +75,20 @@ object DalEnv {
   val obt_build_cache_dev = DalEnv("obt-build-cache-dev")
   val obt_build_cache_qa = DalEnv("obt-build-cache-qa")
   val obtdev = DalEnv("obtdev")
+  val coddev = DalEnv("coddev")
   val obtqa = DalEnv("obtqa")
   val qa = DalEnv("qa")
   val qai = DalEnv("qai")
   val bas = DalEnv("bas")
+  val codbas = DalEnv("codbas")
   val reg = DalEnv("reg")
   val reg2 = DalEnv("reg2")
+  val codreg = DalEnv("codreg")
   val snap = DalEnv("snap")
   val uat = DalEnv("uat")
   val praqa = DalEnv("praqa")
   val prod2 = DalEnv("prod2")
+  val codprod = DalEnv("codprod")
 
   // for integration tests
   val inttestPrefix = "inttest"
@@ -160,4 +164,9 @@ object DalProid {
   val optmonp = DalProid("optmonp")
   val optmonq = DalProid("optmonq")
   val optmond = DalProid("optmond")
+
+  // cod dal proid list
+  val optimuscod_dal_prod = DalProid("optimuscod_dal_prod")
+  val optimus_cod_dal_qa = DalProid("optimus_cod_dal_qa")
+  val optimus_cod_dal_dev = DalProid("optimus_cod_dal_dev")
 }

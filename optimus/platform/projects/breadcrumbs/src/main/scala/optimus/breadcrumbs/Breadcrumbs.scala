@@ -12,6 +12,7 @@
 package optimus.breadcrumbs
 
 import com.google.common.cache.CacheBuilder
+import msjava.base.slr.internal.ServiceEnvironment
 import msjava.base.util.internal.SystemPropertyUtils
 import msjava.zkapi.ZkaAttr
 import msjava.zkapi.ZkaConfig
@@ -140,8 +141,7 @@ private object BreadcrumbsVerifier {
   }
 }
 
-object Breadcrumbs {
-  val log: Logger = LoggerFactory.getLogger("Breadcrumbs")
+object Breadcrumbs extends Log {
   private val resourceName = "breadcrumb.resource"
   private val queueLengthName = "breadcrumb.queue.length"
   private val queueDrainTime = "breadcrumb.queue.drain.ms"
@@ -330,13 +330,15 @@ object Breadcrumbs {
   private[optimus] def setImpl(newImpl: BreadcrumbsPublisher): Unit = {
     val oldImpl = this.synchronized {
       val oldImpl = impl
-      Breadcrumbs.log.info(s"Setting breadcrumbs implementation from $oldImpl to $newImpl")
+      log.info(s"Setting breadcrumbs implementation from $oldImpl to $newImpl")
       newImpl.init()
       impl = newImpl
       oldImpl
     }
     oldImpl.shutdown()
   }
+
+  def getEnv(): Option[ServiceEnvironment] = impl.env
 
   def disable() = setImpl(new BreadcrumbsIgnorer)
 
@@ -512,12 +514,15 @@ object BreadcrumbsSendLimit {
   }
 }
 
-abstract class BreadcrumbsPublisher extends Filterable {
+abstract class BreadcrumbsPublisher extends Filterable with Log {
   import BreadcrumbsSendLimit._
-  Breadcrumbs.log.debug(s"Initializing ${this.getClass}")
+  log.debug(s"Initializing ${this.getClass}")
 
   private[breadcrumbs] lazy val level: Level = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT"))
   private val scv = new StandardCrumbValidator
+  def env: Option[ServiceEnvironment] = savedCustomization.map { case (_, zkc) =>
+    zkc.getEnvironment
+  }
   def savedCustomization: Option[(Map[String, String], ZkaContext)] = None
   def customize(
       keys: => Map[String, String],
@@ -559,7 +564,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
 
   final protected[breadcrumbs] def send(crumb: Crumb): Boolean = {
     if (crumb.source.isShutdown) false
-    else if (crumb.uuid.base.length > 0) {
+    else if (crumb.uuid.base.nonEmpty) {
       def sendCrumbsForOneSource(c: Crumb): Boolean = {
         if (c.source.publisherOverride.isDefined) {
           c.source.publisherOverride.exists(_.sendInternal(c))
@@ -583,8 +588,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
           sendCrumbsForOneSource(crumb)
       }
     } else {
-      Breadcrumbs.log
-        .warn(s"Not sending crumb with empty uuid base: $crumb", new IllegalArgumentException("Empty UUID base"))
+      log.warn(s"Not sending crumb with empty uuid base: $crumb", new IllegalArgumentException("Empty UUID base"))
       false
     }
   }
@@ -595,8 +599,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
       level: BreadcrumbLevel.Level): Boolean = {
     var crumbSent = false
     if (uuid == null)
-      Breadcrumbs.log.debug(
-        s"null chain ID received from:\n${Thread.currentThread.getStackTrace.toSeq.mkString("\n ")}")
+      log.debug(s"null chain ID received from:\n${Thread.currentThread.getStackTrace.toSeq.mkString("\n ")}")
     else if (collecting && level >= Math.min(this.level, uuid.crumbLevel)) {
       val c: Crumb = cf(uuid)
       scv.validate(c)
@@ -606,13 +609,13 @@ abstract class BreadcrumbsPublisher extends Filterable {
         } catch {
           case t: Throwable =>
             val msg = s"Unable to filter $c due to $t, discarded..."
-            Breadcrumbs.log.debug(msg)
+            log.debug(msg)
             warning.foreach(_.fail(msg))
             true
         }
 
       if (filtered) {
-        Breadcrumbs.log.debug(s"Crumb $c was filtered")
+        log.debug(s"Crumb $c was filtered")
       } else {
         crumbSent = send(c)
       }
@@ -683,7 +686,6 @@ private[optimus] class BreadcrumbsRouter(
     private[breadcrumbs] val defaultPublisher: BreadcrumbsPublisher)
     extends BreadcrumbsPublisher {
   import Breadcrumbs.runProtected
-  import BreadcrumbsRouter.log
 
   require(rules != null, "Rules cannot be null")
   require(defaultPublisher != null, "Default publisher cannot be null")
@@ -705,6 +707,8 @@ private[optimus] class BreadcrumbsRouter(
     }
   }
 
+  override def env: Option[ServiceEnvironment] = publishers.flatMap(_.env).headOption
+
   override val getFilter: Option[CrumbFilter] = {
     if (rules.isEmpty)
       defaultPublisher.getFilter
@@ -714,10 +718,12 @@ private[optimus] class BreadcrumbsRouter(
 
   // [SEE_BREADCRUMB_FILTERING]
   private def route(c: Crumb): BreadcrumbsPublisher = {
-    val targetPublisher = rules
-      .find { _.matcher matches c }
-      .map { _.publisher }
-    targetPublisher getOrElse defaultPublisher
+    if (c.source.isFilterable) {
+      val targetPublisher = rules
+        .find { _.matcher matches c }
+        .map { _.publisher }
+      targetPublisher getOrElse defaultPublisher
+    } else defaultPublisher
   }
 
   protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
@@ -752,12 +758,12 @@ class DeferredConfigurationBreadcrumbsPublisher() extends BreadcrumbsPublisher {
       keys: => Map[String, String],
       zkc: => ZkaContext,
       setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
-    Breadcrumbs.log.info(s"${this.getClass} reconfiguring with $keys")
+    log.info(s"${this.getClass} reconfiguring with $keys")
     BreadcrumbsPropertyConfigurer.implFromConfig(zkc, keys, setupFlags)
   }
   override def collecting: Boolean = true
   override def init(): Unit = {
-    Breadcrumbs.log.info(s"${this.getClass} dummy initialization, pending customization")
+    log.info(s"${this.getClass} dummy initialization, pending customization")
   }
   // Enqueue crumbs pending eventual configuration.
   override def sendInternal(c: Crumb): Boolean = BreadcrumbsVerifier.withUuidVerifiedInDalCrumbs(c) {
@@ -768,7 +774,7 @@ class DeferredConfigurationBreadcrumbsPublisher() extends BreadcrumbsPublisher {
 }
 
 class BreadcrumbsLoggingPublisher(cfg: BreadcrumbConfig = new BreadcrumbConfigFromEnv) extends BreadcrumbsPublisher {
-  private val log = Breadcrumbs.log
+  def javaLogger = log.javaLogger
   override def collecting: Boolean = true
   override def init(): Unit = {
     // One-time drain, since we won't be using queue any more
@@ -837,12 +843,12 @@ class BreadcrumbsLocalPublisher(gzpath: Path, flushSec: Int = 10) extends Breadc
   override protected[breadcrumbs] def sendInternal(c: Crumb): Boolean = queue.offer(c)
   override def flush(): Unit = {
     val fm = FlushMarker()
-    queue.offer(FlushMarker())
+    queue.offer(fm)
     fm.await(1000)
   }
   override def shutdown(): Unit = {
     val fm = FlushMarker(close = true)
-    queue.offer(FlushMarker(close = true))
+    queue.offer(fm)
     fm.await(1000)
   }
   sys.addShutdownHook(shutdown())
@@ -876,9 +882,9 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   private val warningAveragingTime =
     Option(props.get("warning.averaging.sec")).map(_.toString.toDouble).getOrElse(300.0)
   val encryptPayload: Boolean = {
-    SystemPropertyUtils.getBoolean("optimus.breadcrumbs.encrypt_payload", false, log) || CloudUtil.isCloud()
+    SystemPropertyUtils.getBoolean("optimus.breadcrumbs.encrypt_payload", false, log.javaLogger) || CloudUtil.isCloud()
   }
-  override val warning = Some(new ThrottledWarnOrDebug(log, targetWarningInterval, warningAveragingTime))
+  override val warning = Some(new ThrottledWarnOrDebug(log.javaLogger, targetWarningInterval, warningAveragingTime))
   override def collecting: Boolean = producer.isDefined
   override def init(): Unit = synchronized {
     if (!initialized) {
@@ -897,8 +903,8 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
         drainThread.start()
       } catch {
         case t: Throwable =>
-          Breadcrumbs.log.warn(s"Unable to create KafkaProducer: $t $props")
-          Breadcrumbs.log.warn(s"Creation failed with: ${t.getMessage}")
+          log.warn(s"Unable to create KafkaProducer: $t $props")
+          log.warn(s"Creation failed with: ${t.getMessage}")
           t.printStackTrace()
           producer = None
       }
@@ -906,7 +912,7 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   }
 
   override def sendInternal(c: Crumb): Boolean = BreadcrumbsVerifier.withUuidVerifiedInDalCrumbs(c) {
-    Breadcrumbs.log.trace(s"Sending $c")
+    log.trace(s"Sending $c")
     Breadcrumbs.queue.offer(c) || {
       c.source.enqueueFailures.incrementAndGet()
       warning.foreach(_.fail("Failed to send kafka message due to full queue."))
@@ -1013,7 +1019,6 @@ object BreadcrumbsCompositePublisher {
 class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[BreadcrumbsPublisher])
     extends BreadcrumbsPublisher {
   import Breadcrumbs.runProtected
-  import BreadcrumbsCompositePublisher.log
 
   override def customize(
       keys: => Map[String, String],

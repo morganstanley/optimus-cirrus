@@ -31,6 +31,8 @@ trait FrameMatcherProvider extends Log {
 
 object StringPredicate {
   private val all = mutable.ArrayBuffer.empty[StringPredicate]
+  private var roots = 0L
+  def rootMask: Long = roots
   def startsWith(prefix: String): StringPredicate =
     new StringPredicate(s"startsWith($prefix)", (t: String) => t.startsWith(prefix))
   def contains(substr: String): StringPredicate =
@@ -49,17 +51,25 @@ object StringPredicate {
 }
 
 final class StringPredicate private (name: String, val pred: Predicate[String]) {
+  private var root = false
   private var mask = 0L
   // We don't assign a mask to components of compound predicates
   private[ap] def assignMask(): Long = StringPredicate.synchronized {
     if (mask == 0) {
-      import StringPredicate.all
+      import StringPredicate.{all, roots}
       all += this
       assert(all.size < 64, "Maximum number of frame matcher predicates exceeded!")
       mask = 1 << all.size
+      if (root) roots |= mask
     }
     mask
   }
+  def markRoot(): StringPredicate = {
+    root = true
+    this
+  }
+
+  def isRoot: Boolean = root
 
   def test(x: Long): Boolean = (mask & x) != 0L
 

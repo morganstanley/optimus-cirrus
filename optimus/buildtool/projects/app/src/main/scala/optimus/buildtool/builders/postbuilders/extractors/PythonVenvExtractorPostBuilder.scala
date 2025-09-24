@@ -21,6 +21,7 @@ import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.utils.LatestVenvs
 import optimus.platform._
 
 import java.io.PrintWriter
@@ -29,27 +30,25 @@ import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Random
+
 object PythonVenvExtractorPostBuilder {
   private[buildtool] def venvFolder(buildDir: Directory): Directory = buildDir.resolveDir("venvs")
   private[buildtool] def mappingFile(buildDir: Directory): FileAsset =
     venvFolder(buildDir).resolveFile("venv-mapping.txt")
-  private[buildtool] def latestVenvFile(buildDir: Directory): FileAsset =
-    venvFolder(buildDir).resolveFile("latest-venvs.txt")
 }
 
 class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: PythonBspConfig)
     extends FilteredPostBuilder {
   private val venvFolder: Directory = PythonVenvExtractorPostBuilder.venvFolder(buildDir)
   private val mappingFile: FileAsset = PythonVenvExtractorPostBuilder.mappingFile(buildDir)
-  private val latestVenvFile: FileAsset = PythonVenvExtractorPostBuilder.latestVenvFile(buildDir)
+  private val latestVenvFile: FileAsset = FileAsset(LatestVenvs.defaultLatestVenvFile(buildDir.path))
 
   private val mapping: ConcurrentHashMap[(ScopeId, String), Directory] =
     new ConcurrentHashMap(loadMappingsFile().asJava)
   private val latestVenvs: AtomicReference[LatestVenvs] =
-    new AtomicReference[LatestVenvs](LatestVenvs.load(latestVenvFile))
+    new AtomicReference[LatestVenvs](LatestVenvs.loadFromDefaultFile(latestVenvFile.path))
 
   @async override protected def postProcessFilteredScopeArtifacts(id: ScopeId, artifacts: Seq[Artifact]): Unit = {
     artifacts.foreach {
@@ -77,7 +76,8 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: Pytho
             pythonBspConfig.pythonEnvironment
           )
         }
-        latestVenvs.getAndUpdate(old => old.update(pythonArtifact, venvExtractionDest.path))
+        latestVenvs.getAndUpdate(old =>
+          old.update(pythonArtifact.scopeId, pythonArtifact.file.path, venvExtractionDest.path))
 
       case _ => None
     }
@@ -106,7 +106,10 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: Pytho
     val mappingEntries = mapping.asScala.map { case ((scope, hash), mapping) =>
       s"$scope,$hash,${mapping.path.getFileName}"
     }
-    IO.using(new PrintWriter(Files.newOutputStream(mappingFile.path)))(pw => mappingEntries.foreach(pw.println))
+    IO.using {
+      Files.createDirectories(mappingFile.path.getParent)
+      new PrintWriter(Files.newOutputStream(mappingFile.path))
+    }(pw => mappingEntries.foreach(pw.println))
   }
 
   private def loadMappingsFile(): Map[(ScopeId, String), Directory] = {

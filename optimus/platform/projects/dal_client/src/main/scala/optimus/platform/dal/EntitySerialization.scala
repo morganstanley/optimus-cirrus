@@ -132,9 +132,15 @@ trait EntitySerialization extends StorableSerializer {
           super.writeEntity(e)
       }
     }
+
+    def newInstance: InliningOutputStream = {
+      new InliningOutputStream(rootEntity, entityRefs, inlineBuf, visiting, allowMutation) {
+        def inlinedEntities: Seq[SerializedEntity] = inlineBuf.toList
+      }
+    }
   }
 
-  protected def createOutputStream(
+  protected[platform] def createOutputStream(
       re: Entity,
       entityRefs: mutable.Map[Entity, EntityReference],
       allowMutation: Boolean

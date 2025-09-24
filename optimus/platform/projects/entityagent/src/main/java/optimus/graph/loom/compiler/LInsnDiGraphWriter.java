@@ -46,7 +46,7 @@ public class LInsnDiGraphWriter {
     return true;
   }
 
-  public static String toString(Block block, String methodId, boolean minimal) {
+  static String toString(Block block, String methodId, boolean minimal) {
     var writer = new LInsnDiGraphWriter();
     writer.writeHeader(methodId);
     writer.visitBlock(block, minimal);
@@ -79,7 +79,7 @@ public class LInsnDiGraphWriter {
     }
   }
 
-  public void visitBlock(Block block, boolean minimal) {
+  void visitBlock(Block block, boolean minimal) {
     if (visitedOp.contains(block)) return;
     visitedOp.add(block);
 

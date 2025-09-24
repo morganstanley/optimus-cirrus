@@ -88,6 +88,7 @@ object EmailTemplate {
   lazy val dalKafkaConsumerLagAnnouncement = config.getTemplate("monitoring/DalKafkaConsumerLagAnnouncement.ftl")
   lazy val keyRotationReminder = config.getTemplate("security/KeyRotationReminder.ftl")
   lazy val simpleTemplate = config.getTemplate("simple.ftl.html")
+  lazy val obliterationTemplate = config.getTemplate("obliteration/ObliterationAnnouncement.ftl")
 
   def apply(template: Template, inputs: Map[String, Object]): EmailTemplate = new EmailTemplate(template, inputs)
 

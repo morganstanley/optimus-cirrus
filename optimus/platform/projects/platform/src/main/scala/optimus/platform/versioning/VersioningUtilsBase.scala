@@ -31,16 +31,17 @@ import scala.reflect.api.Universe
 private[optimus] trait VersioningUtilsBase {
   type U <: Universe with Singleton
   val u: U
+  import u._
 
-  implicit class TypeOps(val t: u.Type) {
-    def getUnderlying: u.Type = t match {
-      case n: u.NullaryMethodTypeApi =>
+  implicit class TypeOps(val t: Type) {
+    def getUnderlying: Type = t match {
+      case n: NullaryMethodTypeApi =>
         val resultType = n.resultType
         resultType match {
-          case a: u.AnnotatedTypeApi => a.underlying
-          case o                     => o
+          case a: AnnotatedTypeApi => a.underlying
+          case o                   => o
         }
-      case c: u.ConstantTypeApi =>
+      case c: ConstantTypeApi =>
         c.value.tpe
       case o => o
     }
@@ -55,8 +56,16 @@ private[optimus] trait VersioningUtilsBase {
 
       if (typeSym.hasAnnotation[entity]) RegisteredFieldType.EntityReference(typeName)
       else if (typeSym.hasAnnotation[event]) RegisteredFieldType.BusinessEventReference(typeName)
-      else if (typeSym.hasAnnotation[embeddable]) RegisteredFieldType.Embeddable(typeName)
-      else if (typeSig <:< types.referenceHolder && typeArgs.size == 1)
+      else if (typeSym.hasAnnotation[embeddable]) {
+        typeSym.annotations
+          .map(_.tree)
+          .collectFirst { case q"new $embeddable(customPickling=$_)" =>
+            RegisteredFieldType.Unknown(typeName)
+          }
+          .getOrElse {
+            RegisteredFieldType.Embeddable(typeName)
+          }
+      } else if (typeSig <:< types.referenceHolder && typeArgs.size == 1)
         RegisteredFieldType.ReferenceHolder(typeArgs.head.typeSymbol.fullName)
       else if (typeSig <:< types.boolean || typeSig <:< types.javaBoolean) RegisteredFieldType.Boolean
       else if (typeSig <:< types.byte || typeSig <:< types.javaByte) RegisteredFieldType.Byte
@@ -195,22 +204,22 @@ private[optimus] trait VersioningUtilsBase {
     }
   }
 
-  implicit class NameOps(val t: u.Name) {
+  implicit class NameOps(val t: Name) {
     def stringify: String = t.decodedName.toString.trim
   }
 
-  implicit class SymbolOps(val s: u.Symbol) {
-    def hasAnnotation[T: u.WeakTypeTag]: Boolean = {
-      s.annotations.exists(_.tree.tpe =:= u.weakTypeOf[T])
+  implicit class SymbolOps(val s: Symbol) {
+    def hasAnnotation[T: WeakTypeTag]: Boolean = {
+      s.annotations.exists(_.tree.tpe =:= weakTypeOf[T])
     }
 
     // true if the symbol is a nullary method whose return type is annotated with T
-    def isNullaryMethodReturningAnnotatedType[T: u.WeakTypeTag]: Boolean = {
+    def isNullaryMethodReturningAnnotatedType[T: WeakTypeTag]: Boolean = {
       s.typeSignature match {
-        case n: u.NullaryMethodTypeApi =>
+        case n: NullaryMethodTypeApi =>
           n.resultType match {
-            case a: u.AnnotatedTypeApi =>
-              a.annotations.exists(_.tree.tpe =:= u.weakTypeOf[T])
+            case a: AnnotatedTypeApi =>
+              a.annotations.exists(_.tree.tpe =:= weakTypeOf[T])
             case _ =>
               false
           }
@@ -219,7 +228,7 @@ private[optimus] trait VersioningUtilsBase {
       }
     }
 
-    def typeName: u.Name = s.typeSignature.typeSymbol.name
+    def typeName: Name = s.typeSignature.typeSymbol.name
 
     def fieldType: RegisteredFieldType = {
       s.typeSignature.fieldType
@@ -230,70 +239,70 @@ private[optimus] trait VersioningUtilsBase {
   }
 
   protected object types {
-    lazy val anyRef = u.typeOf[AnyRef]
-    lazy val array = u.typeOf[Array[_]]
-    lazy val bigDecimal = u.typeOf[BigDecimal]
-    lazy val boolean = u.typeOf[Boolean]
-    lazy val byte = u.typeOf[Byte]
-    lazy val businessEvent = u.typeOf[BusinessEvent]
-    lazy val char = u.typeOf[Char]
-    lazy val double = u.typeOf[Double]
-    lazy val duration = u.typeOf[Duration]
-    lazy val float = u.typeOf[Float]
-    lazy val entity = u.typeOf[Entity]
-    lazy val entityCompanionBase = u.typeOf[EntityCompanionBase[_]]
-    lazy val enumerationValue = u.typeOf[Enumeration#Value]
-    lazy val eventCompanionBase = u.typeOf[EventCompanionBase[_]]
-    lazy val immutableArray = u.typeOf[ImmutableArray[_]]
-    lazy val instant = u.typeOf[Instant]
-    lazy val int = u.typeOf[Int]
-    lazy val iterable = u.typeOf[Iterable[_]]
-    lazy val javaBoolean = u.typeOf[java.lang.Boolean]
-    lazy val javaByte = u.typeOf[java.lang.Byte]
-    lazy val javaChar = u.typeOf[java.lang.Character]
-    lazy val javaDouble = u.typeOf[java.lang.Double]
-    lazy val javaEnum = u.typeOf[java.lang.Enum[_]]
-    lazy val javaFloat = u.typeOf[java.lang.Float]
-    lazy val javaInt = u.typeOf[java.lang.Integer]
-    lazy val javaLong = u.typeOf[java.lang.Long]
-    lazy val javaShort = u.typeOf[java.lang.Short]
-    lazy val javaString = u.typeOf[java.lang.String]
-    lazy val listMap = u.typeOf[ListMap[_, Any]]
-    lazy val localDate = u.typeOf[LocalDate]
-    lazy val localTime = u.typeOf[LocalTime]
-    lazy val long = u.typeOf[Long]
-    lazy val map = u.typeOf[Map[_, Any]]
-    lazy val msUnique = u.typeOf[MSUnique]
-    lazy val msUuid = u.typeOf[MSUuid]
-    lazy val chainedId = u.typeOf[ChainedID]
-    lazy val node = u.typeOf[Node[Any]]
-    lazy val offsetTime = u.typeOf[OffsetTime]
-    lazy val option = u.typeOf[Option[Any]]
-    lazy val period = u.typeOf[Period]
-    lazy val product = u.typeOf[Product]
-    lazy val referenceHolder = u.typeOf[ReferenceHolder[_]]
-    lazy val registeredFieldType = u.typeOf[RegisteredFieldType]
-    lazy val sortedSet = u.typeOf[SortedSet[_]]
-    lazy val set = u.typeOf[Set[_]]
-    lazy val seq = u.typeOf[Seq[Any]]
-    lazy val short = u.typeOf[Short]
-    lazy val string = u.typeOf[String]
-    lazy val treeMap = u.typeOf[TreeMap[_, Any]]
-    lazy val tuple2 = u.typeOf[Tuple2[Any, Any]]
-    lazy val tuple3 = u.typeOf[Tuple3[Any, Any, Any]]
-    lazy val tuple4 = u.typeOf[Tuple4[Any, Any, Any, Any]]
-    lazy val tuple5 = u.typeOf[Tuple5[Any, Any, Any, Any, Any]]
-    lazy val tuple6 = u.typeOf[Tuple6[Any, Any, Any, Any, Any, Any]]
-    lazy val tuple7 = u.typeOf[Tuple7[Any, Any, Any, Any, Any, Any, Any]]
-    lazy val tuple8 = u.typeOf[Tuple8[Any, Any, Any, Any, Any, Any, Any, Any]]
-    lazy val tuple9 = u.typeOf[Tuple9[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
-    lazy val tuple10 = u.typeOf[Tuple10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
-    lazy val unit = u.typeOf[Unit]
-    lazy val yearMonth = u.typeOf[YearMonth]
-    lazy val year = u.typeOf[Year]
-    lazy val zonedDateTime = u.typeOf[ZonedDateTime]
-    lazy val zoneId = u.typeOf[ZoneId]
-    lazy val piiElement = u.typeOf[PIIElement[_ <: DataSubjectCategory]]
+    lazy val anyRef: Type = typeOf[AnyRef]
+    lazy val array: Type = typeOf[Array[_]]
+    lazy val bigDecimal: Type = typeOf[BigDecimal]
+    lazy val boolean: Type = typeOf[Boolean]
+    lazy val byte: Type = typeOf[Byte]
+    lazy val businessEvent: Type = typeOf[BusinessEvent]
+    lazy val char: Type = typeOf[Char]
+    lazy val double: Type = typeOf[Double]
+    lazy val duration: Type = typeOf[Duration]
+    lazy val float: Type = typeOf[Float]
+    lazy val entity: Type = typeOf[Entity]
+    lazy val entityCompanionBase: Type = typeOf[EntityCompanionBase[_]]
+    lazy val enumerationValue: Type = typeOf[Enumeration#Value]
+    lazy val eventCompanionBase: Type = typeOf[EventCompanionBase[_]]
+    lazy val immutableArray: Type = typeOf[ImmutableArray[_]]
+    lazy val instant: Type = typeOf[Instant]
+    lazy val int: Type = typeOf[Int]
+    lazy val iterable: Type = typeOf[Iterable[_]]
+    lazy val javaBoolean: Type = typeOf[java.lang.Boolean]
+    lazy val javaByte: Type = typeOf[java.lang.Byte]
+    lazy val javaChar: Type = typeOf[java.lang.Character]
+    lazy val javaDouble: Type = typeOf[java.lang.Double]
+    lazy val javaEnum: Type = typeOf[java.lang.Enum[_]]
+    lazy val javaFloat: Type = typeOf[java.lang.Float]
+    lazy val javaInt: Type = typeOf[java.lang.Integer]
+    lazy val javaLong: Type = typeOf[java.lang.Long]
+    lazy val javaShort: Type = typeOf[java.lang.Short]
+    lazy val javaString: Type = typeOf[java.lang.String]
+    lazy val listMap: Type = typeOf[ListMap[_, Any]]
+    lazy val localDate: Type = typeOf[LocalDate]
+    lazy val localTime: Type = typeOf[LocalTime]
+    lazy val long: Type = typeOf[Long]
+    lazy val map: Type = typeOf[Map[_, Any]]
+    lazy val msUnique: Type = typeOf[MSUnique]
+    lazy val msUuid: Type = typeOf[MSUuid]
+    lazy val chainedId: Type = typeOf[ChainedID]
+    lazy val node: Type = typeOf[Node[Any]]
+    lazy val offsetTime: Type = typeOf[OffsetTime]
+    lazy val option: Type = typeOf[Option[Any]]
+    lazy val period: Type = typeOf[Period]
+    lazy val product: Type = typeOf[Product]
+    lazy val referenceHolder: Type = typeOf[ReferenceHolder[_]]
+    lazy val registeredFieldType: Type = typeOf[RegisteredFieldType]
+    lazy val sortedSet: Type = typeOf[SortedSet[_]]
+    lazy val set: Type = typeOf[Set[_]]
+    lazy val seq: Type = typeOf[Seq[Any]]
+    lazy val short: Type = typeOf[Short]
+    lazy val string: Type = typeOf[String]
+    lazy val treeMap: Type = typeOf[TreeMap[_, Any]]
+    lazy val tuple2: Type = typeOf[Tuple2[Any, Any]]
+    lazy val tuple3: Type = typeOf[Tuple3[Any, Any, Any]]
+    lazy val tuple4: Type = typeOf[Tuple4[Any, Any, Any, Any]]
+    lazy val tuple5: Type = typeOf[Tuple5[Any, Any, Any, Any, Any]]
+    lazy val tuple6: Type = typeOf[Tuple6[Any, Any, Any, Any, Any, Any]]
+    lazy val tuple7: Type = typeOf[Tuple7[Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple8: Type = typeOf[Tuple8[Any, Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple9: Type = typeOf[Tuple9[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple10: Type = typeOf[Tuple10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    lazy val unit: Type = typeOf[Unit]
+    lazy val yearMonth: Type = typeOf[YearMonth]
+    lazy val year: Type = typeOf[Year]
+    lazy val zonedDateTime: Type = typeOf[ZonedDateTime]
+    lazy val zoneId: Type = typeOf[ZoneId]
+    lazy val piiElement: Type = typeOf[PIIElement[_ <: DataSubjectCategory]]
   }
 
   def backed(nme: String): String = s"backed$$$nme"

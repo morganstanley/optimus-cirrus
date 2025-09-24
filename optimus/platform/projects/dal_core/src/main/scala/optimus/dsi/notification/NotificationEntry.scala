@@ -242,6 +242,44 @@ object NotificationEntry {
       partition)
   }
 
+  def deserialized(
+      tpe: NotificationType.Value,
+      context: Context,
+      txTime: Instant,
+      affectedVtInterval: ValidTimeInterval,
+      slotRef: SlottedVersionedReference,
+      lockToken: Long,
+      segment: ValidSegment[SerializedEntity],
+      primarySeq: Long,
+      partition: Partition,
+      referenceOnly: Boolean): NotificationEntry = {
+    if (referenceOnly) {
+      ReferenceOnlyNotificationEntry(
+        tpe,
+        context,
+        txTime,
+        affectedVtInterval,
+        slotRef,
+        lockToken,
+        ValidSegment(segment.data, segment.vtInterval),
+        None,
+        primarySeq,
+        partition)
+    } else {
+      NotificationEntryImpl(
+        tpe,
+        context,
+        txTime,
+        affectedVtInterval,
+        slotRef,
+        lockToken,
+        ValidSegment(segment.data, segment.vtInterval),
+        None,
+        primarySeq,
+        partition)
+    }
+  }
+
   def apply(
       tpe: NotificationType.Value,
       context: Context,
@@ -264,6 +302,45 @@ object NotificationEntry {
       Some(segmentTtFrom),
       primarySeq,
       partition)
+  }
+
+  def deserialized(
+      tpe: NotificationType.Value,
+      context: Context,
+      txTime: Instant,
+      affectedVtInterval: ValidTimeInterval,
+      slotRef: SlottedVersionedReference,
+      lockToken: Long,
+      segment: ValidSegment[SerializedEntity],
+      segmentTtFrom: Instant,
+      primarySeq: Long,
+      partition: Partition,
+      referenceOnly: Boolean): NotificationEntry = {
+    if (referenceOnly) {
+      ReferenceOnlyNotificationEntry(
+        tpe,
+        context,
+        txTime,
+        affectedVtInterval,
+        slotRef,
+        lockToken,
+        ValidSegment(segment.data, segment.vtInterval),
+        Some(segmentTtFrom),
+        primarySeq,
+        partition)
+    } else {
+      NotificationEntryImpl(
+        tpe,
+        context,
+        txTime,
+        affectedVtInterval,
+        slotRef,
+        lockToken,
+        ValidSegment(segment.data, segment.vtInterval),
+        Some(segmentTtFrom),
+        primarySeq,
+        partition)
+    }
   }
 
   def unapply(ne: NotificationEntry): Option[(
@@ -320,6 +397,38 @@ object NotificationEntry {
       override val primarySeq: Long,
       partition: Partition)
       extends NotificationEntry
+
+  /**
+   * This type is only for DAL PubSub internal use. It should be converted to normal entry  before passing to client callback.
+   * The properties of the serialised entity should be removed
+   * The entity is retained so that type refs are avaliable
+   */
+  private[optimus] final case class ReferenceOnlyNotificationEntry private[NotificationEntry] (
+      override val tpe: NotificationType.Value,
+      override val context: Context,
+      override val txTime: Instant,
+      override val affectedVtInterval: ValidTimeInterval,
+      override val slotRef: SlottedVersionedReference,
+      override val lockToken: Long,
+      override val segment: ValidSegment[SerializedEntity],
+      override val segmentTtFromOption: Option[Instant],
+      override val primarySeq: Long,
+      partition: Partition)
+      extends NotificationEntry {
+    def toEntry(se: SerializedEntity): NotificationEntry = {
+      NotificationEntryImpl(
+        tpe,
+        context,
+        txTime,
+        affectedVtInterval,
+        slotRef,
+        lockToken,
+        ValidSegment(se, segment.vtInterval),
+        segmentTtFromOption,
+        primarySeq,
+        partition)
+    }
+  }
 }
 
 object NotificationEntryOrder {

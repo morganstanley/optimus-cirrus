@@ -34,7 +34,6 @@ import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.CompletableFuture
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 object BspSyncer {
@@ -53,7 +52,6 @@ class BspSyncer(
     osVersion: String
 ) extends Log {
   import BspSyncer._
-  import BuildServerProtocolService.translateException
   import service.Ops._
   import service._
 
@@ -312,7 +310,9 @@ class BspSyncer(
               val jar = sparseJarPathBuilder.libDir(id).resolveJar(NamingConventions.scopeOutputName(id))
               intellijFriendlyURI(jar, alwaysIncludeSources = true)
             }
-          val externalClasspath = resolvedScope.externalCompileDependencies.map(intellijFriendlyURI)
+          val externalClasspath = resolvedScope.externalCompileDependencies.collect {
+            case classFile: ExternalClassFileArtifact => intellijFriendlyURI(classFile)
+          }
 
           new ScalacOptionsItem(
             target,
@@ -374,7 +374,7 @@ class BspSyncer(
         res.setDataKind(BuildTargetDataKind.SCALA)
         val scalaTarget = new ScalaBuildTarget(
           "org.scala-lang",
-          scalaCfg.scalaVersion,
+          scalaCfg.scalaVersion.value,
           scalaCfg.scalaMajorVersion,
           ScalaPlatform.JVM,
           scalaCfg.scalaJars.map(intellijFriendlyURI(_, alwaysIncludeSources = false)).asJava
@@ -431,7 +431,7 @@ class BspSyncer(
   @closuresEnterGraph
   private def run[A](task: => A): CompletableFuture[A] =
     workspace.run(cancellationScope, listener)(task).exceptionally { t =>
-      val (unwrapped, message) = translateException("Workspace refresh failed")(t)
+      val (unwrapped, message) = Utils.translateException(t)
       val error = new ResponseError(
         ResponseErrorCode.InternalError,
         message.getOrElse(unwrapped.toString),

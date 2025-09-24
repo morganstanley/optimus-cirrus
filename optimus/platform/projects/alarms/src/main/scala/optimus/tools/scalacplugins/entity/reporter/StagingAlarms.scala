@@ -56,6 +56,15 @@ object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with Optimu
         |Write `case immutable.Seq` to silence this message. Found scrutinee type %s.""".stripMargin
     )
 
+  val ARRAY_SEQUENCE_ARG =
+    warning0(
+      10010,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """foo(array: _*) is deprecated in Scala 2.13 and results in a defensive copy of the array
+        |  - use `foo(array.toVarArgsSeq: _*)` to create an `immutable.Seq` that wraps the array without copying it
+        |  - if the array may be mutated, use `foo(array.toIndexedSeq: _*)`
+        |Note: if `foo` is defined in Java, then passing an array is fine""".stripMargin
+    )
 }
 
 object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAlarmHelper {

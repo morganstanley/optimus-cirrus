@@ -221,6 +221,15 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     case _                      => false
   }
 
+  // True if param is a by-name parameter of a method or a by-name parameter of Function:
+  //
+  //   def f(a: => T): Unit
+  //   val f: (=> T) => ()
+  //
+  // Will return true for x in both f(x)
+  def extendedIsByNameParam(param: Symbol): Boolean =
+    param.isByNameParam || (param.isValueParameter && definitions.isByNameParamType(param.tpe))
+
   lazy val NodifyCall = definitions.getMember(rootMirror.getRequiredModule("optimus.core.CoreAPI"), names.nodify)
   def NodifySelect = gen.mkAttributedRef(NodifyCall)
   lazy val NodifyPropertyCall =
@@ -253,6 +262,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val GivenAnyRuntimeEnvAnnotation = rootMirror.getRequiredClass("optimus.platform." + tpnames.givenAnyRuntimeEnv)
   lazy val AlwaysAutoAsNodeAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.alwaysAutoAsyncArgs")
   lazy val MiscFlagsAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.miscFlags")
+  lazy val GeneratedAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.internal.Generated")
 
   lazy val StoredAnnotation = rootMirror.getRequiredClass("optimus.platform.stored")
   lazy val BackedAnnotation = rootMirror.getRequiredClass("optimus.platform.backed")
@@ -358,6 +368,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val JunitAfterAnnotation = rootMirror.getClassIfDefined("org.junit.After")
   lazy val JunitBeforeClassAnnotation = rootMirror.getClassIfDefined("org.junit.BeforeClass")
   lazy val JunitAfterClassAnnotation = rootMirror.getClassIfDefined("org.junit.AfterClass")
+  lazy val JunitJupiterTestAnnotation = rootMirror.getClassIfDefined("org.junit.jupiter.api.Test")
   lazy val hasJunitAnnotations = JunitTestAnnotation.exists
 
   lazy val ScalaTestSuiteClass = rootMirror.getClassIfDefined("org.scalatest.TestSuite")
@@ -423,7 +434,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val TweakNode = rootMirror.getRequiredClass("optimus.graph.TweakNode")
   lazy val Tweak = rootMirror.getRequiredClass("optimus.platform.Tweak")
 
-  lazy val AsyncCollection = rootMirror.getRequiredModule("optimus.platform.Async")
+  lazy val AsyncInternals = rootMirror.getRequiredModule("optimus.platform.AsyncInternals")
   lazy val AsyncBaseClass = rootMirror.getRequiredClass("optimus.platform.AsyncBase")
   lazy val AsyncBaseAutoAsyncClass = definitions.getMemberClass(AsyncBaseClass, TypeName("AutoAsync"))
   lazy val AsyncIterableMarkerClass = rootMirror.getRequiredClass("optimus.platform.AsyncIterableMarker")
@@ -539,6 +550,8 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     requiredClassForScalaVersion("scala.collection.BitSetLike", "scala.collection.BitSetOps")
   lazy val TraversableLikeClass =
     requiredClassForScalaVersion("scala.collection.TraversableLike", "scala.collection.IterableOps")
+  lazy val UnsafeImmutableBufferWrapperClass =
+    rootMirror.getRequiredClass("optimus.scalacompat.collection.UnsafeImmutableBufferWrapper")
   lazy val CovariantSetClass = rootMirror.getRequiredClass("optimus.platform.CovariantSet")
   lazy val CanBuildFromClass =
     requiredClassForScalaVersion("scala.collection.generic.CanBuildFrom", "scala.collection.BuildFrom")
@@ -547,6 +560,8 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val OrderingClass = rootMirror.getRequiredClass("scala.math.Ordering")
   lazy val ProgressReporter = rootMirror.getRequiredClass("optimus.interop.ProgressReporter")
   lazy val Enumeration = rootMirror.getRequiredClass("scala.Enumeration")
+  lazy val Enumeration_Value = definitions.getMember(Enumeration, TypeName("Value"))
+  lazy val Enumeration_Val = definitions.getMember(Enumeration, TypeName("Val"))
   lazy val Enumeration_ValueSet = definitions.getMember(Enumeration, TypeName("ValueSet"))
   lazy val InstantCls = rootMirror.getRequiredClass("java.time.Instant")
   lazy val LookupClass = rootMirror.getRequiredClass("java.lang.invoke.MethodHandles.Lookup")
@@ -759,6 +774,11 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   def addLoomIfMissing(symbol: Symbol): Unit = if (curInfo.isLoom) addIfMissing(symbol, LoomAnnotation)
   def addIfMissing(sym: Symbol, annotation: ClassSymbol, assoc: List[(TermName, ClassfileAnnotArg)] = Nil): Unit =
     if (!sym.hasAnnotation(annotation)) sym.addAnnotation(AnnotationInfo(annotation.tpe, Nil, assoc))
+
+  /** Exclude synthetic methods from Jacoco coverage */
+  def markAsGenerated(sym: Symbol): sym.type = {
+    sym.withAnnotation(AnnotationInfo(GeneratedAnnotation.tpe, Nil, List.empty))
+  }
 
   lazy val OptimusJavaAnnos: Set[Symbol] =
     Set(

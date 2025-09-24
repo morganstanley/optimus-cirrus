@@ -24,7 +24,6 @@ import optimus.buildtool.utils.TypeClasses.StartingWith
 import optimus.platform._
 
 import scala.collection.immutable.IndexedSeq
-import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
 object DependencyMetadataResolver {

@@ -72,6 +72,14 @@ public final class EvaluationState {
   public static final int NOT_TRANSPARENT_FOR_CACHING_BARRIER =
       NOT_TRANSPARENT_FOR_CACHING | NOT_TRANSPARENT_FOR_CACHING_INHERIT;
 
+  /** set inside withoutDAL block */
+  public static final int IN_WITHOUT_DAL_BLOCK = 0x4000;
+
+  // TODO (OPTIMUS-78287): - See note referencing this JIRA in ReflectivePicklingImpl.unpickleFill
+  // regarding the need for this check and when it can be removed
+  /** used to indicate that interning used for during [un]pickling should be disabled */
+  public static final int DISABLE_PICKLING_INTERNING = 0x8000;
+
   /**
    * Children are never SI (you are entering a given block) and we want to clear
    * NOT_TRANSPARENT_FOR_CACHING_INHERIT
@@ -99,15 +107,18 @@ public final class EvaluationState {
           | SCENARIO_INDEPENDENT_STACK
           | RECORD_TWEAK_USAGE
           | RECORD_WHEN_DEPENDENCIES;
-  public static final int FLAGS_TO_PROPAGATE_TO_SI_STACK =
+
+  public static final int NON_SCENARIO_FLAGS =
       IGNORE_SYNC_STACKS
+          | DISABLE_PICKLING_INTERNING
           | CACHED_TRANSITIVELY
           | AUDITOR_CALLBACKS_DISABLED
           | FAIL_ON_SYNC_STACKS
-          | IN_NON_CONCURRENT_SEQ;
+          | IN_NON_CONCURRENT_SEQ
+          | IN_WITHOUT_DAL_BLOCK;
 
   public static final int ENGINE_PROPAGATION_CLEAR_FLAGS =
-      IGNORE_SYNC_STACKS | FAIL_ON_SYNC_STACKS | IN_NON_CONCURRENT_SEQ;
+      IGNORE_SYNC_STACKS | DISABLE_PICKLING_INTERNING | FAIL_ON_SYNC_STACKS | IN_NON_CONCURRENT_SEQ;
 
   /** Updates flags for usage by DependencyTracker */
   public static int flagsForMutableScenarioStack(int state) {

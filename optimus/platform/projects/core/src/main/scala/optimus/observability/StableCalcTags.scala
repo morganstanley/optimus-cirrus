@@ -16,6 +16,7 @@ import optimus.platform._
 import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.storable.Embeddable
 import optimus.platform.storable.EmbeddableTraitCompanionBase
+import optimus.platform.storable.HasDefaultUnpickleableValue
 
 /**
  * In an ideal world, we would collect all inputs to computations and we would let data speak for
@@ -31,7 +32,11 @@ import optimus.platform.storable.EmbeddableTraitCompanionBase
   def tuples: Seq[(String, String)] = Seq.empty
 }
 
-object StableCalcTags extends EmbeddableTraitCompanionBase with JobForwardingPluginTagKey[StableCalcTags] {
+object StableCalcTags
+    extends EmbeddableTraitCompanionBase
+    with JobForwardingPluginTagKey[StableCalcTags]
+    with HasDefaultUnpickleableValue[StableCalcTags] {
+  def defaultUnpickleableValue: StableCalcTags = MissingStableCalcTags
   val Missing: StableCalcTags = MissingStableCalcTags
 }
 

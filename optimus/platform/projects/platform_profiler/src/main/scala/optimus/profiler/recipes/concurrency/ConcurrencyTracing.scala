@@ -443,7 +443,7 @@ final class ConcurrencyTracing(config: ConcurrencyTracingConfig) {
   }
 
   def minimumUnitCost(costFunctionPnti: PNodeTaskInfo, costTasks: JArrayList[PNodeTask]): MinimumUnitCostReport = {
-    val tasksOfInterest = ArrayBuffer(costTasks.asScala: _*)
+    val tasksOfInterest = ArrayBuffer.from(costTasks.asScala)
 
     val orgGraphEntryPoints = NodeGraphVisitor.sortedGraphEntryPointsOf(costTasks)
     val graphEntryPoints = if (config.groupByTime) groupGraphEntryPoints(orgGraphEntryPoints) else orgGraphEntryPoints

@@ -14,7 +14,6 @@ package optimus.stratosphere.utils
 import optimus.stratosphere.logger.Logger
 
 import java.util.concurrent.TimeUnit
-import scala.collection.immutable.Seq
 
 object IntervalPrinter {
   private[utils] def millis(interval: Long): String = {

@@ -24,13 +24,13 @@ import optimus.graph.OptimusCancellationException;
 import optimus.graph.PropertyInfo;
 import optimus.graph.PropertyNode;
 import optimus.graph.loom.*;
+import optimus.interception.StrictEquality;
 import optimus.platform.pickling.AlreadyUnpickledPropertyNode;
 import optimus.platform.pickling.ContainsUnresolvedReference;
 import optimus.platform.pickling.LazyPickledReference;
 import optimus.platform.pickling.MaybePickledReference;
 import optimus.platform.storable.Entity;
 import optimus.platform.storable.EntityImpl;
-import optimus.platform.storable.EntityReference;
 import optimus.platform.storable.ModuleEntityToken;
 import optimus.platform.storable.NonDALEntityFlavor;
 import optimus.platform.storable.Storable;
@@ -38,43 +38,63 @@ import optimus.platform.pickling.UnresolvedItemWrapper;
 import scala.Function0;
 import scala.Function1;
 import scala.Function2;
+import scala.Function3;
+import scala.Product;
 
 @SuppressWarnings("unchecked")
 public class PluginHelpers {
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, boolean v) {
     return prev * 31 + (v ? 1231 : 1237);
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, byte v) {
     return prev * 31 + v;
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, short v) {
     return prev * 31 + v;
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, char v) {
     return prev * 31 + v;
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, int v) {
     return prev * 31 + v;
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, long v) {
     return prev * 31 + (int) (v ^ (v >>> 32));
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, double v) {
     long bits = Double.doubleToLongBits(v);
     return prev * 31 + (int) (bits ^ (bits >>> 32));
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, float v) {
     return prev * 31 + Float.floatToIntBits(v);
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int hashOf(int prev, Object v) {
     return prev * 31 + (v == null ? 0 : v.hashCode());
   }
@@ -86,6 +106,8 @@ public class PluginHelpers {
    * @param hash the calculated hash
    * @return the hash value to be stored
    */
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static int avoidZero(int hash) {
     return (hash == 0) ? -1 : hash;
   }
@@ -99,12 +121,16 @@ public class PluginHelpers {
    * @param hash2 the stored hash of the first case class
    * @return false iff the hashes are known to be not equal, true otherwise
    */
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static boolean equalsAvoidingZero(int hash1, int hash2) {
     return hash1 == hash2 || hash1 == 0 || hash2 == 0;
   }
 
   /* use DoubleCompareBenchmark when considering other implementations
    * Note - equals(Float.NaN, Float.NaN) == true */
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static boolean equals(float f1, float f2) {
     return f1 == f2 || (f1 != f1 && f2 != f2);
   }
@@ -145,6 +171,8 @@ public class PluginHelpers {
    * Calls to this family of method ore overloaded to allow the compiler to chose the most
    * appropriate method
    */
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static boolean canEqualStorable(Storable p1, Storable p2) {
     if (p1 == p2) return true;
     if (p1 == null || p2 == null) return false;
@@ -154,6 +182,8 @@ public class PluginHelpers {
     return p1.getClass() == p2.getClass();
   }
 
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
   public static Object safeResult(Entity e, VarHandle vh) {
     // safeResult should only be getting called from plugin-generated
     // argsHash and argsEquals methods, which in turn should only
@@ -164,6 +194,29 @@ public class PluginHelpers {
     // the value is always stable for heap entities so we can just
     // get here rather than getVolatile.
     return vh.get(e);
+  }
+
+  // This method is used to ensure that @embeddable case classes can be interned safely.
+  // The requirement for it stems from existing code that have defined custom equality methods
+  // that don't necessarily adhere to strict equality. When the plugin sees such classes, it will
+  // generate code that calls this method when StrictEquality.isActive() is true.
+  @SuppressWarnings("unused")
+  public static boolean strictEquals(Product inst, Object that) {
+    if (inst == that) return true;
+    // plugin sets inst to be the "this" of the embeddable so no check
+    // for inst == null here:
+    if (that == null || that.getClass() != inst.getClass()) return false;
+    var other = (Product) that;
+    for (int i = 0; i < inst.productArity(); ++i) {
+      if (!Objects.equals(inst.productElement(i), other.productElement(i))) return false;
+    }
+    return true;
+  }
+
+  // Called from plugin-generated code
+  @SuppressWarnings("unused")
+  public static boolean strictEqualsIsActive() {
+    return StrictEquality.isActive();
   }
 
   // Called from plugin-generated code
@@ -220,7 +273,7 @@ public class PluginHelpers {
         // an ACN in the next iteration
         var module = ((ModuleEntityToken) v).resolve();
         if (vh.compareAndSet(e, v, module)) {
-          res = new AlreadyUnpickledPropertyNode<T>((T) module, e, propInfo);
+          res = new AlreadyUnpickledPropertyNode<>(module, e, propInfo);
           break;
         }
       } else if (v instanceof UnresolvedItemWrapper<?> wrapper) {
@@ -275,7 +328,7 @@ public class PluginHelpers {
   }
 
   public static <V> AlreadyCompletedPropertyNode<V> acpn(V v, Entity entity, int propertyID) {
-    return new AlreadyCompletedPropertyNode<V>(v, entity, NodeTrace.forID(propertyID));
+    return new AlreadyCompletedPropertyNode<>(v, entity, NodeTrace.forID(propertyID));
   }
 
   public static <V> AlreadyCompletedNode<V> acn(V v) {
@@ -298,15 +351,13 @@ public class PluginHelpers {
   }
 
   public static <V, R> Function1<V, Node<R>> toNodeFactory(Function1<V, R> f) {
-    if (f instanceof LNodeFunction1<?, ?>)
-      return new AsNodeFactory1<V, R>((LNodeFunction1<V, R>) f);
-    return new AsNodeFactoryPlain1<V, R>(f);
+    if (f instanceof LNodeFunction1<?, ?>) return new AsNodeFactory1<>((LNodeFunction1<V, R>) f);
+    return new AsNodeFactoryPlain1<>(f);
   }
 
   // Used in $queued functions with @nodeLift params
   public static <V, R> Function1<V, Node<R>> toNodeFQ(Function1<V, Node<R>> f) {
-    if (f instanceof LNodeFunction1<?, ?>)
-      return new AsNodeFactory1<V, R>((LNodeFunction1<V, R>) f);
+    if (f instanceof LNodeFunction1<?, ?>) return new AsNodeFactory1<>((LNodeFunction1<V, R>) f);
     return f;
   }
 
@@ -319,6 +370,11 @@ public class PluginHelpers {
     if (f instanceof LNodeFunction2<?, ?, ?>)
       return new AsNodeFactory2<>((LNodeFunction2<V1, V2, R>) f);
     return f;
+  }
+
+  public static <V1, V2, V3, R> Function3<V1, V2, V3, Node<R>> toNodeFactory(
+      Function3<V1, V2, V3, R> f) {
+    return new AsNodeFactory3<>((LNodeFunction3<V1, V2, V3, R>) f);
   }
 
   public static <R> NodeFunction0<R> toNodeF(Function0<R> f) {

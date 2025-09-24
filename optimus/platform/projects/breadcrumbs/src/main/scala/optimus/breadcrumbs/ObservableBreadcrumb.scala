@@ -31,4 +31,32 @@ object ObservableBreadcrumb {
     Breadcrumbs.info(uuid, _ => cf)
   }
 
+  def info(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = {
+    if (listeners.isEmpty) {
+      Breadcrumbs.info(uuid, cf)
+    } else {
+      val crumb = cf(uuid)
+      listeners.foreach(cb => cb.apply(uuid, crumb))
+      Breadcrumbs.info(uuid, _ => crumb)
+    }
+  }
+
+  def clear(): Unit = synchronized {
+    listeners = Nil
+  }
+
+  def hasListeners: Boolean = synchronized {
+    listeners.nonEmpty
+  }
+}
+
+abstract class BreadcrumbsListener {
+  def onMessage(uuid: ChainedID, crumb: Crumb): Unit
+  lazy val callback = onMessage _
+  def register(): Unit = {
+    ObservableBreadcrumb.registerCallback(callback)
+  }
+  def unregister(): Unit = {
+    ObservableBreadcrumb.unRegisterCallback(callback)
+  }
 }

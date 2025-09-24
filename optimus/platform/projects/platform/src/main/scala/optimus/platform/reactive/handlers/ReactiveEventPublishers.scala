@@ -66,7 +66,7 @@ trait WithStatusStartStop extends WithStartStopImpl {
     super.beforeStop()
     status.publish(StateChangeEvent.StatusStopped)
   }
-  def setError(t: Throwable, cause: EventCause) = status.publish(StateChangeEvent.StatusError(t, cause))
+  def setError(t: Throwable, cause: EventCause) = status.publish(StateChangeEvent.StatusError(t))
   def clearError() = status.publish(StateChangeEvent.StatusOperational)
 }
 

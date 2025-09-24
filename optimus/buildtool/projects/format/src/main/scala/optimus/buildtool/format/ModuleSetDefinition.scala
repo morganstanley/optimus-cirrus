@@ -24,18 +24,18 @@ import optimus.buildtool.dependencies.DependencySetId
 import optimus.buildtool.dependencies.VariantSetId
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 final case class ModuleSetDefinition(
     id: ModuleSetId,
-    publicModules: Set[Module],
-    privateModules: Set[Module],
+    modules: Set[Module],
     canDependOn: Set[(ModuleSetId, Int)],
     dependencySets: Set[(DependencySetId, Int)],
     variantSets: Set[(VariantSetId, Int)],
     file: ObtFile,
     line: Int
-) extends OrderedElement[ModuleSetId]
+) extends OrderedElement[ModuleSetId] {
+  require(modules.forall(_.setId == id), s"tried to create module set with modules that belong somewhere else")
+}
 
 object ModuleSetDefinition {
 
@@ -54,7 +54,7 @@ object ModuleSetDefinition {
       files.map(f => f -> ModuleSetId(f.path.name.stripSuffix(s".${NamingConventions.ObtExt}"))).toMap
     val newModuleSetIdsByName = newModuleSetIdsByFile.values.map(id => id.name -> id).toMap
 
-    for {
+    val moduleSetsResult = for {
       legacySets <- loadLegacySets(loader, bundleMap, newModuleSetIdsByName, dependencySetMap, variantSetMap)
       allModuleSetMap = newModuleSetIdsByName ++ legacySets.map(d => d.id.name -> d.id)
       newSets <- Result.traverse(files) { f =>
@@ -63,6 +63,8 @@ object ModuleSetDefinition {
       }
       allSets <- validate(legacySets ++ newSets.toSet)
     } yield allSets
+
+    moduleSetsResult.withProblems(moduleSets => checkModulesMavenName(moduleSets))
   }
 
   private def loadLegacySets(
@@ -142,16 +144,15 @@ object ModuleSetDefinition {
       allVariantSets: Map[String, VariantSetId]
   ): Result[ModuleSetDefinition] = {
     val moduleSet = for {
-      publicModules <- loadModules(file, moduleSetCfg.optionalConfig(Keys.Public), bundles)
-      privateModules <- loadModules(file, moduleSetCfg.optionalConfig(Keys.Private), bundles)
+      publicModules <- loadModules(file, moduleSetCfg.optionalConfig(Keys.Public), bundles, id, public = true)
+      privateModules <- loadModules(file, moduleSetCfg.optionalConfig(Keys.Private), bundles, id, public = false)
       canDependOn <- loadSetsFromConfig(file, moduleSetCfg, Keys.CanDependOn, "module", moduleSets)
       dependencySets <- loadSetsFromConfig(file, moduleSetCfg, Keys.DependencySets, "dependency", allDependencySets)
       variantSets <- loadSetsFromConfig(file, moduleSetCfg, Keys.VariantSets, "variant", allVariantSets)
     } yield {
       ModuleSetDefinition(
         id = id,
-        publicModules = publicModules,
-        privateModules = privateModules,
+        modules = publicModules ++ privateModules,
         canDependOn = canDependOn,
         dependencySets = dependencySets,
         variantSets = variantSets,
@@ -165,19 +166,23 @@ object ModuleSetDefinition {
   private def loadModules(
       file: ObtFile,
       config: Option[Config],
-      bundles: Map[MetaBundle, Bundle]
-  ): Result[Set[Module]] = config
-    .map { cfg =>
-      val modules = for {
-        (moduleName, moduleCfg) <- ResultSeq(cfg.nested(file, 3))
-        moduleId = ModuleId.parse(moduleName)
-        bundle <- ResultSeq.single(getBundle(moduleId.metaBundle, bundles, file, moduleCfg))
-        module <- ResultSeq.single(loadModule(moduleName, bundle, file, moduleCfg))
-      } yield module
+      bundles: Map[MetaBundle, Bundle],
+      setId: ModuleSetId,
+      public: Boolean
+  ): Result[Set[Module]] = {
+    config
+      .map { cfg =>
+        val modules = for {
+          (moduleName, moduleCfg) <- ResultSeq(cfg.nested(file, 3))
+          moduleId = ModuleId.parse(moduleName)
+          bundle <- ResultSeq.single(getBundle(moduleId.metaBundle, bundles, file, moduleCfg))
+          module <- ResultSeq.single(loadModule(file, moduleCfg, bundle, setId, public, moduleId))
+        } yield module
 
-      modules.value.withProblems(mods => OrderingUtils.checkOrderingIn(file, mods)).map(_.toSet)
-    }
-    .getOrElse(Success(Set.empty))
+        modules.value.withProblems(mods => OrderingUtils.checkOrderingIn(file, mods)).map(_.toSet)
+      }
+      .getOrElse(Success(Set.empty))
+  }
 
   private def getBundle(id: MetaBundle, bundles: Map[MetaBundle, Bundle], file: ObtFile, cfg: Config): Result[Bundle] =
     bundles.get(id) match {
@@ -188,19 +193,31 @@ object ModuleSetDefinition {
         )
     }
 
-  private def loadModule(name: String, bundle: Bundle, file: ObtFile, conf: Config) =
+  private def loadModule(
+      file: ObtFile,
+      conf: Config,
+      bundle: Bundle,
+      setId: ModuleSetId,
+      public: Boolean,
+      id: ModuleId
+  ): Result[Module] = {
     Result.tryWith(file, conf) {
-      val id = ModuleId.parse(name)
       Success(
         Module(
           id = id,
+          setId = setId,
+          public = public,
           path = RelativePath(s"${bundle.modulesRoot}/${id.module}/${id.module}.obt"),
-          owner = conf.getString("owner"),
-          owningGroup = conf.getString("group"),
+          owner = conf.optionalString("owner"),
+          owningGroup = conf.optionalString("group"),
           line = conf.root().origin().lineNumber()
         )
-      ).withProblems(conf.checkExtraProperties(file, Keys.moduleOwnership))
+      ).withProblems(
+        conf.checkRequiredInternalKeys(file, Keys.moduleOwnership) ++
+          conf.checkExtraProperties(file, Keys.moduleOwnership)
+      )
     }
+  }
 
   private def loadSetsFromConfig[A](
       file: ObtFile,
@@ -301,6 +318,18 @@ object ModuleSetDefinition {
           missingDependencies.to(Seq) ++ missingVariants ++ multipleVariants
         }
     else Failure(circularDeps.to(Seq))
+  }
+
+  private def checkModulesMavenName(moduleSetDefinitions: Set[ModuleSetDefinition]): Seq[Error] = {
+    val modules: Set[(Module, ObtFile)] = moduleSetDefinitions.flatMap(ms => ms.modules.map((_, ms.file)))
+    val incompatibleModules = modules.groupBy(_._1.id.scope("main").forMavenRelease.fullModule).filter(_._2.size > 1)
+
+    for {
+      (id, modules) <- incompatibleModules.to(Seq)
+      (m, file) <- modules
+    } yield {
+      Error(s"Duplicate (lower-case) module name: '$id'", file, m.line)
+    }
   }
 
 }

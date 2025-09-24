@@ -19,7 +19,6 @@ import optimus.buildtool.runconf.plugins.NativeLibraries
 import optimus.buildtool.runconf.plugins.ReorderSpec
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 object NativeLibrariesSupport {
 

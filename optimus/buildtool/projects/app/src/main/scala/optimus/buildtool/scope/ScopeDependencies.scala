@@ -139,7 +139,7 @@ import scala.collection.immutable.{IndexedSeq, Seq}
     } else None
 
   @node def transitiveExternalDependencies: IndexedSeq[ExternalClassFileArtifact] =
-    resolution.map(_.result.resolvedArtifacts).getOrElse(Vector())
+    resolution.map(_.result.resolvedClassFileArtifacts).getOrElse(Vector())
 
   @node def internalDependencyIds: IndexedSeq[ScopeId] = dependencies.modules.toVector
 

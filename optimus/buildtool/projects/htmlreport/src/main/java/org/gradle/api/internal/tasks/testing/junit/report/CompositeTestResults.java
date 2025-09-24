@@ -17,6 +17,9 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -30,7 +33,7 @@ public abstract class CompositeTestResults extends TestResultModel {
   private final Set<TestResult> failures = new TreeSet<TestResult>();
   private final Set<TestResult> ignored = new TreeSet<TestResult>();
   private long duration;
-  private Optional<CoverageResult> coverageResult = Optional.empty();
+  private final Map<String, CoverageResult> coverageResultsByScope = new HashMap<>();
 
   protected CompositeTestResults(CompositeTestResults parent) {
     this.parent = parent;
@@ -109,16 +112,13 @@ public abstract class CompositeTestResults extends TestResultModel {
     return ignored;
   }
 
-  public ResultType getCoverageResultType() {
-    if (coverageResult.isPresent()) {
-      if (coverageResult.get().isFailure()) {
-        return ResultType.FAILURE;
-      } else {
-        return ResultType.SUCCESS;
-      }
-    } else {
-      return ResultType.SKIPPED;
+  public Map<String, ResultType> getCoverageResultTypeByScope() {
+    Map<String, ResultType> resultTypes = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      resultTypes.put(
+          entry.getKey(), entry.getValue().isFailure() ? ResultType.FAILURE : ResultType.SUCCESS);
     }
+    return resultTypes;
   }
 
   @Override
@@ -132,53 +132,63 @@ public abstract class CompositeTestResults extends TestResultModel {
     return ResultType.SUCCESS;
   }
 
-  public String getFormattedExpectedCoverageRate() {
-    Number coverageRate = getExpectedCoverageRate();
-    if (coverageRate == null) return "-";
-    return coverageRate + "%";
-  }
-
-  public Number getExpectedCoverageRate() {
-    if (coverageResult.isPresent()) {
-      return coverageResult.get().getExpectedPct();
-    } else {
-      return null;
+  public Map<String, String> getFormattedExpectedCoverageRateByScope() {
+    Map<String, String> formattedRates = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      Number rate = entry.getValue().getExpectedPct();
+      formattedRates.put(entry.getKey(), rate == null ? "-" : rate + "%");
     }
+    return formattedRates;
   }
 
-  public String getCoverageLink() {
-    if (coverageResult.isPresent()) {
-      return coverageResult.get().getReportLink().get().toAbsolutePath().toString();
-    } else {
-      return "#";
+  public Map<String, Number> getExpectedCoverageRateByScope() {
+    Map<String, Number> expectedRates = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      expectedRates.put(entry.getKey(), entry.getValue().getExpectedPct());
     }
+    return expectedRates;
   }
 
-  public String getFormattedActualCoverageRate() {
-    Number coverageRate = getActualCoverageRate();
-    if (coverageRate == null) return "-";
-    return coverageRate + "%";
-  }
-
-  public Number getActualCoverageRate() {
-    if (coverageResult.isPresent()) {
-      return coverageResult.get().getActualPct();
-    } else {
-      return null;
+  public Map<String, String> getCoverageLinkByScope() {
+    Map<String, String> links = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      links.put(entry.getKey(), entry.getValue().getReportLink().map(Object::toString).orElse("#"));
     }
+    return links;
   }
 
-  public String getCoverageStatusClass() {
-    switch (getCoverageResultType()) {
-      case SUCCESS:
-        return "success";
-      case FAILURE:
-        return "failures";
-      case SKIPPED:
-        return "skipped";
-      default:
-        throw new IllegalStateException();
+  public Map<String, String> getFormattedActualCoverageRateByScope() {
+    Map<String, String> formattedRates = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      Number rate = entry.getValue().getActualPct();
+      formattedRates.put(entry.getKey(), rate == null ? "-" : rate + "%");
     }
+    return formattedRates;
+  }
+
+  public Map<String, Number> getActualCoverageRateByScope() {
+    Map<String, Number> actualRates = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      actualRates.put(entry.getKey(), entry.getValue().getActualPct());
+    }
+    return actualRates;
+  }
+
+  public Map<String, String> getCoverageStatusClassByScope() {
+    Map<String, String> statusClasses = new HashMap<>();
+    for (Map.Entry<String, CoverageResult> entry : coverageResultsByScope.entrySet()) {
+      switch (entry.getValue().isFailure() ? ResultType.FAILURE : ResultType.SUCCESS) {
+        case SUCCESS:
+          statusClasses.put(entry.getKey(), "success");
+          break;
+        case FAILURE:
+          statusClasses.put(entry.getKey(), "failures");
+          break;
+        default:
+          statusClasses.put(entry.getKey(), "skipped");
+      }
+    }
+    return statusClasses;
   }
 
   public String getFormattedSuccessRate() {
@@ -223,8 +233,14 @@ public abstract class CompositeTestResults extends TestResultModel {
     return test;
   }
 
-  protected Optional<CoverageResult> addCoverage(Optional<CoverageResult> coverage) {
-    coverageResult = coverage;
-    return coverage;
+  public Map<String, CoverageResult> getCoverageResultsByScope() {
+    return new HashMap<>(coverageResultsByScope); // Return a copy to ensure immutability
+  }
+
+  protected void addCoverageByScope(String scope, CoverageResult coverage) {
+    coverageResultsByScope.put(scope, coverage);
+    if (parent != null) {
+      parent.addCoverageByScope(scope, coverage);
+    }
   }
 }

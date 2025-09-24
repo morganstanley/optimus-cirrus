@@ -18,7 +18,6 @@ import optimus.buildtool.format.ConfigUtils._
 import scala.jdk.CollectionConverters._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object ExtensionConfigurationCompiler {
 

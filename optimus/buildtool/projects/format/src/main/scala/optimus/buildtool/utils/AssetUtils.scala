@@ -16,18 +16,15 @@ import com.github.plokhotnyuk.jsoniter_scala.core.readFromStream
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
 
 import java.io.BufferedInputStream
-import java.io.BufferedWriter
 import java.io.IOException
 import java.io.InputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.OutputStream
-import java.io.OutputStreamWriter
 import java.io.Serializable
 import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
-import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.AccessDeniedException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.CopyOption
@@ -55,7 +52,6 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributeView
 import java.util.jar.JarFile
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -303,30 +299,6 @@ object AssetUtils {
         }
       }
     )
-  }
-
-  def writeZip(file: FileAsset, s: CharSequence): Unit = {
-    var zOut: BufferedWriter = null
-    try {
-      val out = Files.newOutputStream(file.path, StandardOpenOption.CREATE_NEW)
-      zOut = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(out), UTF_8))
-      zOut.append(s)
-    } catch {
-      case NonFatal(e) =>
-        log.error(s"Failed to write to ${file.path}", e)
-        if (e.isInstanceOf[FileSystemException]) {
-          ManagementFactory.getOperatingSystemMXBean match {
-            case b: UnixOperatingSystemMXBean =>
-              val open = b.getOpenFileDescriptorCount
-              val max = b.getMaxFileDescriptorCount
-              log.info(s"$open/$max open file descriptors")
-            case _ => // do nothing
-          }
-        }
-        throw e
-    } finally {
-      if (zOut ne null) zOut.close()
-    }
   }
 
   def serializeAtomically[T <: Serializable](file: FileAsset, value: T, replaceIfMissing: Boolean): Unit = {

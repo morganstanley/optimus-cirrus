@@ -26,7 +26,6 @@ import optimus.platform._
 
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
-import scala.collection.immutable.Seq
 import scala.collection.concurrent.TrieMap
 import scala.util.control.NonFatal
 
@@ -58,7 +57,7 @@ object FreezerStoreConf {
     }
 }
 
-class CustomFreezerStore(
+@entity class CustomFreezerStore(
     config: FreezerStoreConf,
     pathBuilder: CompilePathBuilder
 ) extends ArtifactStoreBase
@@ -182,5 +181,5 @@ object FreezerCache {
       conf: FreezerStoreConf,
       compilePathBuilder: CompilePathBuilder
   ): SimpleArtifactCache[CustomFreezerStore] =
-    SimpleArtifactCache(new CustomFreezerStore(conf, compilePathBuilder), cacheMode = CacheMode.ReadWrite)
+    SimpleArtifactCache(CustomFreezerStore(conf, compilePathBuilder), cacheMode = CacheMode.ReadWrite)
 }

@@ -26,7 +26,6 @@ import optimus.tools.metadata.updater.JsonUpdaterReflectiveStub
 import sbt.internal.inc.javac.JavaNoPosition
 import sbt.internal.inc.javac.JavaProblem
 
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 import xsbti.Reporter
 import xsbti.Severity

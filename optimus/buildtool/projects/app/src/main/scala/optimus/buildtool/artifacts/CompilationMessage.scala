@@ -39,6 +39,7 @@ final case class CompilationMessage(
 
   def isWarning: Boolean = severity == CompilationMessage.Warning
   def isError: Boolean = severity == CompilationMessage.Error
+  def isInfo: Boolean = severity == CompilationMessage.Info
   override def compare(y: CompilationMessage): Int =
     pos.compare(y.pos) elze alarmId.compare(y.alarmId) elze msg.compare(y.msg) elze
       severity.toString.compare(y.severity.toString)
@@ -92,6 +93,18 @@ object CompilationMessage {
   private val alarmIdExtractor = """Optimus: \((\d+)\)""".r
   private def extractAlarmId(msg: String): Option[String] =
     alarmIdExtractor.findFirstMatchIn(msg).map(_.group(1))
+
+  def errorMsg(allMessages: Seq[CompilationMessage]): String = {
+    val errors = allMessages.filter(_.isError)
+    val messageStrings = errors.map { m =>
+      m.pos match {
+        case Some(p) => s"${m.msg} [${p.filepath}:${p.startLine}]"
+        case None    => m.msg
+      }
+    }
+    messageStrings.mkString("\n  ")
+  }
+
 }
 
 // Because you can't easily reconstruct a real scala.reflect.internal.util.Position, and we don't need one anyway.

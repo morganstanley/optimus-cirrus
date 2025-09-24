@@ -12,6 +12,9 @@
 package optimus.platform.dal
 
 import optimus.platform._
+import optimus.platform.dal.session.RolesetMode
+
+import java.time.Instant
 
 trait DALClientSession {
 
@@ -22,6 +25,12 @@ trait DALClientSession {
     @async private def getClientSession = resolver.getSession()
 
     @async def effectiveUserId: String = getClientSession.effectiveId
+
+    @async private[optimus] def encryptedSessionToken: Option[Vector[Byte]] = getClientSession.encryptedSessionToken
+
+    @async private[optimus] def establishmentTime: Instant = getClientSession.establishmentTime
+
+    @async private[optimus] def rolesetMode: RolesetMode.Established = getClientSession.rolesetMode
 
   }
 

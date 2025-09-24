@@ -34,7 +34,6 @@ import optimus.graph.PropertyNode
 import optimus.graph.Scheduler
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -83,7 +82,7 @@ import scala.util.control.NonFatal
       inputs: NodeFunction0[Inputs],
       cancellationScope: CancellationScope = EvaluationContext.cancelScope
   ): (Node[CompilerOutput], Node[SignatureCompilerOutput]) = {
-    val queueTask: TaskTrace = ObtTrace.startTask(scopeId, Queue)
+    val queueTask: TaskTrace = ObtTrace.startTask(scopeId, Queue(Scala))
     val outVersions = outputVersions(inputs)
     val sigPromise = NodePromise[SignatureCompilerOutput]()
     // get but do not start the outputNode (so that we don't end up running it on this thread if we only wanted to get
@@ -220,8 +219,10 @@ import scala.util.control.NonFatal
 
     val compiler = compilerFactory.newCompiler(scopeId, Scala)
 
-    var scalacTrace: TaskTrace = null
-    var signaturesTrace: TaskTrace = null
+    var scalacTrace: Option[TaskTrace] = None
+    var scalacComplete = false
+    var signaturesTrace: Option[TaskTrace] = None
+    var signaturesComplete = false
 
     val cancelScope = EvaluationContext.cancelScope
     val listener = { _: CancellationScope =>
@@ -234,7 +235,7 @@ import scala.util.control.NonFatal
       val signatureOutputConsumer: Option[Try[SignatureCompilerOutput] => Unit] =
         if (inputs.signatureOutPath.isDefined) {
           // we record the scalac time until signatures are ready as Signatures/Outline
-          signaturesTrace = ObtTrace.startTask(scopeId, signatureType)
+          signaturesTrace = Some(ObtTrace.startTask(scopeId, signatureType))
 
           // This callback will be triggered when SignatureArtifacts are available. If the compilation fails before
           // they are available we'll get completed by the generateClasses node instead (probably with error
@@ -242,12 +243,12 @@ import scala.util.control.NonFatal
           Some { result: Try[SignatureCompilerOutput] =>
             // once signatures are available, we record the remaining scalac time as Scalac
             val endTime = patch.MilliInstant.now()
-            if (signaturesTrace ne null) {
-              result.failed.foreach(t => signaturesTrace.publishMessages(Seq(CompilationMessage.error(t))))
-              signaturesTrace.end(result.isSuccess, time = endTime)
-              signaturesTrace = null
+            if (!signaturesComplete) {
+              result.failed.foreach(t => signaturesTrace.foreach(_.publishMessages(Seq(CompilationMessage.error(t)))))
+              signaturesTrace.foreach(_.end(result.isSuccess, time = endTime))
+              signaturesComplete = true
 
-              if (!inputs.outlineTypesOnly) scalacTrace = ObtTrace.startTask(scopeId, Scala, endTime)
+              if (!inputs.outlineTypesOnly) scalacTrace = Some(ObtTrace.startTask(scopeId, Scala, endTime))
               val id = scopeId
               log.debug(s"[$id:scala] signatureOutputConsumer callback (${dbgStr(outputNode, signaturePromise)})")
 
@@ -267,7 +268,8 @@ import scala.util.control.NonFatal
           }
         } else {
           // if pipelined signatures are disabled, we record the entire scalac time as Scalac
-          scalacTrace = ObtTrace.startTask(scopeId, Scala)
+          signaturesComplete = true
+          scalacTrace = Some(ObtTrace.startTask(scopeId, Scala))
           signaturePromise.completeWithExtraInfo(
             Success(SignatureCompilerOutput.empty(scopeId, inputs.outputFile(ArtifactType.SignatureMessages).asJson)),
             outputNode
@@ -275,33 +277,39 @@ import scala.util.control.NonFatal
           None
         }
 
-      // (note that there's no concurrency here, so no worries about the trace getting nulled out during this method)
-      def activeTask: Task =
-        if (signaturesTrace ne null) Task(signaturesTrace, ArtifactType.SignatureMessages, signatureType)
-        else if (scalacTrace ne null) Task(scalacTrace, ArtifactType.ScalaMessages, Scala)
-        else Task(LoggingTaskTrace, ArtifactType.ScalaMessages, Scala)
+      def activeTask: Task = (signaturesTrace, scalacTrace) match {
+        case (Some(sig), _) if !signaturesComplete =>
+          Task(sig, ArtifactType.SignatureMessages, signatureType, signaturesTrace)
+        case (_, Some(scala)) if !scalacComplete =>
+          Task(scala, ArtifactType.ScalaMessages, Scala, signaturesTrace)
+        case _ =>
+          Task(LoggingTaskTrace, ArtifactType.ScalaMessages, Scala, None)
+      }
 
       // actually run the compiler
       val output = compiler.compile(inputs, signatureOutputConsumer, activeTask)
-      if (signaturesTrace ne null) {
-        signaturesTrace.end(success = !output.messages.hasErrors, output.messages.errors, output.messages.warnings)
-        signaturesTrace = null
-      }
-      if (scalacTrace ne null) {
-        scalacTrace.end(success = !output.messages.hasErrors, output.messages.errors, output.messages.warnings)
-        scalacTrace = null
+      if (!signaturesComplete) {
+        signaturesTrace.foreach(
+          _.end(success = !output.messages.hasErrors, output.messages.errors, output.messages.warnings)
+        )
+        signaturesComplete = true
+      } else {
+        scalacTrace.foreach(
+          _.end(success = !output.messages.hasErrors, output.messages.errors, output.messages.warnings)
+        )
+        scalacComplete = true
       }
       output
     } catch {
       case NonFatal(e) =>
-        if (scalacTrace ne null) scalacTrace.publishMessages(Seq(CompilationMessage.error(e)))
-        if (signaturesTrace ne null) signaturesTrace.publishMessages(Seq(CompilationMessage.error(e)))
+        scalacTrace.foreach(_.publishMessages(Seq(CompilationMessage.error(e))))
+        signaturesTrace.foreach(_.publishMessages(Seq(CompilationMessage.error(e))))
         throw e
     } finally {
       EvaluationContext.cancelScope.removeListener(listener)
-      // if we got here without nulling out the trace, it must have failed
-      if (scalacTrace ne null) scalacTrace.end(success = false)
-      if (signaturesTrace ne null) signaturesTrace.end(success = false)
+      // if we got here without completion, the task must have failed
+      if (!scalacComplete) scalacTrace.foreach(_.end(success = false))
+      if (!signaturesComplete) signaturesTrace.foreach(_.end(success = false))
     }
   }
 

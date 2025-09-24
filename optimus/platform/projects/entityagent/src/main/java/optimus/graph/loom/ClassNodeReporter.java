@@ -11,9 +11,15 @@
  */
 package optimus.graph.loom;
 
+import java.util.concurrent.ConcurrentHashMap;
 import org.objectweb.asm.tree.ClassNode;
 
-public interface ClassNodeReporter {
+/** For testing purposes only. Provides an ability to report on what LoomAdapter is doing */
+public class ClassNodeReporter {
 
-  void report(ClassNode classNode);
+  public static final ConcurrentHashMap<String, ClassNode> classNodes = new ConcurrentHashMap<>();
+
+  static void report(ClassNode classNode) {
+    classNodes.put(classNode.name, classNode);
+  }
 }

@@ -144,7 +144,8 @@ final class MultiRemoteDsiProxy(
         ClientBrokerContext(baseContext, pubSubUri, zone, appId, Int.MaxValue, asyncConfig, brokerVirtualHostname(env)),
         brokerProviderResolver,
         partitionMap,
-        secureTransport
+        secureTransport,
+        Some(this)
       )
   }
   override protected[optimus] val messagesOpt: Option[ClientSideDSI] = messagesBroker.map { messagesUri =>
@@ -190,7 +191,14 @@ class MultiRemoteTcpDsiProxy(
     new RemoteDSIProxy(clientBrokerCtx, uri.getHost, uri.getPort, false, partitionMap, secureTransport)
   }
   override protected[optimus] val pubSubOpt: Option[PubSubTcpDsiProxy] = pubSubUri map { uri =>
-    new PubSubTcpDsiProxy(clientBrokerCtx.leadCtx, uri.getHost, uri.getPort, false, partitionMap, secureTransport)
+    new PubSubTcpDsiProxy(
+      clientBrokerCtx.leadCtx,
+      uri.getHost,
+      uri.getPort,
+      false,
+      partitionMap,
+      secureTransport,
+      Some(this))
   }
   override protected val accOpt: Option[RemoteDSIProxy] = accUri map { uri =>
     new RemoteDSIProxy(clientBrokerCtx, uri.getHost, uri.getPort, false, partitionMap, false)

@@ -13,6 +13,7 @@ package optimus.buildtool.utils
 
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.RelativePath
@@ -24,6 +25,7 @@ import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.RevWalkUtils
 import org.eclipse.jgit.revwalk.filter.RevFilter
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.AbstractTreeIterator
@@ -32,7 +34,6 @@ import org.eclipse.jgit.treewalk.CanonicalTreeParser
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -51,22 +52,23 @@ trait FileDiff {
 }
 
 class LazyGitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, baseline: String) extends FileDiff {
+  private val obtTrace = ObtTrace.current
   private val diffFiles: CompletableFuture[Set[String]] = CompletableFuture.supplyAsync { () =>
-    ObtTrace.traceTask(ScopeId.RootScopeId, GitModifiedFiles) {
+    obtTrace.traceTask(ScopeId.RootScopeId, GitModifiedFiles) {
       val m = utils.diffFiles(baseline)
       GitLog.log.debug(s"${m.size} modified files since baseline $baseline:\n\t${m.map(_.pathString).mkString("\n\t")}")
       m.map(f => workspaceSourceRoot.relativize(f).pathString)
     }
   }
   private val untrackedFiles: CompletableFuture[Set[String]] = CompletableFuture.supplyAsync { () =>
-    ObtTrace.traceTask(ScopeId.RootScopeId, GitUntrackedFiles) {
-      val u = utils.untrackedFiles()
+    obtTrace.traceTask(ScopeId.RootScopeId, GitStatus) {
+      val u = utils.status().untrackedFiles
       GitLog.log.debug(s"${u.size} untracked files:\n\t${u.map(_.pathString).mkString("\n\t")}")
       u.map(f => workspaceSourceRoot.relativize(f).pathString)
     }
   }
   private val lines: CompletableFuture[Map[String, Set[Int]]] = CompletableFuture.supplyAsync { () =>
-    ObtTrace.traceTask(ScopeId.RootScopeId, GitModifiedLines) {
+    obtTrace.traceTask(ScopeId.RootScopeId, GitModifiedLines) {
       val m = utils.diffLines(baseline)
       GitLog.log.debug(
         s"${m.flatMap(_._2).sum} modified lines in ${m.size} files since baseline $baseline:\n\t${m.keys.map(_.pathString).mkString("\n\t")}"
@@ -93,6 +95,9 @@ object EmptyFileDiff extends FileDiff {
 }
 
 object GitLog {
+  // git status is so expensive we want to really go out of our way to keep the result cached
+  uncommittedChanges.setCustomCache(NodeCaching.optimizerCache)
+
   private[utils] val log: Logger = getLogger(this.getClass)
 
   private val DefaultDescriptionFilter = ".*"
@@ -101,17 +106,27 @@ object GitLog {
       utils: GitUtils,
       workspaceSourceRoot: Directory,
       stratoWorkspace: StratoWorkspace,
+      targetBranch: String,
       descriptionFilter: String = DefaultDescriptionFilter, // String here since Regexes don't have stable equality
       commitLength: Int
-  ): GitLog = GitLogImpl(utils, workspaceSourceRoot, stratoWorkspace, descriptionFilter.r, commitLength)
+  ): GitLog = GitLogImpl(utils, workspaceSourceRoot, stratoWorkspace, targetBranch, descriptionFilter.r, commitLength)
+
+  @entity object gitStatusState extends TrackedExternalState
 }
 
 @entity trait GitLog {
+  @node def branch(): String
   @node def diff(oldRef: String, newRef: String): Seq[DiffEntry]
   @node def HEAD: Option[Commit] = recentHeads.headOption
   @node def recentHeads: Seq[Commit]
   @node def recentCommits(from: String = Constants.HEAD): Seq[Commit]
-  @async def baseline(from: String = Constants.HEAD): Option[Commit]
+  @node def baselineCached(from: String = Constants.HEAD): Option[Commit]
+  @node def baselineDistance(from: String = Constants.HEAD): Option[Int]
+  @node def uncommittedChanges(): Option[Int] = {
+    GitLog.gitStatusState.establishDependency()
+    uncommittedChangesUncached()
+  }
+  protected def uncommittedChangesUncached(): Option[Int]
   // Diff between the baseline of `from` and current working tree
   @async @impure def fileDiff(from: String = Constants.HEAD): Option[FileDiff]
   // If current HEAD is a descendant of tag then return the current head commit, otherwise return None
@@ -126,6 +141,7 @@ object GitLog {
     utils: GitUtils,
     workspaceSourceRoot: Directory,
     stratoWorkspace: StratoWorkspace,
+    targetBranch: String,
     descriptionFilter: Regex,
     commitLength: Int
 ) extends GitLog {
@@ -133,6 +149,11 @@ object GitLog {
   // triggering the configured credentials here
   private val credentials = new UsernamePasswordCredentialsProvider("", "")
   private val native = NativeGitUtils(workspaceSourceRoot, stratoWorkspace)
+
+  @node def branch(): String = {
+    utils.declareReflogVersionDependence()
+    utils.repo.getBranch
+  }
 
   @node def diff(oldRef: String, newRef: String): Seq[DiffEntry] = {
     utils.declareReflogVersionDependence()
@@ -232,9 +253,26 @@ object GitLog {
     }
   }
 
+  @node def baselineCached(from: String): Option[Commit] = {
+    utils.declareReflogVersionDependence()
+    baseline(from)
+  }
+
+  private def onPrBuild: Boolean = System.getenv("PULL_REQUEST_ID") != null
+
+  private def useGitBaselineBasedOnCommitMessages: Boolean =
+    OptimusBuildToolProperties.getOrFalse("useGitBaselineBasedOnCommitMessages")
+
   @async def baseline(from: String): Option[Commit] = {
     // Note: Because in practice this is called before the file scan has been completed, it should not be
     // made a @node and call utils.declareVersionDependence
+    if (onPrBuild && !useGitBaselineBasedOnCommitMessages)
+      baselineBasedOnMergeBase(from)
+    else
+      baselineBasedOnCommitMessages(from)
+  }
+
+  @async def baselineBasedOnCommitMessages(from: String): Option[Commit] = {
     try {
       val start = utils.repo.resolve(from)
       utils.git
@@ -249,6 +287,62 @@ object GitLog {
     } catch {
       case NonFatal(t) =>
         log.error(s"Exception reading git log", t)
+        None
+    }
+  }
+
+  @async def baselineBasedOnMergeBase(from: String): Option[Commit] = {
+    val walk = new RevWalk(utils.repo)
+    try {
+      var start = walk.parseCommit(utils.repo.resolve(from))
+      val target = walk.parseCommit(utils.repo.resolve(targetBranch))
+
+      // On PR builds, the HEAD is a temporary merge commit, so back up to the PR head commit
+      if (onPrBuild)
+        start = start.getParent(1)
+
+      walk.setRevFilter(RevFilter.MERGE_BASE)
+      walk.markStart(start)
+      walk.markStart(target)
+      Option(walk.next())
+        .map(Commit(_))
+    } catch {
+      case NonFatal(t) =>
+        log.error(s"Exception reading git, finding merge-base of $from and $targetBranch", t)
+        None
+    } finally walk.close()
+  }
+
+  @node def baselineDistance(from: String): Option[Int] = {
+    utils.declareReflogVersionDependence()
+    baselineCached(from).flatMap { baselineCommit =>
+      val repo = utils.repo
+      val walk = new RevWalk(repo)
+      try {
+        val start = walk.parseCommit(repo.resolve(from))
+        val end = walk.parseCommit(repo.resolve(baselineCommit.hash))
+        Some(RevWalkUtils.count(walk, start, end))
+      } catch {
+        case NonFatal(t) =>
+          log.error(s"Exception reading git, walking from $from to baseline ${baselineCommit.hash}", t)
+          None
+      } finally walk.close()
+    }
+  }
+
+  def uncommittedChangesUncached(): Option[Int] = {
+    try {
+      // Can't do the following as we're using command-line git 2.40+ (2.42.4),
+      // which uses a new "index.skipHash" option
+      // which is only supported as of JGit 5.13.2
+      // (currently on v4.11.4.201810160000-r-ms1)
+      //    Some(!utils.git.status().call().hasUncommittedChanges)
+      // so use the native utils (which I'm guessing someone built this for the same reason)
+      val status = native.status()
+      Some(status.modifiedFiles.size + status.untrackedFiles.size)
+    } catch {
+      case NonFatal(t) =>
+        log.error(s"Exception reading git", t)
         None
     }
   }

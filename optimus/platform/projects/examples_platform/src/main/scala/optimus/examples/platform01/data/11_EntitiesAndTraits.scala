@@ -13,6 +13,7 @@ package optimus.examples.platform01.data
 
 import optimus.platform._
 import optimus.examples.platform.entities.SimpleCalcs
+import optimus.examples.testinfra.PrintlnInterceptor
 
 @entity
 trait XEntityTrait {
@@ -73,7 +74,7 @@ class AnEntityExtendingScalaTraits(@node val x: Int = 7, @node val y: Int = 0) e
   @node def f(i: Int) = 2 * i
 }
 
-object EntitiesAndTraits extends LegacyOptimusApp {
+object EntitiesAndTraits extends LegacyOptimusApp with PrintlnInterceptor {
 
   def showInterfaces(c: Class[_], indent: String = ""): Unit = {
     println(indent + c.getName)

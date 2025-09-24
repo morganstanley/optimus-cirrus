@@ -14,32 +14,38 @@ package optimus.scala212
 import optimus.scalacompat.collection.UnsafeImmutableBufferWrapper
 
 import scala.annotation.implicitNotFound
+import scala.annotation.unused
 import scala.collection.convert.AsScalaExtensions
-import scala.{collection => sc}
+import scala.collection.immutable.ArraySeq
 
 object DefaultSeq extends optimus.scalacompat.collection.MapBuildFromImplicits {
-  type Seq[+A] = sc.Seq[A]
-  val Seq: sc.Seq.type = sc.Seq
-  type IndexedSeq[+A] = sc.IndexedSeq[A]
-  val IndexedSeq: sc.IndexedSeq.type = sc.IndexedSeq
-  def toVarargsSeq[A](s: sc.Seq[A]): scala.collection.immutable.Seq[A] = s match {
-    case is: scala.collection.immutable.Seq[a] => is.asInstanceOf[scala.collection.immutable.Seq[A]]
-    case _                                     => s.toSeq
+  implicit class ArrayToVarArgsOps[A](private val self: Array[A]) extends AnyVal {
+    /**
+     * Convert an Array to an `immutable.Seq` in order to pass it as "sequence argument" to a "vararg" method, a
+     * method with a repeated parameter. Example:
+     *
+     * {{{
+     *   Vector(someString.split(' ').toVarArgsSeq: _*)
+     * }}}
+     *
+     * For efficiency, the array is *not* copied. Mutations to the array are reflected in the resulting `immutable.Seq`.
+     */
+    def toVarArgsSeq: Seq[A] = ArraySeq.unsafeWrapArray(self)
   }
-  def toVarargsSeq[A](s: Array[A]): scala.collection.immutable.Seq[A] =
-    scala.collection.immutable.ArraySeq.unsafeWrapArray(s)
 
   implicit class ListHasAsScalaUnsafe[A](l: java.util.List[A]) {
     /**
-     * Extension method to convert a `java.util.List` to an [[UnsafeImmutableBufferWrapper]].
+     * This method converts a `java.util.List` to a `scala.collection.immutable.Seq` without copying the collection.
+     * The resulting collection therefore changes in case the underlying Java list is mutated, hence the name `Unsafe`.
      *
-     * This conversion is useful when an immutable collection is needed and the underlying Java list is known to be
-     * immutable / fresh / non-aliased.
+     * The `asScla` conversion from [[scala.jdk.CollectionConverters]] returns a `mutable.Buffer`.
+     * `asScalaUnsafeImmutable` can be used when an immutable collection is needed and the underlying Java list is known
+     * to be immutable / fresh / non-aliased. The resulting collection is an [[UnsafeImmutableBufferWrapper]].
      */
     def asScalaUnsafeImmutable(implicit
-        @implicitNotFound(
-          "import scala.jdk.CollectionConverters._ to use asScalaUnsafeImmutable") importEvidence: java.util.List[
-          A] => AsScalaExtensions#ListHasAsScala[A]): UnsafeImmutableBufferWrapper[A] =
-      new UnsafeImmutableBufferWrapper(l.asScala)
+        @implicitNotFound("import scala.jdk.CollectionConverters._ to use asScalaUnsafeImmutable")
+        @unused
+        importEvidence: java.util.List[A] => AsScalaExtensions#ListHasAsScala[A]): UnsafeImmutableBufferWrapper[A] =
+      if (l == null) null else new UnsafeImmutableBufferWrapper(l.asScala)
   }
 }

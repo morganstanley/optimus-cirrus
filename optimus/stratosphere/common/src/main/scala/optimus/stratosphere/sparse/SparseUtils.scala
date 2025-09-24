@@ -25,7 +25,6 @@ import java.nio.file.Paths
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.util.Try
 import scala.util.control.NonFatal
 

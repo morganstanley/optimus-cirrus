@@ -13,16 +13,18 @@ package optimus.platform.temporalSurface.operations
 
 import optimus.platform._
 import optimus.platform.storable._
-
 import optimus.platform.dal.DSIStorageInfo
 import optimus.platform.TemporalContext
 import optimus.platform.AsyncImplicits._
 import optimus.platform.temporalSurface.impl.TemporalSurfaceDataAccess
-import java.io.Serializable
 
+import java.io.Serializable
 import optimus.platform.temporalSurface.impl.BranchTemporalSurfaceImpl
 import optimus.platform.temporalSurface.impl.LeafTemporalSurfaceImpl
+import optimus.platform.temporalSurface.impl.TemporalSurfaceImpl
 import optimus.scalacompat.collection._
+
+import scala.collection.mutable
 
 sealed trait TemporalSurfaceQueryImpl extends TemporalSurfaceQuery
 sealed trait TemporalSurfaceEntityListDataAccessOperation[T <: Entity]
@@ -72,7 +74,7 @@ sealed trait QueryByKey[E <: Entity] extends EntityClassBasedQuery[E] {
   val key: SerializedKey
 }
 object QueryByKey {
-  def unapply[E <: Entity](query: QueryByKey[E]) = if (query == null) None else Some(query.key)
+  def unapply[E <: Entity](query: QueryByKey[E]): Option[SerializedKey] = if (query == null) None else Some(query.key)
 }
 sealed trait EntityClassBasedQuery[E <: Entity] extends TemporalSurfaceQueryImpl with TemporalSurfaceQueryWithClass {
   def targetClass: Class[E]
@@ -129,10 +131,10 @@ final case class QueryPersistentEntityByEntityReference(dataAccess: TemporalSurf
     extends TemporalSurfaceQuery
     with DataQueryByEntityReference[Entity] {
   type ResultType = Option[PersistentEntity]
-  @node final override def toResult(
+  @node override def toResult(
       contextGenerator: ItemKey => (TemporalContext, ItemData),
       keys: Iterable[ItemKey],
-      storageInfo: Option[StorageInfo] = None) = {
+      storageInfo: Option[StorageInfo] = None): Option[ItemData] = {
     if (keys.isEmpty) None
     else if (keys.tail.isEmpty) Option(contextGenerator(keys.head)._2)
     // required only one assigned or unassigned item
@@ -206,73 +208,53 @@ private[optimus /*platform*/ ] sealed trait QueryTree extends TemporalSurfaceQue
   def left: TemporalSurfaceQuery
   def right: TemporalSurfaceQuery
 
-  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T
+  protected def queryFirstStep(): QueryStep
 
-  @async def doScopeMatch(ts: BranchTemporalSurfaceImpl): MatchScope =
-    getMatchResult[MatchScope](asNode { q =>
-      doQueryScopeMatch(q, ts)
-    })
+  @async def doScopeMatch(ts: BranchTemporalSurfaceImpl): MatchScope = doMatchI(ts).asInstanceOf[MatchScope]
 
-  @async private def doQueryScopeMatch(query: TemporalSurfaceQuery, ts: BranchTemporalSurfaceImpl): MatchScope =
-    query match {
-      case qt: QueryTree           => qt.doScopeMatch(ts)
-      case q: TemporalSurfaceQuery => ts.scope.matchScope(q, ts)
+  @async def doMatch(ts: LeafTemporalSurfaceImpl): MatchResult = doMatchI(ts).asInstanceOf[MatchResult]
+
+  @async private def doMatchI(ts: TemporalSurfaceImpl): MatchEnum = {
+    val stack = new mutable.Stack[QueryStep]()
+    stack.push(queryFirstStep())
+    while (stack.size > 1 || stack.head.result == null) {
+      val qs = stack.pop()
+      if (qs.result ne null) {
+        val prev = stack.pop()
+        stack.push(prev.next(qs.result))
+      } else
+        qs.next match {
+          case qt: QueryTree =>
+            stack.push(qs)
+            stack.push(qt.queryFirstStep())
+          case tsq: TemporalSurfaceQuery =>
+            val result = ts match {
+              case bts: BranchTemporalSurfaceImpl => bts.scope.matchScope(tsq, bts)
+              case lts: LeafTemporalSurfaceImpl   => lts.matcher.matchQuery(tsq, lts)
+            }
+            stack.push(qs.next(result))
+        }
     }
-
-  @async def doMatch(ts: LeafTemporalSurfaceImpl): MatchResult =
-    getMatchResult[MatchResult](asNode { q =>
-      doQueryMatch(q, ts)
-    })
-
-  @async private def doQueryMatch(query: TemporalSurfaceQuery, ts: LeafTemporalSurfaceImpl): MatchResult = query match {
-    case qt: QueryTree => qt.doMatch(ts)
-    case query         => ts.matcher.matchQuery(query, ts)
+    if (stack.isEmpty) throw new IllegalArgumentException("Unexpected stack state!")
+    else stack.head.result
   }
 
   @node final override def toResult(
-      contextGenerator: (EntityReference) => (TemporalContext, PersistentEntity),
+      contextGenerator: EntityReference => (TemporalContext, PersistentEntity),
       keys: Iterable[EntityReference],
-      storageInfo: Option[StorageInfo]): ResultType = ???
+      storageInfo: Option[StorageInfo]): ResultType = throw new IllegalStateException()
   override val dataAccess: TemporalSurfaceDataAccess = null
 }
 
 private[optimus] final case class AndTemporalSurfaceQuery(left: TemporalSurfaceQuery, right: TemporalSurfaceQuery)
     extends QueryTree {
 
-  /*
-   * For AND (&&) operator
-   *
-   * Always   && Always   = Always
-   * Always   && CantTell = Always
-   * Always   && Never    = Never // Error ?
-   * CantTell && CantTell = CantTell
-   * CantTell && Never    = Never
-   * Never    && Never    = Never
-   */
-  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T = {
-    val leftRes = matchFunc(left)
-    if (leftRes == NeverMatch) leftRes // one Never must be Never, no need to calc the other half
-    else {
-      val rightRes = matchFunc(right)
-      (leftRes, rightRes) match {
-        case (_, NeverMatch)      => rightRes // Never => Never
-        case (_, AlwaysMatch)     => rightRes // left is not Never, right is Always => Always
-        case (CantTell, CantTell) =>
-          // if the left and right side of the query considered in isolation are CantTell, try combining them because
-          // together they might be specific enough to be provably convered by the matcher
-          val merged = mergeAdjacentKeyQueries
-          if (merged ne this) matchFunc(merged)
-          else rightRes
-        case (AlwaysMatch, CantTell) => leftRes
-        case s                       => throw new IllegalArgumentException(s"Invalid match state: $s")
-      }
-    }
-  }
+  override protected def queryFirstStep(): QueryStep = new QueryStepAnd(left, right, this)
 
-  private def mergeAdjacentKeyQueries: TemporalSurfaceQuery = {
+  private[platform] def mergeAdjacentKeyQueries: TemporalSurfaceQuery = {
     def visit(t: TemporalSurfaceQuery) = t match {
       case a: AndTemporalSurfaceQuery => a.mergeAdjacentKeyQueries
-      case t => t
+      case t                          => t
     }
     // visiting in post-order so that any adjacent keys in our children will have already been merged
     (visit(left), visit(right)) match {
@@ -286,9 +268,8 @@ private[optimus] final case class AndTemporalSurfaceQuery(left: TemporalSurfaceQ
         if (lProps.keySet.intersect(rProps.keySet).forall(k => lProps(k) == rProps(k))) {
           val combinedProperties = SortedPropertyValues(lProps.toSeq ++ rProps.toSeq)
           // Unique vs NonUnique doesn't matter here - only the key properties will be used
-           QueryByUniqueKey(l.dataAccess, l.key.copy(combinedProperties), l.targetClass, entitledOnly = false)
-        }
-        else this
+          QueryByUniqueKey(l.dataAccess, l.key.copy(combinedProperties), l.targetClass, entitledOnly = false)
+        } else this
       case _ => this
     }
   }
@@ -298,6 +279,52 @@ private[optimus] final case class AndTemporalSurfaceQuery(left: TemporalSurfaceQ
 private[optimus] final case class OrTemporalSurfaceQuery(left: TemporalSurfaceQuery, right: TemporalSurfaceQuery)
     extends QueryTree {
 
+  override protected def queryFirstStep(): QueryStep = new QueryStepOr(left, right)
+}
+
+abstract class QueryStep(val next: TemporalSurfaceQuery) {
+  def next(result: MatchEnum): QueryStep
+  def result: MatchEnum = null
+}
+
+private class QueryDone(override val result: MatchEnum) extends QueryStep(null) {
+  override def next(result: MatchEnum): QueryStep = throw new IllegalArgumentException("Should not be called!")
+}
+
+/*
+ * For AND (&&) operator
+ *
+ * Always   && Always   = Always
+ * Always   && CantTell = Always
+ * Always   && Never    = Never // Error ?
+ * CantTell && CantTell = CantTell
+ * CantTell && Never    = Never
+ * Never    && Never    = Never
+ */
+private class QueryStepAnd(
+    left: TemporalSurfaceQuery,
+    right: TemporalSurfaceQuery,
+    andQ: AndTemporalSurfaceQuery,
+    leftResult: MatchEnum = null)
+    extends QueryStep(left) {
+
+  override def next(result: MatchEnum): QueryStep = {
+    if (result == NeverMatch) new QueryDone(NeverMatch) // one Never must be Never, no need to calc the other half
+    else if (leftResult eq null) new QueryStepAnd(right, null, andQ, result)
+    else if (result == AlwaysMatch) new QueryDone(AlwaysMatch) // left is not Never, right is Always => Always
+    else if (leftResult == AlwaysMatch) new QueryDone(AlwaysMatch)
+    else if (leftResult == CantTell && result == CantTell) {
+      // if the left and right side of the query considered in isolation are CantTell, try combining them because
+      // together they might be specific enough to be provably convered by the matcher
+      val merged = andQ.mergeAdjacentKeyQueries
+      if (merged eq andQ) new QueryDone(CantTell)
+      else new QueryStepOne(merged)
+    } else throw new IllegalArgumentException("Invalid match state")
+  }
+}
+
+private class QueryStepOr(left: TemporalSurfaceQuery, right: TemporalSurfaceQuery, leftResult: MatchEnum = null)
+    extends QueryStep(left) {
   /*
    * For OR(||) operator
    *
@@ -308,16 +335,14 @@ private[optimus] final case class OrTemporalSurfaceQuery(left: TemporalSurfaceQu
    * CantTell || Never    = CantTell
    * Never    || Never    = Never
    */
-  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T = {
-    val leftRes = matchFunc(left)
-    if (leftRes == CantTell) leftRes // one CantTell must be CantTell, no need to calc the other half
-    else {
-      val rightRes = matchFunc(right)
-      (leftRes, rightRes) match {
-        case (_, CantTell)    => rightRes // CantTell => CantTell
-        case (l, r) if l == r => rightRes // left == right (Always/Never)
-        case (_, _)           => CantTell.asInstanceOf[T] // left != right, (Always || Never -> CantTell)
-      }
-    }
+  override def next(result: MatchEnum): QueryStep = {
+    if (result == CantTell) new QueryDone(CantTell) // one CantTell must be CantTell, no need to calc the other half
+    else if (leftResult eq null) new QueryStepOr(right, null, result)
+    else if (leftResult == result) new QueryDone(result) // left == right (Always/Never)
+    else new QueryDone(CantTell) // left != right, (Always || Never -> CantTell)
   }
+}
+
+private class QueryStepOne(query: TemporalSurfaceQuery) extends QueryStep(query) {
+  def next(result: MatchEnum): QueryStep = new QueryDone(result)
 }

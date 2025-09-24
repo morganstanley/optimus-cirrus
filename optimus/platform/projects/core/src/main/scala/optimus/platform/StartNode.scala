@@ -43,7 +43,11 @@ private[optimus] class StartNode(ss: ScenarioStack) extends Node[Unit] {
       PropertiesCrumb(
         _,
         Properties.config ->
-          Option(ss.env.config).flatMap(c => Option(c.runtimeConfig)).map(_.propertyMap).getOrElse(Map.empty),
+          // the config is only used for sending diagnostics so we don't track access
+          Option(ss.ssShared.environmentWithoutTrackingAccess.config)
+            .flatMap(c => Option(c.runtimeConfig))
+            .map(_.propertyMap)
+            .getOrElse(Map.empty),
         Properties.pid -> MSProcess.getPID,
         Properties.host -> LoggingInfo.getHost,
         Properties.logFile -> LoggingInfo.getLogFile,

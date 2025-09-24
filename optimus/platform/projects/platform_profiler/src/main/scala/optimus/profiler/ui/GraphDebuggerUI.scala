@@ -15,7 +15,6 @@ import java.awt.BorderLayout
 import java.awt.EventQueue
 import java.awt.FlowLayout
 import java.awt.Frame
-import java.awt.Toolkit
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import java.awt.event.WindowAdapter
@@ -35,8 +34,6 @@ import optimus.graph.DiagnosticSettings
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.cache.CauseProfiler
-import optimus.platform.inputs.ProcessState
-import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.graph.cache.UNodeCache
 import optimus.graph.diagnostics.DbgPreference
 import optimus.graph.diagnostics.Debugger
@@ -64,6 +61,7 @@ import optimus.profiler.utils.NodeDiGraphWriter
 import optimus.profiler.utils.ValueGraphConfig
 
 import java.awt.Component
+import javax.swing.JCheckBoxMenuItem
 import javax.swing.event.ChangeEvent
 import javax.swing.event.ChangeListener
 import scala.collection.mutable
@@ -154,6 +152,22 @@ object GraphDebuggerUI extends Log with ConfigSettings {
 
   // same preference as for the class
   private[profiler] val showInternal: DbgPreference = DbgPreference("showInternal", "Show Internal Nodes", "", pref)
+
+  // By default we want to reset between clicking REC because some stuff gets rather confusing otherwise:
+  // - we may miss the beginning or end of a node
+  // - we may miss some of the nodes parents or children, if they were computed while we werent tracing
+  // - there are probably weird bugs present.
+  val resetBetweenRecordings: JCheckBoxMenuItem = {
+    val cb = new JCheckBoxMenuItem("Reset trace data when starting a recording")
+    cb.setState(true)
+    cb.setToolTipText(
+      "Unset to maintain previous trace data when starting a new recording. This is poorly tested and likely to break in weird ways.")
+    Debugger.dbgShowAdvancedCmds.addCallback { show =>
+      cb.setVisible(show)
+      if (!show) cb.setState(true) // turn off automatically if experimental gets tuned off
+    }
+    cb
+  }
 }
 
 class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with ProvidesMenus {
@@ -225,7 +239,7 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
 
       val collectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0))
       collectPanel.setBorder(BorderFactory.createEmptyBorder(0, 5, 5, 5))
-      collectPanel.add(NodeUI.createCollectPickerComponent)
+      collectPanel.add(NodeUI.createRecStopPanel)
       collectPanel.add(NodeUI.createIsProfilingSSUsageComponent(pref))
       collectPanel.add(NodeUI.createIsTraceInvalidatesComponent(pref))
       collectPanel.add(NodeUI.createTraceWaitsComponent(pref))
@@ -353,6 +367,16 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
           "Generate NodeTask graph", {
             val graph = NodeDiGraphWriter.fullNodeGraphToString(DebuggerUI.loadedTraces.last, config = ValueGraphConfig)
             SClipboard.copy(graph, graph)
+            showMessage("Copied to clipboard!")
+          },
+          tooltipText = Some("Only of latest trace loaded")
+        )
+        add(
+          offlineMenu,
+          "Generate Cache Statistics", {
+            // PNTI => # (cache hits, misses)
+            val cacheHits: String = HotspotsTable.getCacheStatsFromReader(DebuggerUI.loadedTraces.last).toString
+            SClipboard.copy(cacheHits, cacheHits)
             showMessage("Copied to clipboard!")
           },
           tooltipText = Some("Only of latest trace loaded")

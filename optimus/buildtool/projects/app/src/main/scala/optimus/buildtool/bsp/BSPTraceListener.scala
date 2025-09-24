@@ -63,7 +63,6 @@ import java.util.Timer
 import java.util.TimerTask
 import scala.jdk.CollectionConverters._
 import scala.collection.concurrent.TrieMap
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 import scala.collection.compat._
 

@@ -21,7 +21,11 @@ import org.objectweb.asm.tree.ClassNode;
 public class LMessage {
 
   public static void fatal(String msg) {
-    throw new RuntimeException("LFATAL :" + msg);
+    throw new RuntimeException("LFATAL : " + msg);
+  }
+
+  public static void fatal(String className, Exception e) {
+    throw new RuntimeException("LFATAL : (" + className + ") " + e.getMessage(), e);
   }
 
   static void error(String msg) {
@@ -40,7 +44,7 @@ public class LMessage {
 
   static void info(String msg, TransformableMethod tmethod, ClassNode cls) {
     var methodName = cls.name + "." + tmethod.method.name;
-    System.out.println(
+    System.err.println(
         "LINFO: " + msg + methodName + " (" + cls.sourceFile + ":" + tmethod.lineNumber + ")");
   }
 }

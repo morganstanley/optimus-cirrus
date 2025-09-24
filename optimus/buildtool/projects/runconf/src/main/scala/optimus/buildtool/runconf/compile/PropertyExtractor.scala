@@ -24,7 +24,6 @@ import optimus.buildtool.runconf.plugins.ExtraExecOpts
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
 private[compile] class PropertyExtractor(val properties: RawProperties) extends AnyVal {

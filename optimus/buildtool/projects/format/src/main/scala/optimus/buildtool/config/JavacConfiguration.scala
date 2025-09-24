@@ -13,11 +13,8 @@ package optimus.buildtool.config
 
 import optimus.buildtool.files.Directory
 import optimus.buildtool.format.WarningsConfiguration
-import optimus.buildtool.utils.JavaOptionFiltering
 import optimus.buildtool.utils.JavaOpts
 import spray.json._
-
-import scala.collection.immutable.Seq
 
 final case class JavacConfiguration(
     options: Seq[String],
@@ -36,9 +33,4 @@ final case class JavacConfiguration(
       "warnings" -> warnings.asJson,
       "options" -> JsArray(options.map(JsString.apply): _*),
       "release" -> JsNumber(release))
-}
-
-object JavacConfiguration {
-  def filterJavaRuntimeOptions(javaRuntimeVersion: String, opts: Seq[String], log: String => Unit): Seq[String] =
-    JavaOptionFiltering.filterJavaRuntimeOptions(javaRuntimeVersion, opts, log)
 }

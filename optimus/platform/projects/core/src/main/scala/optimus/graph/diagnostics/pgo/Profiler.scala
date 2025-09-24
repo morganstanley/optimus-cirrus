@@ -90,6 +90,7 @@ object Profiler {
 
   private def cleanupLocMarker(locMarker: AnyRef): AnyRef = locMarker match {
     case clsID: LNodeClsID if clsID.isDynamic => clsID._clsID().asInstanceOf[AnyRef]
+    case cls: Class[_]                        => cls
     case null                                 => null
     case _                                    => locMarker.getClass
   }

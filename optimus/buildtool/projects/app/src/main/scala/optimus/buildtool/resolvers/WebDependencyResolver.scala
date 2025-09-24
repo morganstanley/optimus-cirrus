@@ -26,7 +26,6 @@ import org.yaml.snakeyaml.Yaml
 import spray.json.JsValue
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
 

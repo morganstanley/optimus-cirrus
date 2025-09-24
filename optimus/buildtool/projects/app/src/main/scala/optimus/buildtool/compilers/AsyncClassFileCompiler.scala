@@ -65,4 +65,9 @@ import optimus.platform._
   @node protected def signatureOutput(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): SignatureCompilerOutput
 }
 
-final case class Task(trace: TaskTrace, artifactType: MessageArtifactType, category: MessageTrace)
+final case class Task(
+    trace: TaskTrace,
+    artifactType: MessageArtifactType,
+    category: MessageTrace,
+    sigTrace: Option[TaskTrace]
+)

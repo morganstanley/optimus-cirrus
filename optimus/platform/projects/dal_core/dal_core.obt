@@ -32,13 +32,12 @@ main {
       optimus.silverking.silverking
     ]
     libs = [
-      com.ms.watchtower.watchtower_core,
       fsf.zookeeper,
-      msjava.base,
-      msjava.hdom,
-      msjava.msnet,
-      msjava.msxml,
-      msjava.zkapi,
+      msjava.rr-base,
+      msjava.rr-hdom,
+      msjava.rr-msnet,
+      msjava.rr-msxml,
+      msjava.rr-zkapi,
       ossjava.commons-codec,
       ossjava.commons-lang3,
       ossjava.curator,
@@ -59,9 +58,9 @@ main {
     ]
   }
   runtime.libs = [
-    msjava.directory,
-    msjava.directory.testutils,
-    msjava.protobufutils,
+    msjava.rr-directory,
+    msjava.rr-directory-testing,
+    msjava.rr-protobufutils,
     ossjava.snakeyaml
   ]
 

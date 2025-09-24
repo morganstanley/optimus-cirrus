@@ -12,6 +12,7 @@
 package optimus.buildtool.builders.postbuilders.installer.component.testplans
 
 import optimus.buildtool.config.ScopeConfigurationSource
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.GitLog
 import optimus.platform._
 import org.eclipse.jgit.diff.DiffEntry.ChangeType
@@ -19,14 +20,21 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
 import java.nio.file.Path
 import java.nio.file.Paths
 
+@entity class GitChanges(
+    val changesByScope: Option[Map[ScopeId, Set[Path]]],
+    val scopeConfigSource: ScopeConfigurationSource
+) extends Changes {
+  override def scopes: Option[Set[ScopeId]] = changesByScope.map(_.keySet)
+}
+
 @entity object GitChanges {
   @node def apply(
       gitOpt: Option[GitLog],
       scopeConfigSource: ScopeConfigurationSource,
       ignoredPaths: Seq[String]
-  ): Changes = {
-    val changesAsScopes = gitOpt.map(git => changedPaths(git, ignoredPaths)).map(scopeConfigSource.changesAsScopes)
-    Changes(changesAsScopes, scopeConfigSource)
+  ): GitChanges = {
+    val changesByScopes = gitOpt.map(git => changedPaths(git, ignoredPaths)).map(scopeConfigSource.changesByScopes)
+    GitChanges(changesByScopes, scopeConfigSource)
   }
 
   @node def changedPaths(git: GitLog, ignoredPaths: Seq[String]): Set[Path] = {

@@ -11,33 +11,23 @@
  */
 package optimus.platform.temporalSurface.impl
 
-import java.io.ObjectStreamException
-import java.time.Instant
-
+import optimus.core.InternerHashEquals
+import optimus.core.WeakInterner
 import optimus.graph.Settings
 import optimus.platform._
-import optimus.platform._
-import optimus.platform.internal.IgnoreSyncStacksPlugin
-import optimus.platform.scenarioIndependent
 import optimus.platform.temporalSurface._
 import optimus.utils.MacroUtils.SourceLocation
 
-private[optimus /*platform*/ ] object FlatTemporalSurface {
-  @entity private object factory {
-    // really these are just a cacheable functional call
-    @scenarioIndependent @node def create(
-        matcher: TemporalSurfaceMatcher,
-        vt: Instant,
-        tt: Instant,
-        tag: Option[String],
-        sourceLocation: SourceLocation): FlatTemporalSurface =
-      new FlatTemporalSurface(matcher, vt, tt, tag, sourceLocation)
+import java.io.ObjectStreamException
+import java.time.Instant
+import java.util.Objects
 
-    IgnoreSyncStacksPlugin.installIfNeeded(create_info)
-  }
+private[optimus /*platform*/ ] object FlatTemporalSurface {
+  private val interner = new WeakInterner()
+
   def apply(matcher: TemporalSurfaceMatcher, vt: Instant, tt: Instant, tag: Option[String])(implicit
       sourceLocation: SourceLocation): FlatTemporalSurface =
-    factory.create(matcher, vt, tt, tag, sourceLocation)
+    interner.intern(new FlatTemporalSurface(matcher, vt, tt, tag, sourceLocation)).asInstanceOf[FlatTemporalSurface]
 
   // until we resolve the temporal surface throughout the code, some legacy APIs
   def apply(vt: Instant, tt: Instant, tag: Option[String]): FlatTemporalSurface =
@@ -45,45 +35,21 @@ private[optimus /*platform*/ ] object FlatTemporalSurface {
 
 }
 @entity private[optimus /*platform*/ ] object FlatTemporalContext {
-  @entity private object factory {
-    // really this is just a cacheable functional call
-    @scenarioIndependent @node def create(
-        matcher: TemporalSurfaceMatcher,
-        vt: Instant,
-        tt: Instant,
-        tag: Option[String],
-        sourceLocation: SourceLocation): FixedTemporalContextImpl with FlatTemporalContext = {
-      val result = new FlatTemporalContext(matcher, vt, tt, tag, sourceLocation)
-      if (Settings.traceCreateTemporalContext) {
-        TemporalContextTrace.traceCreated(result)
-      }
-      result
-    }
-    IgnoreSyncStacksPlugin.installIfNeeded(create_info)
+  private val interner = new WeakInterner()
+
+  def apply(matcher: TemporalSurfaceMatcher, vt: Instant, tt: Instant, tag: Option[String])(implicit
+      sourceLocation: SourceLocation): FixedTemporalContextImpl with FlatTemporalContext = {
+    val result =
+      interner.intern(new FlatTemporalContext(matcher, vt, tt, tag, sourceLocation)).asInstanceOf[FlatTemporalContext]
     if (Settings.traceCreateTemporalContext) {
-      // trace every call
-      create_info.setCacheable(false)
+      TemporalContextTrace.traceCreated(result)
     }
+    result
   }
-  @scenarioIndependent @node def apply(matcher: TemporalSurfaceMatcher, vt: Instant, tt: Instant, tag: Option[String])(
-      implicit sourceLocation: SourceLocation): FixedTemporalContextImpl with FlatTemporalContext =
-    factory.create(matcher, vt, tt, tag, sourceLocation)
-
-  private def buildTC(
-      matcher: TemporalSurfaceMatcher,
-      vt: Instant,
-      tt: Instant,
-      tag: Option[String],
-      sourceLoc: SourceLocation): FixedTemporalContextImpl with FlatTemporalContext =
-    factory.create(matcher, vt, tt, tag, sourceLoc)
-
-  apply_info.setCacheable(false)
-  // until we resolve the temporal surface throughout the code, some legacy APIs
 
   def apply(vt: Instant, tt: Instant, tag: Option[String])(implicit
       sourceLocation: SourceLocation): FixedTemporalContextImpl with FlatTemporalContext =
-    AdvancedUtils.suppressSyncStackDetection(
-      FlatTemporalContext.buildTC(DataFreeTemporalSurfaceMatchers.all, vt, tt, tag, sourceLocation))
+    apply(DataFreeTemporalSurfaceMatchers.all, vt, tt, tag)
 }
 
 final private[optimus /*platform*/ ] class FlatTemporalSurface(
@@ -92,7 +58,8 @@ final private[optimus /*platform*/ ] class FlatTemporalSurface(
     private[optimus /*platform*/ ] val tt: Instant,
     override private[optimus] val tag: Option[String],
     override private[optimus] val sourceLocation: SourceLocation)
-    extends FixedLeafTemporalSurfaceImpl {
+    extends FixedLeafTemporalSurfaceImpl
+    with InternerHashEquals {
 
   /**
    * for serialisation, use the cache if it is available
@@ -103,6 +70,17 @@ final private[optimus /*platform*/ ] class FlatTemporalSurface(
 
   override protected def canEqual(ots: TemporalSurface): Boolean = ots.isInstanceOf[FlatTemporalSurface]
 
+  // the regular hashcode / equals ignore the tag and location, but for interning we must include them
+  override def internerHashCode(): Int = Objects.hash(matcher, vt, tt, tag, sourceLocation)
+  override def internerEquals(other: Any): Boolean = other match {
+    case that: FlatTemporalSurface =>
+      Objects.equals(this.matcher, that.matcher) &&
+      Objects.equals(this.vt, that.vt) &&
+      Objects.equals(this.tt, that.tt) &&
+      Objects.equals(this.tag, that.tag) &&
+      Objects.equals(this.sourceLocation, that.sourceLocation)
+    case _ => false
+  }
 }
 
 final private[optimus /*platform*/ ] class FlatTemporalContext(
@@ -113,7 +91,8 @@ final private[optimus /*platform*/ ] class FlatTemporalContext(
     override private[optimus] val sourceLocation: SourceLocation)
     extends FixedLeafTemporalSurfaceImpl
     with FixedTemporalContextImpl
-    with FixedLeafTemporalContext {
+    with FixedLeafTemporalContext
+    with InternerHashEquals {
 
   override def unsafeValidTime: Instant = vt
   override def unsafeTxTime: Instant = tt
@@ -127,6 +106,17 @@ final private[optimus /*platform*/ ] class FlatTemporalContext(
 
   override protected def canEqual(ots: TemporalSurface): Boolean = ots.isInstanceOf[FlatTemporalContext]
 
+  // the regular hashcode / equals ignore the tag and location, but for interning we must include them
+  override def internerHashCode(): Int = Objects.hash(matcher, vt, tt, tag, sourceLocation)
+  override def internerEquals(other: Any): Boolean = other match {
+    case that: FlatTemporalContext =>
+      Objects.equals(this.matcher, that.matcher) &&
+      Objects.equals(this.vt, that.vt) &&
+      Objects.equals(this.tt, that.tt) &&
+      Objects.equals(this.tag, that.tag) &&
+      Objects.equals(this.sourceLocation, that.sourceLocation)
+    case _ => false
+  }
 }
 
 /**

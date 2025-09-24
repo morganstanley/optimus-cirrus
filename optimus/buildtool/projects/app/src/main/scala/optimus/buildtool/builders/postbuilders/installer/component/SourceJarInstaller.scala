@@ -27,7 +27,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
 
 class SourceJarInstaller(installer: Installer) extends ComponentInstaller {

@@ -25,8 +25,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 @entity class FingerprintHasher(
     id: ScopeId,
     pathBuilder: CompilePathBuilder,
@@ -40,11 +38,10 @@ import scala.collection.immutable.Seq
       tpe: FingerprintArtifactType,
       discriminator: Option[String] = None
   ): FingerprintArtifact = ObtTrace.traceTask(id, HashFingerprints(tpe)) {
-    log.debug(s"[$id] Calculating hashed fingerprint for $tpe...")
     val hashPrefix = Hashing.hashStrings(fingerprint ++ freezeHash)
     // we use Z for freezer because F could be interpreted as part of the hash!
     val hash: String = hashPrefix + (if (freezeHash.nonEmpty) "Z" else "") + (if (mischief) "M" else "")
-    log.debug(s"[$id] Hashed fingerprint (${fingerprint.size}) for $tpe: $hash")
+    log.debug(s"[$id:$tpe] Hashed fingerprint (${fingerprint.size} lines): $hash")
     if (fingerprint.nonEmpty) {
       val path = pathBuilder.outputPathFor(id, hash, tpe, discriminator)
       AssetUtils.atomicallyWriteIfMissing(path) { tmp =>
@@ -53,7 +50,7 @@ import scala.collection.immutable.Seq
 
       // Note that we deliberately create the artifact here (even if we're not going to write it to the store below)
       // so that we watch for its deletion
-      val artifact = FingerprintArtifact.create(InternalArtifactId(id, tpe, discriminator), path, fingerprint, hash)
+      val artifact = FingerprintArtifact.create(InternalArtifactId(id, tpe, discriminator), path, hash)
       tpe match {
         // Most of the time, there's no reason to cache the fingerprints.
         // CompilationFingerprints are useful for debugging though, so we would like them to be cached.

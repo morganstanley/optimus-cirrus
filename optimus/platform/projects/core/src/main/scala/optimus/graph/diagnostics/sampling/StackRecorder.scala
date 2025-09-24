@@ -18,12 +18,16 @@ import optimus.graph.NodeTask
 import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.utils.PropertyUtils
 import optimus.graph.DiagnosticSettings
+import optimus.graph.FormattableNode
+import optimus.graph.NodeStateMachine
 import optimus.graph.OGLocalTables
 import optimus.graph.PluginType
 import optimus.graph.PluginType.AdaptedNodesOfAllPlugins
 import optimus.graph.Scheduler
 import optimus.graph.Scheduler.SchedulerSnapshot
 import optimus.graph.TestableClock
+import optimus.graph.diagnostics.NodeName
+import optimus.graph.diagnostics.ap.StackAnalysis.CleanName
 import optimus.graph.diagnostics.sampling.SamplingProfiler.TopicAccumulator
 import optimus.platform.util.Log
 
@@ -63,6 +67,31 @@ class NodeStackSampler extends StackSampler with Log {
   private def getRecorder(pt: PluginType, tpe: String): StackRecorder = {
     pluginStackRecorders.getOrElseUpdate((pt, tpe), new StackRecorder(tpe + "_" + pt.name))
   }
+
+  // If this class is a node, try to decode it a little.  Return an empty string if unsuccessful.
+  override def classToFrame(clz: Class[_], method: String): String = {
+    if (classOf[FormattableNode].isAssignableFrom(clz)) {
+      // Seems to be an FSM node, delegate to NodeName
+      val nn = NodeName.fromNodeCls(clz).toString(true)
+      if (method.startsWith("func")) nn else s"$nn.$method"
+    } else if (classOf[NodeStateMachine].isAssignableFrom(clz)) {
+      // Seems to be statemachine itself.  Try to find the enclosing  FSM node
+      try {
+        val m = clz.getEnclosingMethod
+        if (Objects.nonNull(m)) {
+          val ec = m.getDeclaringClass
+          if (Objects.nonNull(ec)) classToFrame(ec, "sM." + method)
+          else ""
+        } else ""
+      } catch {
+        case t: Throwable =>
+          CleanName.whine((clz, method), t)
+          ""
+      }
+    } else ""
+  }
+
+  override def cleanClassName(clz: String): String = NodeName.cleanNodeClassName(clz, '.')
 
   override def drainToIterable(sp: SamplingProfiler): Iterable[TimedStack] = { // Enqueue chains of nodes currently parked in waiting queues.
     val waitStacks = {

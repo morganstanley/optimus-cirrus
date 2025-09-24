@@ -11,13 +11,13 @@
  */
 package optimus.debug;
 
-import static optimus.debug.InstrumentationConfig.FieldRef;
 import static optimus.debug.InstrumentationConfig.MethodPatch;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.allocateID;
 import java.util.Arrays;
 import java.util.List;
+import optimus.FieldInjector.InjectedField;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
@@ -114,13 +114,14 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     mv.visitVarInsn(localValueType.getOpcode(ISTORE), __localValue);
   }
 
-  void ifNotZeroReturn(MethodPatch patch, FieldRef fpatch) {
+  void ifNotZeroReturn(MethodPatch patch, InjectedField fpatch) {
     loadThis();
-    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
+    // TODO (OPTIMUS-76886): This should call the getter provided by FieldInjector.
+    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.descOrNull);
     Label label1 = new Label();
     mv.visitJumpInsn(IFEQ, label1);
     loadThis();
-    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
+    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.descOrNull);
     mv.visitInsn(IRETURN);
     mv.visitLabel(label1);
   }
@@ -202,14 +203,40 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     if (!isStatic(methodAccess)) loadThis();
   }
 
-  void writeCallForward(String className, String name, int access, String desc) {
-    // call original native method
-    loadThisIfNonStatic();
-    loadArgs();
+  void writeCallForward(
+      String className,
+      String name,
+      int access,
+      String desc,
+      boolean forwardArgs,
+      boolean isInterface) {
+    int targetArgumentShift = 0;
+    int sourceArgumentShift = 0;
+
+    if (!isStatic(methodAccess)) {
+      loadThis();
+      targetArgumentShift = 1; // `this` will not be part of the sourceArgTypes
+    } else if (!isStatic(access)) {
+      loadArg(0); // Source static but target is instance so load first argument as `this`
+      sourceArgumentShift = 1;
+    }
+
+    if (forwardArgs) {
+      var sourceArgTypes = getArgumentTypes();
+      var targetArgTypes = Type.getArgumentTypes(desc);
+      for (int i = sourceArgumentShift; i < sourceArgTypes.length; i++) {
+        loadArg(i);
+        var targetType = targetArgTypes[i + targetArgumentShift - sourceArgumentShift];
+        if (!targetType.equals(sourceArgTypes[i])) unbox(targetType);
+      }
+    }
 
     var opcode = invokeStaticOrVirtual(access);
-    visitMethodInsn(opcode, className, name, desc, false);
+    visitMethodInsn(opcode, className, name, desc, isInterface);
     var returnType = Type.getReturnType(desc);
+    var matchReturnType = getReturnType();
+    if (!matchReturnType.equals(returnType)) unbox(matchReturnType);
+
     visitInsn(returnType.getOpcode(Opcodes.IRETURN));
   }
 
@@ -245,14 +272,6 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return access & ~ACC_PUBLIC & ~ACC_PROTECTED | ACC_PRIVATE;
   }
 
-  public static int makePublic(int access) {
-    return access & ~ACC_PROTECTED & ~ACC_PRIVATE | ACC_PUBLIC;
-  }
-
-  public static int accessPart(int access) {
-    return access & (ACC_PRIVATE | ACC_PROTECTED | ACC_PUBLIC);
-  }
-
   public static int invokeStaticOrVirtual(int access) {
     return isStatic(access) ? INVOKESTATIC : INVOKEVIRTUAL;
   }
@@ -263,10 +282,6 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
 
   public static boolean isVolatile(int access) {
     return (access & ACC_VOLATILE) != 0;
-  }
-
-  public static boolean isStaticOrAbstract(int access) {
-    return (access & (ACC_STATIC | ACC_ABSTRACT)) != 0;
   }
 
   public static boolean isCCtor(int access, String name, String desc) {
@@ -348,8 +363,7 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
   public String getFwdDescriptor(String suggestedDesc, int fwdAccess, String className) {
     if (suggestedDesc != null) return suggestedDesc;
     if (isStatic(getAccess()) && isStatic(fwdAccess)) return this.methodDesc;
-    if (!isStatic(fwdAccess))
-      return stripFirstArgument(this.methodDesc);
+    if (!isStatic(fwdAccess)) return stripFirstArgument(this.methodDesc);
 
     // insert first argument the object of the class
     return this.methodDesc.replace("(", "(L" + className + ";");

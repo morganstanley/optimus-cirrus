@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.EitherModule
 import com.fasterxml.jackson.module.scala.IterableModule
@@ -24,7 +25,7 @@ import com.fasterxml.jackson.module.scala.IteratorModule
 import com.fasterxml.jackson.module.scala.JacksonModule
 import com.fasterxml.jackson.module.scala.MapModule
 import com.fasterxml.jackson.module.scala.OptionModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.fasterxml.jackson.module.scala.SeqModule
 import com.fasterxml.jackson.module.scala.SetModule
 import com.fasterxml.jackson.module.scala.TupleModule

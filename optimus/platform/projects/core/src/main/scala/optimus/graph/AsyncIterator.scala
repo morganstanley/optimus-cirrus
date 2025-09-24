@@ -74,7 +74,10 @@ object AsyncIterator {
   private final case class Phase(f: Any => NI[Any], next: Phase) {
     def hasNext: Boolean = next ne null
   }
-  private final case class Slot(var slotValue: SlotValue, phase: Phase) {
+
+  // slotValue is written outside of lock so we mark it @volatile to guarantee safe publication (it can be read
+  // by the reaping code running concurrently on another thread)
+  private final case class Slot(@volatile var slotValue: SlotValue, phase: Phase) {
     def reapable = slotValue.reapable
   }
 
@@ -241,6 +244,11 @@ object AsyncIterator {
               while (slots.nonEmpty && reap(slots.head))
                 slots = slots.tail
               slots.isEmpty
+            // Although consumeIteration converts EmptyResults to Reaped, it's possible that the wrappedNode code
+            // has inserted a new EmptyResults during reaping which has not yet been processed by consumeIteration.
+            // We can just treat this as already reaped because there's nothing to do
+            case EmptyResults =>
+              true
             case _ =>
               throw new IllegalStateException()
           }

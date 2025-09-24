@@ -17,8 +17,6 @@ import optimus.buildtool.config.RelaxedScopeIdString
 import optimus.buildtool.format.ConfigUtils.ConfOps
 import optimus.buildtool.format.Keys.KeySet
 
-import scala.collection.immutable.Seq
-
 object ForbiddenDependencyConfigurationCompiler {
   private val forbiddenDependenciesKey = "forbiddenDependencies"
   private val dependencyIdKey = "dependencyId"

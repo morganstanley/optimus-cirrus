@@ -14,7 +14,6 @@ package optimus.stratosphere.utils
 import optimus.stratosphere.bootstrap.OsSpecific
 
 import scala.Console._
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 object ProcessUtils {

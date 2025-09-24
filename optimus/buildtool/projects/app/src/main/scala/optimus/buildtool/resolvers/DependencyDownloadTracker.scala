@@ -75,6 +75,8 @@ object DependencyDownloadTracker extends RemoteDownloadTracker {
   def failedDownloadDuration: Map[String, Long] = _failedDownloadDuration.toMap
   def fetchDuration: Map[String, Long] = _fetchDuration.toMap
 
+  def hasProblems: Boolean = _brokenFiles.nonEmpty || _brokenMetadata.nonEmpty || _failedMetadata.nonEmpty
+
   private def timeStr(input: Long) = Utils.durationString(input / 1000000L)
 
   private def getSlowestFilesMsgs(files: Map[String, Long], msgKey: String): Seq[String] = if (files.nonEmpty) {

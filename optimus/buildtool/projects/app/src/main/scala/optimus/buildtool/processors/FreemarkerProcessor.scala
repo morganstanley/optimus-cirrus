@@ -22,7 +22,6 @@ import optimus.platform.util.Log
 
 import java.io.StringWriter
 import java.util
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 @entity class FreemarkerProcessor extends TemplatingProcessor {

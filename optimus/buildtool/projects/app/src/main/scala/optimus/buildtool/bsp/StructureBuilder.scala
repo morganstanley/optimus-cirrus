@@ -14,7 +14,6 @@ package bsp
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
-import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.builders.StandardBuilder
@@ -32,9 +31,10 @@ import optimus.buildtool.utils.Hashing
 import optimus.platform._
 import optimus.scalacompat.collection._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import optimus.buildtool.artifacts.ExternalHashedArtifact
+import optimus.buildtool.artifacts.CompilationMessage
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 @entity class StructureHasher(
     hasher: FingerprintHasher,
@@ -97,15 +97,10 @@ import scala.collection.immutable.Seq
 
   @node def structure: WorkspaceStructure = ObtTrace.traceTask(ScopeId.RootScopeId, BuildWorkspaceStructure) {
     val builder = underlyingBuilder()
-    val rawScalaConfig = scalaVersionConfig()
+    val scalaConfig = scalaVersionConfig()
 
     checkForErrors(builder.factory.globalMessages)
 
-    // Depcopy all scala lib jars (class, source and javadoc) so they're available for use in the bundle structure.
-    // This will generally be a superset of `rawScalaConfig.scalaJars`, which we also depcopy below.
-    val scalaLibPath = dependencyCopier.depCopyDirectoryIfMissing(rawScalaConfig.scalaLibPath)
-    val scalaJars = rawScalaConfig.scalaJars.apar.map(dependencyCopier.atomicallyDepCopyJarIfMissing)
-    val scalaConfig = rawScalaConfig.copy(scalaLibPath = directoryFactory.reactive(scalaLibPath), scalaJars = scalaJars)
     val pythonEnabled = rawPythonEnabled()
     val extractVenvs = rawExtractVenvs()
     val scopeConfigSource = builder.factory.scopeConfigSource
@@ -133,7 +128,7 @@ import scala.collection.immutable.Seq
 
             val externalDeps = resolutions.apar.flatMap { resolution =>
               val deps = resolution.result.resolvedArtifacts
-              deps.apar.map(dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing)
+              deps.apar.map(dependencyCopier.atomicallyDepCopyExternalArtifactsIfMissing)
             }
             val scopeInfo = ResolvedScopeInformation(config, local, localScopeDeps, sparseScopeDeps, externalDeps)
             Some(id -> (resolutions, scopeInfo))
@@ -177,17 +172,11 @@ import scala.collection.immutable.Seq
     } else Nil
   }
 
-  private def checkForErrors(artifacts: Seq[Artifact]): Unit = {
+  def checkForErrors(artifacts: Seq[Artifact]): Unit = {
     val errorArtifacts = artifacts.collectInstancesOf[MessagesArtifact].filter(_.hasErrors)
     if (errorArtifacts.nonEmpty) {
-      val messages = errorArtifacts.flatMap(_.messages.filter(_.isError))
-      val messageStrings = messages.map { m =>
-        m.pos match {
-          case Some(p) => s"${m.msg} [${p.filepath}:${p.startLine}]"
-          case None    => m.msg
-        }
-      }
-      throw new IllegalArgumentException(s"Configuration error(s):\n  ${messageStrings.mkString("\n  ")}")
+      val msg = CompilationMessage.errorMsg(errorArtifacts.flatMap(_.messages))
+      throw new IllegalArgumentException(s"Configuration error(s):\n  $msg")
     }
   }
 }
@@ -213,5 +202,5 @@ final case class ResolvedScopeInformation(
     local: Boolean,
     localInternalCompileDependencies: Seq[ScopeId],
     sparseInternalCompileDependencies: Seq[ScopeId],
-    externalCompileDependencies: Seq[ExternalClassFileArtifact]
+    externalCompileDependencies: Seq[ExternalHashedArtifact]
 )

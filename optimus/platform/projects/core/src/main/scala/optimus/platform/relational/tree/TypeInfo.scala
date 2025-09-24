@@ -50,14 +50,14 @@ object TypeInfoUtils {
   final case class ParameterizedType(rawType: JavaReflectType, typeArgs: Seq[JavaReflectType])
       extends JavaParameterizedType {
     val getActualTypeArguments: Array[JavaReflectType] = typeArgs.toArray
-    val getRawType = rawType
-    def getOwnerType(): JavaReflectType = null
-    override def toString =
+    val getRawType: JavaReflectType = rawType
+    def getOwnerType: JavaReflectType = null
+    override def toString: String =
       "" + getRawType + (if (getActualTypeArguments.isEmpty) "" else getActualTypeArguments.mkString("[", ", ", "]"))
   }
 
   def findAllPropertyMethod(c: Class[_], ignoreProxyFinal: Boolean): Map[String, Method] = {
-    c.getMethods().iterator.collect { case m if isScalaProperty(m, ignoreProxyFinal) => m.getName -> m }.toMap
+    c.getMethods.iterator.collect { case m if isScalaProperty(m, ignoreProxyFinal) => m.getName -> m }.toMap
   }
 
   def extractJavaType(
@@ -148,7 +148,7 @@ object TypeInfoUtils {
 
 object GenericTypeInfoCnt {
   private val cnt = new AtomicInteger(0)
-  def next = cnt.incrementAndGet
+  def next: Int = cnt.incrementAndGet
 }
 
 @parallelizable
@@ -173,7 +173,7 @@ object TypeInfo {
   def isCollection(shape: TypeInfo[_]): Boolean = {
     val underlying = TypeInfo.underlying(shape)
     val clz = underlying.clazz
-    clz.isArray() || underlying <:< classOf[Iterable[_]]
+    clz.isArray || underlying <:< classOf[Iterable[_]]
   }
 
   def replaceUnderlying(shape: TypeInfo[_], newUnderlying: TypeInfo[_]): TypeInfo[_] = {
@@ -324,31 +324,26 @@ object TypeInfo {
     if (any == null) any
     else {
       val name = typeInfo.name
-      if (name == "int" || name == "Int" || name == "scala.Int" || classOf[Integer].getName().equals(name))
+      if (name == "int" || name == "Int" || name == "scala.Int" || classOf[Integer].getName.equals(name))
         Integer.valueOf(any)
       else if (
-        name == "short" || name == "Short" || name == "scala.Short" || classOf[java.lang.Short]
-          .getName()
+        name == "short" || name == "Short" || name == "scala.Short" || classOf[java.lang.Short].getName
           .equals(name)
       ) java.lang.Short.valueOf(any)
       else if (
-        name == "byte" || name == "Byte" || name == "scala.Byte" || classOf[java.lang.Byte]
-          .getName()
+        name == "byte" || name == "Byte" || name == "scala.Byte" || classOf[java.lang.Byte].getName
           .equals(name)
       ) java.lang.Byte.valueOf(any)
       else if (
-        name == "boolean" || name == "Boolean" || name == "scala.Boolean" || classOf[java.lang.Boolean]
-          .getName()
+        name == "boolean" || name == "Boolean" || name == "scala.Boolean" || classOf[java.lang.Boolean].getName
           .equals(name)
       ) java.lang.Boolean.valueOf(any)
       else if (
-        name == "float" || name == "Float" || name == "scala.Float" || classOf[java.lang.Float]
-          .getName()
+        name == "float" || name == "Float" || name == "scala.Float" || classOf[java.lang.Float].getName
           .equals(name)
       ) java.lang.Float.valueOf(any)
       else if (
-        name == "double" || name == "Double" || name == "scala.Double" || classOf[java.lang.Double]
-          .getName()
+        name == "double" || name == "Double" || name == "scala.Double" || classOf[java.lang.Double].getName
           .equals(name)
       ) java.lang.Double.valueOf(any)
       else any
@@ -746,8 +741,8 @@ case class TypeInfo[T] private[optimus] (
 ) {
   type Type = T
 
-  lazy val _hashCode = ScalaRunTime._hashCode(this)
-  override def hashCode() = _hashCode
+  private[this] lazy val _hashCode = ScalaRunTime._hashCode(this)
+  override def hashCode(): Int = _hashCode
   private val vclasses = classes.toArray
   private val vmethods = pureStructuralMethods.toArray
 
@@ -785,11 +780,11 @@ case class TypeInfo[T] private[optimus] (
         "def " + s.getName + ":" + s.getReturnType.getClassName
       } mkString (" { ", "; ", " }")
 
-  override def toString = "typeInfo[" + name + "]"
+  override def toString: String = "typeInfo[" + name + "]"
 
   val id: Int = GenericTypeInfoCnt.next
   def runtimeClass: Class[Type] =
-    (concreteClass ++ interfaces).headOption.map(_.asInstanceOf[Class[Type]]).getOrElse(null)
+    (concreteClass ++ interfaces).headOption.map(_.asInstanceOf[Class[Type]]).orNull
   val clazz = runtimeClass
 
   lazy val nodeProperties: Map[String, Field] = {
@@ -908,7 +903,7 @@ case class TypeInfo[T] private[optimus] (
         case v: TypeVariable[_] =>
           // if we can guess which type param index this refers to, we can look that up in our own list of type params
           val possibleTypeParams =
-            clazz.getTypeParameters().zipWithIndex.filter { case (t, idx) => t.getName == v.getName }
+            clazz.getTypeParameters.zipWithIndex.filter { case (t, idx) => t.getName == v.getName }
           val possibleTypeParamIdx = possibleTypeParams.map { case (t, idx) => idx }.headOption
           possibleTypeParamIdx flatMap { idx =>
             if (typeParams.isDefinedAt(idx)) Some(typeParams(idx)) else None
@@ -1051,7 +1046,7 @@ final case class RegularField(method: Method) extends Field {
   override def invokeOnSync(instance: Any): Any = method.invoke(instance)
 }
 final case class AnonymousField(name: String) extends Field {
-  val method = null
+  val method: Method = null
   val isSyncSafe = true
   def invokeOn$queued(instance: Any): NodeFuture[Any] = {
     new AlreadyCompletedNode(invokeOnSync(instance))

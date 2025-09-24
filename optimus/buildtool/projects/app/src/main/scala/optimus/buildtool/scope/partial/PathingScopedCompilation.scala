@@ -29,24 +29,36 @@ import optimus.platform._
 import java.util.jar
 import scala.collection.immutable.IndexedSeq
 
-// Note: PathingScopedCompilation doesn't extend PartialScopedCompilation; we don't want remote caching
+// Note: PathingScopedCompilation doesn't extend CachedPartialScopedCompilation; we don't want remote caching
 // of pathing jars (since they contain workspace-specific paths)
 @entity class PathingScopedCompilation(
-    scope: CompilationScope,
+    override protected val scope: CompilationScope,
     generator: ManifestGenerator,
     scala: ScalaScopedCompilation,
     java: JavaScopedCompilation,
     resources: ResourcePackaging,
-    jmh: JmhScopedCompilation,
-    cppFallback: Boolean
-) {
+    jmh: JmhScopedCompilation
+) extends PartialScopedCompilation {
 
-  @node def pathing: IndexedSeq[Artifact] = PathingScopedCompilation.artifacts(generator, scope, runtimeArtifacts)
+  override type ArtifactTypeBound = AT
 
-  @node private def upstreamArtifacts: IndexedSeq[Artifact] = scope.upstream.artifactsForOurRuntime
+  @node protected def containsRelevantSources: Boolean = runtimeArtifacts.nonEmpty
+  @node protected def upstreamArtifacts: IndexedSeq[Artifact] =
+    scope.upstream.artifactsForOurRuntime ++ scope.upstream.agentsForOurRuntime
+
+  @node override protected def fingerprintArtifact: Option[FingerprintArtifact] = Some(fingerprint)
+
+  @node def pathing: IndexedSeq[Artifact] = compile(AT.Pathing, None) {
+    Some(PathingScopedCompilation.pathing(generator, scope, runtimeArtifacts, agentArtifacts))
+  }
+
+  @node private def fingerprint: FingerprintArtifact =
+    PathingScopedCompilation.fingerprint(generator, scope, runtimeArtifacts, agentArtifacts)
 
   @node private def runtimeArtifacts =
-    scala.classes ++ java.classes ++ resources.resources ++ jmh.classes ++ upstreamArtifacts
+    scala.classes ++ java.classes ++ resources.resources ++ jmh.classes ++ scope.upstream.artifactsForOurRuntime
+
+  @node private def agentArtifacts = scope.upstream.agentsForOurRuntime
 
 }
 
@@ -55,34 +67,53 @@ import scala.collection.immutable.IndexedSeq
   @node def artifacts(
       generator: ManifestGenerator,
       scope: CompilationScope,
-      allRuntimeArtifacts: IndexedSeq[Artifact]
+      allRuntimeArtifacts: IndexedSeq[Artifact],
+      allAgentArtifacts: IndexedSeq[Artifact]
   ): IndexedSeq[Artifact] = if (ScopedCompilation.generate(AT.Pathing)) {
-    val manifest = generator.manifest(
-      scope.id,
-      scope.config,
-      allRuntimeArtifacts,
-      scope.upstream.runtimeDependencies,
-      scope.upstream.agentsForOurRuntime)
-    val f = fingerprint(manifest, scope)
-    val p = pathing(manifest, f, scope)
-    Vector(f, p)
+    Artifact.onlyErrors(allRuntimeArtifacts ++ allAgentArtifacts).getOrElse {
+      val f = fingerprint(generator, scope, allRuntimeArtifacts, allAgentArtifacts)
+      val p = pathing(generator, scope, allRuntimeArtifacts, allAgentArtifacts)
+      Vector(f, p)
+    }
   } else Vector()
 
-  @node private def fingerprint(manifest: jar.Manifest, scope: CompilationScope): FingerprintArtifact = {
-    val fingerprint = Jars.fingerprint(manifest)
-    scope.hasher.hashFingerprint(fingerprint, PathingFingerprint)
-  }
-
   @node private def pathing(
-      manifest: jar.Manifest,
-      f: FingerprintArtifact,
-      scope: CompilationScope
+      generator: ManifestGenerator,
+      scope: CompilationScope,
+      allRuntimeArtifacts: IndexedSeq[Artifact],
+      allAgentArtifacts: IndexedSeq[Artifact]
   ): PathingArtifact = {
+    val f = fingerprint(generator, scope, allRuntimeArtifacts, allAgentArtifacts)
+    val m = manifest(generator, scope, allRuntimeArtifacts, allAgentArtifacts)
     val jarPath =
       scope.pathBuilder.outputPathFor(scope.id, f.hash, AT.Pathing, None)
     AssetUtils.atomicallyWriteIfMissing(jarPath) { tmpName =>
-      ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), manifest) }
+      ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), m) }
     }
     AT.Pathing.fromAsset(scope.id, jarPath)
   }
+
+  @node private def fingerprint(
+      generator: ManifestGenerator,
+      scope: CompilationScope,
+      allRuntimeArtifacts: IndexedSeq[Artifact],
+      allAgentArtifacts: IndexedSeq[Artifact]
+  ): FingerprintArtifact = {
+    val m = manifest(generator, scope, allRuntimeArtifacts, allAgentArtifacts)
+    val fingerprint = Jars.fingerprint(m)
+    scope.hasher.hashFingerprint(fingerprint, PathingFingerprint)
+  }
+
+  @node private def manifest(
+      generator: ManifestGenerator,
+      scope: CompilationScope,
+      allRuntimeArtifacts: IndexedSeq[Artifact],
+      allAgentArtifacts: IndexedSeq[Artifact]
+  ): jar.Manifest = generator.manifest(
+    scope.id,
+    scope.config,
+    allRuntimeArtifacts,
+    allAgentArtifacts,
+    scope.upstream.runtimeDependencies
+  )
 }

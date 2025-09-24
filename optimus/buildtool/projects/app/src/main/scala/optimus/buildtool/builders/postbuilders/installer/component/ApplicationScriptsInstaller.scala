@@ -35,8 +35,6 @@ import optimus.buildtool.utils.Utils
 import optimus.platform.util.Log
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class ApplicationScriptsInstaller(
     installer: Installer,
     pathBuilder: InstallPathBuilder,

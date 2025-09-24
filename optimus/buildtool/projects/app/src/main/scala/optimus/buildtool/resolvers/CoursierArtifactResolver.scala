@@ -27,7 +27,9 @@ import coursier.util.Artifact
 import coursier.util.EitherT
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.ExternalArtifactType
+import optimus.buildtool.artifacts.ExternalBinaryArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.ExternalHashedArtifact
 import optimus.buildtool.artifacts.VersionedExternalArtifactId
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore
@@ -45,7 +47,9 @@ import optimus.buildtool.config.GroupNameConfig
 import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
+import optimus.buildtool.config.PublicationSettings
 import optimus.buildtool.config.Substitution
+import optimus.buildtool.files.HttpFileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.format.JvmDependenciesConfig
@@ -57,6 +61,7 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.core.CoreAPI
 import optimus.graph.Node
 import optimus.platform._
+import optimus.platform.throttle.Throttle
 import optimus.scalacompat.collection._
 import optimus.stratosphere.artifactory.Credential
 import optimus.stratosphere.utils.Text
@@ -73,7 +78,6 @@ import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.util.regex.Pattern
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -88,11 +92,11 @@ object NativeIvyConstants {
     dependencies: ExternalDependenciesSource,
     dependencyCopier: DependencyCopier,
     globalExcludes: Seq[Exclude] = Nil,
-    globalSubstitutions: Seq[Substitution] = Nil,
     fileSystem: FileSystem = FileSystems.getDefault,
     credentials: Seq[Credential] = Nil,
     remoteAssetStore: RemoteAssetStore = NoOpRemoteAssetStore,
-    enableMappingValidation: Boolean = true
+    enableMappingValidation: Boolean = true,
+    throttle: Option[Throttle]
 ) extends ExternalDependencyResolverSource {
   @node def resolver(moduleSet: ModuleSet): CoursierArtifactResolver =
     CoursierArtifactResolver(
@@ -100,11 +104,11 @@ object NativeIvyConstants {
       dependencies.externalDependencies(moduleSet),
       dependencyCopier,
       globalExcludes,
-      globalSubstitutions,
       fileSystem,
       credentials,
       remoteAssetStore,
-      enableMappingValidation
+      enableMappingValidation,
+      throttle
     )
 }
 
@@ -204,17 +208,16 @@ object CoursierArtifactResolver {
 
 @entity class CoursierArtifactResolver(
     resolvers: DependencyMetadataResolvers,
-    externalDependencies: ExternalDependencies,
+    val externalDependencies: ExternalDependencies,
     dependencyCopier: DependencyCopier,
     globalExcludes: Seq[Exclude] = Nil,
-    globalSubstitutions: Seq[Substitution] = Nil,
     fileSystem: FileSystem = FileSystems.getDefault,
     credentials: Seq[Credential] = Nil,
     remoteAssetStore: RemoteAssetStore = NoOpRemoteAssetStore,
-    enableMappingValidation: Boolean = true
+    enableMappingValidation: Boolean = true,
+    throttle: Option[Throttle] = None
 ) extends ExternalDependencyResolver(externalDependencies.definitions) {
   import CoursierArtifactResolver._
-
   // note that ivyConfiguration exclusions aren't supported natively by Coursier (we handle them ourselves in
   // applyExclusions instead)
   private val (globalConfigSpecificExcludes, globalNonConfigSpecificExcludes) =
@@ -289,6 +292,8 @@ object CoursierArtifactResolver {
 
   private val boms = externalDependencies.mavenDependencies.boms.map(b => BomDependency(toModule(b), b.version))
 
+  private val globalSubstitutions = externalDependencies.mavenDependencies.substitutions
+
   private val localRepos: Seq[(String, MetadataPattern.Local)] =
     resolvers.defaultResolvers
       .flatMap(_.metadataPatterns)
@@ -314,15 +319,11 @@ object CoursierArtifactResolver {
       .sorted
 
   @node private def multiSourceDependenciesFingerprint: Seq[String] =
-    externalDependencies.multiSourceDependencies.apar
+    (externalDependencies.multiSourceDependencies.apar
       .flatMap { dep =>
         fingerprintDependencyDefinitions("multi-source-afs", Seq(dep.afs)) ++
-          fingerprintDependencyDefinitions(
-            "maven-equivalents",
-            dep.maven.toIndexedSeq) :+ s"enableValidation: $enableMappingValidation"
-      }
-      .toIndexedSeq
-      .sorted
+          fingerprintDependencyDefinitions("maven-equivalents", dep.maven.toIndexedSeq)
+      } :+ s"enableValidation: $enableMappingValidation").toIndexedSeq.sorted
 
   @node override def fingerprintDependencies(deps: DependencyDefinitions): Seq[String] = {
     // the dependencies which were actually requested need to be fingerprinted in order (i.e. not sorted) because
@@ -375,6 +376,16 @@ object CoursierArtifactResolver {
     }
   }
 
+  def toCoursierPublication(
+      originalPublication: Publication,
+      publicationSettings: PublicationSettings,
+  ): Publication = {
+    val withName = publicationSettings.name.fold(originalPublication)(originalPublication.withName)
+    val withExt = publicationSettings.ext.fold(withName)(ext => withName.withExt(Extension(ext)))
+    val withTpe = publicationSettings.tpe.fold(withExt)(tpe => withExt.withType(Type(tpe)))
+    publicationSettings.classifier.fold(withTpe)(classifier => withTpe.withClassifier(Classifier(classifier)))
+  }
+
   @node private def toCoursierDep(
       dep: DependencyDefinition,
       scopeSubstitutions: Seq[Substitution],
@@ -390,11 +401,9 @@ object CoursierArtifactResolver {
       .withConfiguration(Configuration(dep.configuration))
       .withMinimizedExclusions(globalCoursierExcludes join toCoursierExcludes(dep.excludes, scopeSubstitutions))
       .withTransitive(dep.transitive)
-    CoursierInterner.internedDependency(dep.classifier match {
-      case Some(str) =>
-        coursierDependency.withAttributes(Attributes(classifier = Classifier(str)))
-      case None => coursierDependency
-    })
+    CoursierInterner.internedDependency(
+      coursierDependency.withPublication(toCoursierPublication(coursierDependency.publication, dep.publicationSettings))
+    )
   }
 
   @node private def toCoursierExcludes(
@@ -430,7 +439,10 @@ object CoursierArtifactResolver {
     originalExclude ++ mappedExcludes
   }
 
-  @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult = {
+  @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult =
+    throttle.map(_.apply(doResolveDependencies(deps))).getOrElse(doResolveDependencies(deps))
+
+  @node def doResolveDependencies(deps: DependencyDefinitions): ResolutionResult = {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint
     val distinctDeps = distinctRequestedDeps(deps.all).filter(_.kind != ExtraLibDefinition)
 
@@ -570,12 +582,15 @@ object CoursierArtifactResolver {
     // optimized path for file:// URLs which avoids inefficient Files.exists probing in Coursier
     case f if f.startsWith("file://") =>
       EitherT(CoursierGraphAdaptor.delay {
-        val path = PathUtils.uriToPath(f, fileSystem)
-        try Right(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
-        catch {
+        try {
+          val path = PathUtils.uriToPath(f, fileSystem)
+          Right(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
+        } catch {
           // cheaper to ask for forgiveness than permission (i.e. try/catch rather than File.exists)
           case _: NoSuchFileException => Left(s"File not found: ${artifact.url}")
           case e: FileSystemException => Left(s"FileSystem error: ${artifact.url}, $e")
+          case other: Throwable =>
+            Left(s"Unexpected resolution error: ${artifact.url}, $other")
         }
       })
     case _ => EitherT(CoursierGraphAdaptor.delay(doHttpFetch(artifact)))
@@ -720,8 +735,8 @@ object CoursierArtifactResolver {
       .getOrElse(Nil)
   }
 
-  // we won't download target maven jar again after first time check
-  @node private def checkMavenJar(isMaven: Boolean, artifact: CoursierArtifact): Boolean =
+  // we won't download target maven asset again after first time check
+  @node private def checkMavenAsset(isMaven: Boolean, artifact: CoursierArtifact): Boolean =
     if (!isMaven) true
     else
       downloadUrl(new URI(artifact.url).toURL, dependencyCopier, remoteAssetStore)(asNode(f => f.exists))(_ => false)
@@ -731,7 +746,7 @@ object CoursierArtifactResolver {
       dependency: CoursierDependency,
       extraPublications: Map[Module, Seq[Publication]],
       pluginModules: Set[Module],
-      macroModules: Set[Module]): Seq[Either[CompilationMessage, ExternalClassFileArtifact]] = {
+      macroModules: Set[Module]): Seq[Either[CompilationMessage, ExternalHashedArtifact]] = {
     val dep = dependency.dependency
     resolution.projectCache
       .get(dep.moduleVersion)
@@ -749,7 +764,7 @@ object CoursierArtifactResolver {
             case msIvy: AsyncArtifactSource =>
               msIvy.artifactsNode(dependency, proj, None)
             case _ =>
-              source.artifacts(dep, proj, None).map { case (publication, artifact) =>
+              source.artifacts(dep, proj, Option(Seq(dep.publication.classifier))).map { case (publication, artifact) =>
                 Right(CoursierArtifact(artifact, publication))
               }
           }
@@ -760,7 +775,8 @@ object CoursierArtifactResolver {
 
           artifacts.toIndexedSeq.apar.collect {
             case Right(artifact)
-                if MsIvyRepository.isClassJar(artifact) && checkMavenJar(hasMavenArtifacts, artifact) =>
+                if (MsIvyRepository.isClassJar(artifact) || MsIvyRepository.isSourceJar(artifact))
+                  && checkMavenAsset(hasMavenArtifacts, artifact) =>
               Right(
                 convertArtifact(
                   source,
@@ -772,6 +788,19 @@ object CoursierArtifactResolver {
                   containsOrUsedByMacros = containsOrUsedByMacros,
                   isMaven = hasMavenArtifacts
                 )
+              )
+            case Right(artifact)
+                if artifact.`type` == Type("executable") && checkMavenAsset(hasMavenArtifacts, artifact) =>
+              val vid = VersionedExternalArtifactId(
+                group = proj.module.organization.value,
+                name = proj.module.name.value,
+                version = proj.actualVersion,
+                artifactName = artifact.url.split("/").last,
+                ExternalArtifactType.ClassJar,
+                hasMavenArtifacts
+              )
+              Right(
+                ExternalBinaryArtifact(vid, hasMavenArtifacts, HttpFileAsset(new URI(artifact.url).toURL()))
               )
             case Left(error) =>
               Left(CompilationMessage.error(s"Failed to resolve ${proj.module.orgName}#${proj.version}: $error"))
@@ -885,7 +914,7 @@ object CoursierArtifactResolver {
             (dependency, _))
         }
         .sortBy { case (dep, arts) =>
-          (dep.module.toString, arts.right.toOption.map(_.file.pathFingerprint).getOrElse(""))
+          (dep.module.toString, arts.map(_.file.pathFingerprint).getOrElse(""))
         }
     val resolvedJniPaths: Seq[String] = resolvedDependencies.flatMap(jniPathsForDependency(resolution, _))
     val resolvedModuleLoads: Seq[String] = resolvedDependencies.flatMap(moduleLoadsForDependency(resolution, _))
@@ -908,7 +937,8 @@ object CoursierArtifactResolver {
       d.publication.`type` == coursier.core.Type.pom || mavenDependencies.contains(
         DependencyCoursierKey(d.module.organization.value, d.module.name.value, "", ""))
 
-    val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalClassFileArtifact, mutable.HashSet[DependencyInfo]]
+    /** This is mutable LinkedHashMap because we want to retain the order of entries, changing this WILL break stuff */
+    val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalHashedArtifact, mutable.HashSet[DependencyInfo]]
     allArtifacts.foreach {
       case (d, Right(art)) =>
         artifactsToDepInfos.getOrElseUpdate(art, mutable.HashSet()) += coursierDependencyToInfo(d, art.isMaven)
@@ -969,7 +999,7 @@ object CoursierArtifactResolver {
       }.toMap
 
     ResolutionResult(
-      resolvedArtifactsToDepInfos = artifactsToDepInfosList.iterator.map { case (a, ds) =>
+      resolvedArtifactsToDepInfos = artifactsToDepInfos.map { case (a, ds) =>
         (a, ds.to(Vector).sortBy(_.toString))
       }.toVector,
       messages = errorMessages ++ conflictMessages ++ artifactMessages,

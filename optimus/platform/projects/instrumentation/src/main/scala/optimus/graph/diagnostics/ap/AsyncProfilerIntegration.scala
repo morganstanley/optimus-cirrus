@@ -17,7 +17,6 @@ import java.nio.file.Paths
 import java.time.Instant
 import one.profiler.AsyncProfiler
 import one.profiler.Counter
-import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
 import optimus.logging.LoggingInfo
 import optimus.platform.util.Log
@@ -50,6 +49,7 @@ object AsyncProfilerIntegration extends Log {
 
   val TestingEvent: CustomEventType = CustomEventType("Testing", "TestValue")
   val FullWaitEvent: CustomEventType = CustomEventType("FullWait", "NS")
+  val cstack = AsyncProfilerSampler.cstack
 
   private def addCustomEvents(): Unit = {
     TestingEvent.add()
@@ -68,7 +68,9 @@ object AsyncProfilerIntegration extends Log {
   def globalStackMemResetTime: Long = _globalStackMemResetTime
 
   // Duplicated from optimus.platform.pickling.Registry.duringCompilation
-  private val duringCompilation = Option(System.getProperty("optimus.inCompiler")).exists(_.toBoolean)
+  private val duringCompilation: Boolean = Option(System.getProperty("optimus.inCompiler")).exists(_.toBoolean)
+
+  final val continuationHeroics: Boolean = PropertyUtils.get("optimus.sampling.experimental.continuations", false);
 
   // Don't expect this to get used except in case of disaster
   private val disableDuringCompilation =
@@ -101,6 +103,14 @@ object AsyncProfilerIntegration extends Log {
 
   private[graph] lazy val settings: Map[String, String] = PropertyUtils.propertyMap(defaultSettings, userSettings)
 
+  private val deferThread = new Thread {
+    override def run(): Unit = {
+      while (profiler ne null) {
+        profiler.recordDeferred(10, 10);
+      }
+    }
+  }
+
   def ensureLoadedIfEnabled(): Boolean = doEnable && {
     if (profiler ne null) {
       true
@@ -122,6 +132,11 @@ object AsyncProfilerIntegration extends Log {
               // Must occur after profiler is defined!
               addCustomEvents()
               if (settings("onload").toBoolean) autoStart(true) // possibly start now, during static initialization
+              if (continuationHeroics) {
+                deferThread.setName("VTDeferral")
+                deferThread.setDaemon(true)
+                deferThread.start()
+              }
               true
             } else {
               log.info(s"asyncProfiler unavailable")
@@ -162,8 +177,13 @@ object AsyncProfilerIntegration extends Log {
     e
   } else e0
 
+  def resetSavedStacks(): Unit = {
+    _globalStackMemResetTime = nanoTime
+  }
+
   private val commandLock = new Object
-  def command(cmd: String): String = commandLock.synchronized {
+  def command(cmd: String, downgradeLogging: Boolean = false): String = commandLock.synchronized {
+    def carp(msg: String) = if (downgradeLogging) log.warn(msg + ", but fret not") else log.error(msg)
     if (!ensureLoadedIfEnabled())
       "async-profiler integration not enabled"
     else {
@@ -171,20 +191,21 @@ object AsyncProfilerIntegration extends Log {
         val ret: String = s"$cmd => ${profiler.execute(cmd)}"
         if (cmd.startsWith("start")) {
           if (DiagnosticSettings.awaitStacks) {
-            _globalStackMemResetTime = nanoTime
+            resetSavedStacks()
           }
           if (profiling)
-            log.error("Attempting to start profiling while still profiling")
+            carp("Attempting to start profiling while still profiling")
           profiling = true
         } else if (cmd.startsWith("stop")) {
           if (!profiling)
-            log.error("Attempting to stop profiling when not profiling")
+            carp("Attempting to stop profiling when not profiling")
           profiling = false
         }
         log.debug(s"async-profiler: $ret")
         ret
       } catch {
         case NonFatal(e) =>
+          // If there's a weird exception, I'm sorry but we will log it.
           val ret = "async-profiler failed: " + e.getMessage
           log.javaLogger.error(ret) // trace will just show execute0 anyway
           ret
@@ -195,9 +216,12 @@ object AsyncProfilerIntegration extends Log {
   def stop(): Unit = {
     if (profiling) command("stop")
   }
-  def shutdown(): Unit = {
-    stop()
-    command("stopjemalloc")
+  def shutdownPermanently(): Unit = {
+    log.warn(s"Permanently shutting down async profiler")
+    command("stop", downgradeLogging = true)
+    command("stopjemalloc", downgradeLogging = true)
+    doEnable = false
+    profiler = null
     profiling = false
   }
 
@@ -209,7 +233,7 @@ object AsyncProfilerIntegration extends Log {
       jfrTraceFile = outputDirFromSettings().resolve(s"profile-${Pid.pidOrZero()}-${Instant.now}.jfr").toString
       addOutputFile(jfrTraceFile)
       jfrTraceReady = false
-      command(s"start,event=cpu,cstack=dwarf,interval=${settings("interval")}ms,file=$jfrTraceFile")
+      command(s"start,event=cpu,cstack=$cstack,interval=${settings("interval")}ms,file=$jfrTraceFile")
     }
   }
 
@@ -303,7 +327,7 @@ object AsyncProfilerIntegration extends Log {
         case "false" => s"event=$event"
         case profile => s"jfrsync=$profile"
       }
-      val conf = s"cstack=dwarf,$eventOpts,interval=${intervalMS}ms"
+      val conf = s"cstack=$cstack,$eventOpts,interval=${intervalMS}ms"
       samplingThread = new RecordingStateMachine(dir, segmentSec * 1000L, conf, jfr)
       samplingThread.setName("AsyncProfilerJFR")
       samplingThread.setDaemon(true) // don't prevent shutdown (but the shutdown hook below will still be called)
@@ -411,7 +435,7 @@ object AsyncProfilerIntegration extends Log {
       }
       try {
         val msgs = new ArrayBuffer[String]
-        msgs += command(s"start,cstack=dwarf,event=$event,interval=${intervalMS}ms$options")
+        msgs += command(s"start,cstack=$cstack,event=$event,interval=${intervalMS}ms$options")
         Thread.sleep(durationMS)
         msgs += command("stop")
         log.info("Dumping flat")
@@ -435,12 +459,8 @@ object AsyncProfilerIntegration extends Log {
     }
   }
 
-  def dumpMemoized(): String = {
-    if (ensureLoadedIfEnabled()) {
-      profiler.execute("collapsed,memoframes,total")
-    } else
-      "unavailable"
-  }
+  private[graph] def execute(cmd: String): String =
+    profiler.execute(cmd)
 
   def recordCustomEvent(etype: CustomEventType, valueD: Double, valueL: Long, ptr: Long): Unit = {
     if (ensureLoadedIfEnabled())
@@ -462,7 +482,12 @@ object AsyncProfilerIntegration extends Log {
     else profiler.getMethodID(cls, method, sig, true)
 
   def getAwaitDataAddress(): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitDataAddress()
+    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0
+    else
+      profiler.getAwaitDataAddress()
+
+  def initAwaitData(slots: Int): Int =
+    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0 else profiler.initAwaitData(slots)
 
   def saveAwaitFrames(ids: Array[Long], nids: Int): Long =
     if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.saveAwaitFrames(2, ids, nids)

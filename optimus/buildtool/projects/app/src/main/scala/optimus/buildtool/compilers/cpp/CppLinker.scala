@@ -17,8 +17,6 @@ import optimus.buildtool.config.CppBuildConfiguration
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 
-import scala.collection.immutable.Seq
-
 trait CppLinker {
   import CppLinker._
 

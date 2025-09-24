@@ -13,9 +13,12 @@ package optimus.buildtool.resolvers
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ClassFileArtifact
+import optimus.buildtool.artifacts.ExternalBinaryArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.ExternalHashedArtifact
 import optimus.buildtool.cache.CacheMode
 import optimus.buildtool.cache.NoOpRemoteAssetStore
+import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.BaseHttpAsset
@@ -42,6 +45,7 @@ import optimus.stratosphere.artifactory.Credential
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.net.SocketTimeoutException
+import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -55,14 +59,26 @@ import java.util.concurrent.TimeUnit
 
   @node def atomicallyDepCopyArtifactsIfMissing(artifact: Artifact): Artifact = artifact match {
     case c: ExternalClassFileArtifact => atomicallyDepCopyExternalClassFileArtifactsIfMissing(c)
+    case b: ExternalBinaryArtifact    => atomicallyDepCopyExternalBinaryArtifactsIfMissing(b)
     case a                            => a
   }
+
+  @node def atomicallyDepCopyExternalArtifactsIfMissing(artifact: ExternalHashedArtifact): ExternalHashedArtifact =
+    artifact match {
+      case c: ExternalClassFileArtifact => atomicallyDepCopyExternalClassFileArtifactsIfMissing(c)
+      case b: ExternalBinaryArtifact    => atomicallyDepCopyExternalBinaryArtifactsIfMissing(b)
+      case a                            => a
+    }
 
   @node def atomicallyDepCopyClassFileArtifactsIfMissing(artifact: ClassFileArtifact): ClassFileArtifact =
     artifact match {
       case c: ExternalClassFileArtifact => atomicallyDepCopyExternalClassFileArtifactsIfMissing(c)
       case a                            => a
     }
+
+  @node def atomicallyDepCopyExternalBinaryArtifactsIfMissing(
+      artifact: ExternalBinaryArtifact
+  ): ExternalBinaryArtifact = artifact.copy(atomicallyDepCopyFileIfMissing(artifact.file))
 
   @node def atomicallyDepCopyExternalClassFileArtifactsIfMissing(
       artifact: ExternalClassFileArtifact
@@ -200,7 +216,7 @@ import java.util.concurrent.TimeUnit
           val urlStr = httpAsset.url.toString
           if (isNonUnzipLibJarFile(urlStr)) DependencyDownloadTracker.addDownloadDuration(urlStr, durationInNanos)
 
-          DependencyDownloadTracker.addHttpFile(httpAsset.url.toString)
+          DependencyDownloadTracker.addHttpFile(urlStr)
           true
         }
       }
@@ -209,11 +225,9 @@ import java.util.concurrent.TimeUnit
     // if we fetched from maven then the artifact wasn't in remote cache (modulo a small race, but re-putting is safe)
     // so we should put it. Note that we do this using the final localFile name, not the tmp file, because the put
     // is async and the tmp file is often removed by the point where the put actually reads the file.
-    if (fetchedFromMaven.contains(true) && assetStore != NoOpRemoteAssetStore && cacheMode.canWrite) {
-      assetStore.put(httpAsset.url, localFile)
-      log.debug(
-        s"Uploaded http file to remote cache: ${httpAsset.url}, ${getLocalChecksumStr(localFile.path, getSha256(localFile.path))}")
-    }
+    val shouldWrite = fetchedFromMaven.contains(true) || cacheMode.forceWrite
+    val canWrite = assetStore != NoOpRemoteAssetStore && cacheMode.canWrite
+    if (shouldWrite && canWrite) DependencyCopier.putFileIntoRemoteCache(assetStore, httpAsset.url, localFile)
 
     localFile
   }
@@ -242,4 +256,16 @@ import java.util.concurrent.TimeUnit
     }
     localize(dir, depCopyPath)
   } else dir
+}
+
+@entity object DependencyCopier {
+  // extracted as a separate node so that we cache the side-effect of uploading and avoid re-uploading redundantly
+  // from the same process even when in forceWrite mode
+  @node def putFileIntoRemoteCache(assetStore: RemoteAssetStore, url: URL, localFile: FileAsset): Unit = {
+    assetStore.put(url, localFile)
+    log.debug(
+      s"Uploaded http file to remote cache: $url, ${getLocalChecksumStr(localFile.path, getSha256(localFile.path))}")
+  }
+
+  putFileIntoRemoteCache_info.setCustomCache(NodeCaching.uploadCache)
 }

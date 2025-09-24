@@ -140,8 +140,8 @@ private[platform] abstract class MessageReceiver[Message <: DalServiceResponseMe
         val clientRequestContext = batchContext.commandIdToClientRequestContext(commandIndex)
         response.establishSessionResult.foreach { esrProto =>
           // check before set because setting involves deserializing proto
-          if (clientRequestContext.establishSessionResult.isEmpty)
-            clientRequestContext.establishSessionResult = Some(fromProto(esrProto))
+          if (clientRequestContext.getEstablishSessionResult().isEmpty)
+            clientRequestContext.setEstablishSessionResult(Some(fromProto(esrProto)))
         }
 
         val (saveResults: Seq[Result], saveProto: Seq[ResultProto]) =

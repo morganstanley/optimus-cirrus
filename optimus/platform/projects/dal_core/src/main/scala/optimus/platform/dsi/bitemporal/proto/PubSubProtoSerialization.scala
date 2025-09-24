@@ -181,10 +181,14 @@ object CreatePubSubStreamResultSerializer
     CreatePubSubStreamSuccessProto.newBuilder
       .setStreamUuid(res.streamId)
       .setTxTime(toProto(res.txTime))
+      .addAllPostChecks(res.postChecks.map(Integer.valueOf(_)).asJava)
       .build
   }
   override def deserialize(proto: CreatePubSubStreamSuccessProto): CreatePubSubStreamSuccessResult = {
-    CreatePubSubStreamSuccessResult(proto.getStreamUuid, fromProto(proto.getTxTime))
+    CreatePubSubStreamSuccessResult(
+      proto.getStreamUuid,
+      fromProto(proto.getTxTime),
+      proto.getPostChecksList.asScala.map(_.toInt).toSeq)
   }
 }
 
@@ -197,13 +201,18 @@ object ChangeSubscriptionResultSerializer
       .setStreamUuid(res.streamId)
       .setChangeRequestId(res.changeRequestId)
       .setTxTime(toProto(res.txTime))
+      .addAllPostChecks(res.postChecks.map(Integer.valueOf(_)).asJava)
       .build
   }
 
   override def deserialize(proto: ChangeSubscriptionSuccessProto): ChangeSubscriptionSuccessResult = {
     val streamId = proto.getStreamUuid
     val changeRequestId = proto.getChangeRequestId
-    ChangeSubscriptionSuccessResult(streamId, changeRequestId, fromProto(proto.getTxTime))
+    ChangeSubscriptionSuccessResult(
+      streamId,
+      changeRequestId,
+      fromProto(proto.getTxTime),
+      proto.getPostChecksList.asScala.map(_.toInt).toSeq)
   }
 }
 

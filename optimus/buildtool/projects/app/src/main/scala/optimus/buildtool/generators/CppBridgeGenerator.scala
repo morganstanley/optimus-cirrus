@@ -17,7 +17,6 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.SyncCompiler
 import optimus.buildtool.config.JavacConfiguration
@@ -47,7 +46,7 @@ import scala.collection.immutable.SortedMap
 
 @entity class CppBridgeGenerator(scalac: AsyncClassFileCompiler, pathBuilder: CompilePathBuilder)
     extends SourceGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.CppBridge
+  override val generatorType: String = "cpp-bridge"
 
   override type Inputs = CppBridgeGenerator.Inputs
 
@@ -128,14 +127,15 @@ import scala.collection.immutable.SortedMap
 
         val artifact = GeneratedSourceArtifact.create(
           scopeId,
+          tpe,
           resolvedInputs.generatorName,
-          artifactType,
           outputJar,
           CppBridgeGenerator.ScalaPath,
           msgArtifact.messages
         )
         AsyncUtils.asyncTry {
           SourceGenerator.createJar(
+            tpe,
             resolvedInputs.generatorName,
             CppBridgeGenerator.ScalaPath,
             artifact.messages,

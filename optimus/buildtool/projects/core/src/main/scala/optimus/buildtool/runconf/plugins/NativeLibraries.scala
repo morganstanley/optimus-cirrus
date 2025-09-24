@@ -14,7 +14,6 @@ package optimus.buildtool.runconf.plugins
 import optimus.buildtool.runconf.FilePath
 import optimus.buildtool.runconf.JavaPattern
 
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 
 final case class ReorderSpec(shouldBeBefore: FilePath, shouldBeAfter: FilePath)

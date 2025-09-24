@@ -414,18 +414,27 @@ abstract class Scheduler extends EvaluationQueue {
       f: => T,
       maySAS: Boolean,
       cb: CBType[T] = null,
+      effectiveEnqueuer: Awaitable = null,
       callbackInline: Boolean = false): Unit = {
     val node = new CompletableNodeM[T] {
       override def run(ec: OGSchedulerContext): Unit = completeWithResult(f, ec)
       override def executionInfo(): NodeTaskInfo = NodeTaskInfo.SchedulerAsyncEvaluate
     }
     node.attach(scenarioStack)
-    evaluateNodeAsync[T](node, maySAS, trackCompletion = false, cb, callbackInline)
+    evaluateNodeAsync[T](
+      node,
+      maySAS,
+      trackCompletion = false,
+      cb,
+      callbackInline,
+      effectiveEnqueuer = effectiveEnqueuer)
   }
 
-  final def evaluateAsync[T](
-      scenarioStack: ScenarioStack)(@closuresEnterGraph f: => T, doneCallback: CBType[T] = null): Unit = {
-    evaluateAsyncSAS(scenarioStack)(f, maySAS = true, doneCallback)
+  final def evaluateAsync[T](scenarioStack: ScenarioStack)(
+      @closuresEnterGraph f: => T,
+      doneCallback: CBType[T] = null,
+      effectiveEnqueuer: Awaitable = null): Unit = {
+    evaluateAsyncSAS(scenarioStack)(f, maySAS = true, cb = doneCallback, effectiveEnqueuer = effectiveEnqueuer)
   }
 
   final def evaluateAsync[T](@closuresEnterGraph f: => T): Unit = {

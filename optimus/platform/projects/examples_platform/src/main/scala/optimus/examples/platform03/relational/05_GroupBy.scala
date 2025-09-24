@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object GroupBy extends LegacyOptimusApp {
+object GroupBy extends LegacyOptimusApp with PrintlnInterceptor {
 
   val byPositionsQ = from(Data.getPositions()).groupBy(pv => pv.portfolio)
 

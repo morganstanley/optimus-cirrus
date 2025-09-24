@@ -11,8 +11,6 @@
  */
 package optimus.graph;
 
-import java.util.ArrayList;
-
 import optimus.platform.EvaluationQueue;
 
 public abstract class NodeCauseInfo extends NodeAwaiter implements NodeCause {
@@ -20,7 +18,7 @@ public abstract class NodeCauseInfo extends NodeAwaiter implements NodeCause {
   public final void onChildCompleted(EvaluationQueue eq, NodeTask node) {}
 
   @Override
-  public final NodeCause awaiter() {
+  final NodeCause awaiter() {
     return this;
   }
 

@@ -38,7 +38,6 @@ import optimus.tools.testplan.model.TestplanField.TestCases
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 final case class TestData(testType: TestType, testplan: TestPlan, testModules: Seq[String])
@@ -78,10 +77,15 @@ final class TestplanInstaller(
     val scopes = Artifact.scopeIds(installable.artifacts)
     val metaBundles = scopes.map(_.metaBundle).distinct
 
-    val fingerprintChanges: Changes =
-      FingerprintDiffChanges.create(scopeConfigSource, installer.buildDir.path, versionConfig.installVersion)
-    val gitChanges: Changes =
+    val gitChanges: GitChanges =
       GitChanges(gitLogOpt, scopeConfigSource, testplanConfig.ignoredPaths)
+    val fingerprintChanges: Changes =
+      FingerprintDiffChanges.create(
+        scopeConfigSource,
+        installer.fingerprintsConfiguration,
+        installer.buildDir.path,
+        versionConfig.installVersion,
+        gitChanges)
 
     val testTypes = readTestTypes()
     val allTestData: Seq[TestData] = prepareFor(testTypes, gitChanges, installable.allScopes)

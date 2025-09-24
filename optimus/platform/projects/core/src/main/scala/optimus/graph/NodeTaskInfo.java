@@ -14,9 +14,11 @@ package optimus.graph;
 import static optimus.graph.OGTrace.CachedSuffix;
 import static optimus.graph.OGTrace.XsSuffix;
 import static optimus.graph.Settings.defaultCacheByNameTweaks;
+import static optimus.graph.Settings.maxCustomFrames;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import optimus.breadcrumbs.Breadcrumbs;
 import optimus.breadcrumbs.ChainedID$;
@@ -40,6 +42,7 @@ import optimus.graph.diagnostics.NodeName;
 import optimus.graph.loom.CallSiteHolder;
 import optimus.platform.ScenarioStack;
 import optimus.platform.inputs.registry.ProcessGraphInputs;
+import optimus.platform.util.PrettyStringBuilder;
 import optimus.platform.util.Version$;
 import scala.Option;
 
@@ -860,6 +863,10 @@ public class NodeTaskInfo {
     return (flags & DONT_CACHE) == 0;
   }
 
+  public final boolean getCacheableNode() {
+    return (_flags & (DONT_CACHE | NOTNODE)) == 0;
+  }
+
   public final boolean isJob() {
     return (_flags & IS_JOB) != 0;
   }
@@ -1581,87 +1588,90 @@ public class NodeTaskInfo {
     return sb.toString();
   }
 
-  public static String flagsAsStringVerbose(long flags, String policy) {
-    StringBuilder sb = new StringBuilder();
+  public void flagsAsStringVerbose(PrettyStringBuilder sb) {
+    flagsAsStringVerbose(_flags, String.valueOf(_cachePolicy), sb);
+  }
 
-    sb.append("<html>");
-
+  public static void flagsAsStringVerbose(long flags, String policy, PrettyStringBuilder sb) {
     if ((flags & TWEAKABLE) != 0) {
-      sb.append("=");
+      sb.bold("=");
       // redundant as WAS_TWEAKED = WAS_INSTANCE_TWEAKED | WAS_PROPERTY_TWEAKED
       if ((flags & WAS_TWEAKED) != 0) {
         boolean instanceTweaked = (flags & WAS_INSTANCE_TWEAKED) != 0;
         boolean propertyTweaked = (flags & WAS_PROPERTY_TWEAKED) != 0;
         if (instanceTweaked && propertyTweaked) {
-          sb.append("ip - instance and property tweaked<br>");
+          sb.bold("ip").append(" - instance and property tweaked").endln();
         } else {
           if (instanceTweaked) {
-            sb.append("i - instance tweaked<br>");
+            sb.bold("i").append(" - instance tweaked").endln();
           }
           if (propertyTweaked) {
-            sb.append("p - property tweaked<br>");
+            sb.bold("p").append(" - property tweaked").endln();
           }
         }
       } else {
-        sb.append(" - tweakable, but not tweaked<br>");
+        sb.append(" - tweakable, but not tweaked").endln();
       }
     }
 
+    if ((flags & PROFILER_IGNORE) != 0) {
+      sb.bold("w").append(" - profiler ignore").endln();
+    }
+
     if ((flags & DONT_CACHE) == 0) {
-      sb.append("$ - cacheable<br>");
+      sb.bold("$").append(" - cacheable").endln();
       if ((flags & FAVOR_REUSE) != 0) {
-        sb.append("x - favor reuse (aka XS aka Cross Scenario Reuse): ")
+        sb.bold("x")
+            .append(" - favor reuse (aka XS aka Cross Scenario Reuse): ")
             .append(policy)
-            .append("<br>");
+            .endln();
       }
       if ((flags & LOCAL_CACHE) != 0) {
-        sb.append("* - local cache<br>");
+        sb.bold("*").append(" - local cache").endln();
       }
     }
 
     if ((flags & SCENARIOINDEPENDENT) != 0) {
-      sb.append("SI - scenario independent<br>");
+      sb.bold("SI").append(" - scenario independent").endln();
     }
 
     if ((flags & SINGLE_THREADED) != 0) {
-      sb.append("[sync] - single threaded<br>");
+      sb.bold("[sync]").append(" - single threaded").endln();
     }
     if ((flags & ASYNC_NEEDED) != 0) {
-      sb.append("a - async was helpful (aka async needed)<br>");
+      sb.bold("a").append(" - async was helpful (aka async needed)").endln();
     }
 
     if ((flags & EXTERNALLY_CONFIGURED_CUSTOM_CACHE) != 0) {
-      sb.append("@ - externally configured custom cache<br>");
+      sb.bold("@").append(" - externally configured custom cache").endln();
     }
     if ((flags & EXTERNALLY_CONFIGURED_POLICY) != 0) {
-      sb.append("@ - externally configured cache policy<br>");
+      sb.bold("@").append(" - externally configured cache policy").endln();
     }
 
     if ((flags & PROFILER_UI_CONFIGURED) != 0) {
-      sb.append("UI - configured in this Profiler UI session<br>");
+      sb.bold("UI").append(" - configured in this Profiler UI session").endln();
     }
     if ((flags & AT_MOST_ONE_WAITER) != 0) {
-      sb.append("1 - at most one waiter<br>");
+      sb.bold("1").append(" - at most one waiter").endln();
     }
     if ((flags & GIVEN_RUNTIME_ENV) != 0) {
-      sb.append("R - given initial Runtime environment<br>");
+      sb.bold("R").append(" - given initial Runtime environment").endln();
     }
     if ((flags & PROFILER_INTERNAL) != 0) {
-      sb.append("g - internal graph node<br>");
+      sb.bold("g").append(" - internal graph node").endln();
     }
     if ((flags & ATTRIBUTABLE_USER_CODE) != 0) {
-      sb.append(
-          "u - either [non-entity node] or [node-function] (see NodeTaskInfo Name column)<br>");
+      sb.bold("u")
+          .append(" - either [non-entity node] or [node-function] (see NodeTaskInfo Name column)")
+          .endln();
     }
     if ((flags & PROFILER_PROXY) != 0) {
-      sb.append("~ - proxy node<br>");
+      sb.bold("~").append(" - proxy node").endln();
     }
     if ((flags & SHOULD_LOOKUP_PLUGIN) != 0) {
-      sb.append("+ - should lookup plugin<br>");
+      sb.bold("+").append(" - may have plugin").endln();
     }
-
-    sb.append("</html>");
-    return sb.toString();
   }
 
   /**
@@ -1726,6 +1736,19 @@ public class NodeTaskInfo {
     return new NodeTaskInfo(name, flags | PROFILER_INTERNAL | NOTNODE);
   }
 
+  public static NodeTaskInfo userCustomDefined(String name) {
+    synchronized (customNodeTaskInfoMap) {
+      if (customNodeTaskInfoMap.containsKey(name)) return customNodeTaskInfoMap.get(name);
+
+      if (customNodeTaskInfoMap.size() >= maxCustomFrames)
+        return NodeTaskInfo.outOfIndexNodeTaskInfo;
+
+      NodeTaskInfo nodeTaskInfo = new NodeTaskInfo(name, NOTNODE | DONT_CACHE, true);
+      customNodeTaskInfoMap.put(name, nodeTaskInfo);
+      return nodeTaskInfo;
+    }
+  }
+
   /** User derived nodes that share a few executionInfos */
   public static NodeTaskInfo userDefined(String name, long flags) {
     return new NodeTaskInfo(name, flags | NOTNODE | DONT_CACHE);
@@ -1735,6 +1758,11 @@ public class NodeTaskInfo {
    * Anonymous node can reuse this, it's not internal in the sense that external nodes can use it
    */
   public static final NodeTaskInfo Default = userDefined("[default]", 0);
+
+  private static final HashMap<String, NodeTaskInfo> customNodeTaskInfoMap =
+      new HashMap<String, NodeTaskInfo>();
+  private static final NodeTaskInfo outOfIndexNodeTaskInfo =
+      userDefined("[OUT_OF_INDEX_CUSTOM_FRAME]", 0);
 
   public static final NodeTaskInfo NonEntityNode =
       userDefined("[non-entity node]", ATTRIBUTABLE_USER_CODE);
@@ -1776,6 +1804,8 @@ public class NodeTaskInfo {
   public static final SequenceNodeTaskInfo AsyncIterator = sequence("[asyncIterator]");
   public static final SequenceNodeTaskInfo Accumulate = sequence("[accumulate]");
   public static final SequenceNodeTaskInfo AssociativeReduce = sequence("[associativeReduce]");
+  public static final SequenceNodeTaskInfo CommutativeMapReduce =
+      sequence("[commutativeMapReduce]");
   public static final SequenceNodeTaskInfo Pipeline = sequence("[pipeline]");
   public static final SequenceNodeTaskInfo Collect = sequence("[collect]");
   public static final SequenceNodeTaskInfo CollectFirst = sequence("[collectFirst]");

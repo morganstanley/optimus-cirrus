@@ -23,7 +23,6 @@ import optimus.utils.ExitCode
 
 import java.nio.file.Path
 import java.time.ZonedDateTime
-import scala.collection.immutable.Seq
 import scala.util.Random
 import scala.util.control.NonFatal
 

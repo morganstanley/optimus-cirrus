@@ -204,6 +204,8 @@ trait JsonSerializationBase {
     val KeyOpsExtension = "kx"
     val TypesKeys = "tks"
     val TypesValues = "tvs"
+    val Mode = "m"
+    val typesForClassInfoRemoval = "tfcir"
 
     val ValidTime = "vt"
     val VersionId = "vid"
@@ -504,7 +506,7 @@ object PropertySerialization {
 }
 
 object JacksonObjectMapper {
-  val mapper = DefaultJsonMapper.legacy
+  val mapper = DefaultJsonMapper.withJavaTime
 
   def readJsonMap(data: String) = JacksonObjectMapper.mapper.readValue(data, classOf[Map[String, Any]])
 }

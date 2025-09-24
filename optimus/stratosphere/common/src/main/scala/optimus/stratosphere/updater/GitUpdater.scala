@@ -11,7 +11,7 @@
  */
 package optimus.stratosphere.updater
 
-import optimus.stratosphere.artifactory.ArtifactoryToolDownloader
+import optimus.stratosphere.artifactory.ArtifactoryToolInstaller
 import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
@@ -34,22 +34,30 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 object GitUpdater {
-  def gitVersion(stratoWorkspace: StratoWorkspaceCommon): Option[SemanticVersion] = {
-    if (!stratoWorkspace.hasGitInWorkspace) {
+  def gitVersion(
+      stratoWorkspace: StratoWorkspaceCommon,
+      cache: GitVersionCache = InMemoryGitVersionCache): Option[SemanticVersion] = {
+    def getVersionWithoutWorkspaceGit(): String =
+      new CommonProcess(stratoWorkspace).runAndWaitFor(Seq("git", "--version"))
+
+    def getVersionUsingWorkspaceGit(): String =
+      new CommonProcess(stratoWorkspace)
+        .runGit(stratoWorkspace.directoryStructure.sourcesDirectory)("--version")
+
+    def getGitVersion(): String =
+      if (stratoWorkspace.hasGitInWorkspace)
+        getVersionUsingWorkspaceGit()
+      else
+        getVersionWithoutWorkspaceGit()
+
+    cache.getOrCalculate {
       try {
-        val cmd = Seq("git", "--version")
-        val result = new CommonProcess(stratoWorkspace).runAndWaitFor(cmd)
-        Some(getGitSemanticVersion(result))
+        Some(getGitSemanticVersion(getGitVersion()))
       } catch {
         case NonFatal(e) =>
-          stratoWorkspace.log.warning(s"Failed to get git version: ${e.getMessage}")
+          stratoWorkspace.log.error(s"Failed to get git version: ${e.getMessage}", e)
           None
       }
-    } else {
-      Some(
-        getGitSemanticVersion(
-          new CommonProcess(stratoWorkspace)
-            .runGit(stratoWorkspace.directoryStructure.sourcesDirectory)("--version")))
     }
   }
 
@@ -206,19 +214,27 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     }
   }
 
-  def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit =
-    if (GitProcess.isUsingGitFromTools) {
+  /**
+   * @return whether new git was installed
+   */
+  def ensureGitInstalled(useGitFromArtifactory: Boolean): Boolean = {
+    def installIfNeeded(): Boolean = {
       stratoWorkspace.log.info("Updating git settings...")
-
       val gitProcess = new GitProcess(stratoWorkspace.config)
       val gitPath = gitProcess.getGitPath
+      lazy val gitInstaller = new ArtifactoryToolInstaller(stratoWorkspace, name = "git")
 
-      if (useGitFromArtifactory && !Paths.get(gitPath).exists()) {
-        val downloader = new ArtifactoryToolDownloader(stratoWorkspace, name = "git")
-        if (!downloader.install(forceReinstall = false))
-          throw new StratosphereException("Could not install git: please see the logs above for more information")
-      }
-
+      val isNewVersionInstalled =
+        if (useGitFromArtifactory && !Paths.get(gitPath).exists() && !gitInstaller.isInstalled) {
+          if (!gitInstaller.install(forceReinstall = false)) {
+            throw new StratosphereException("Could not install git: please see the logs above for more information")
+          }
+          true
+        } else false
+      addGitToPath(gitProcess)
+      isNewVersionInstalled
+    }
+    def addGitToPath(gitProcess: GitProcess): Unit = {
       val stratoPathFile = sys.env.get("STRATO_PATH_FILE")
       stratoPathFile.map(Paths.get(_)).foreach { path =>
         val envCopy = new util.HashMap[String, String](System.getenv())
@@ -227,6 +243,9 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         path.file.write(s"set ${pathEntry.getKey}=${pathEntry.getValue}")
       }
     }
+
+    GitProcess.isUsingGitFromTools && installIfNeeded()
+  }
 
   private def adjustSettings(): Unit = {
     stratoWorkspace.log.info("Configuring git aliases...")

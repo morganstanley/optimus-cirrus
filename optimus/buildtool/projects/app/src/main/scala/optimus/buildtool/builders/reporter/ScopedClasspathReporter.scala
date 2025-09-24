@@ -13,6 +13,8 @@ package optimus.buildtool.builders.reporter
 
 import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.ArtifactType
+import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.builders.BuildResult.CompletedBuildResult
 import optimus.buildtool.config.MetaBundle
@@ -20,8 +22,6 @@ import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.Directory
 import optimus.buildtool.format.OutputMappings
 import optimus.platform._
-
-import scala.collection.immutable.Seq
 
 class ScopedClasspathReporter {
 
@@ -48,14 +48,23 @@ class ScopedClasspathReporter {
   private def storeClasspathMapping(
       buildDir: Directory,
       artifacts: Seq[Artifact],
-      bundleArtifacts: Map[MetaBundle, Seq[PathingArtifact]]): Unit = {
+      bundleArtifacts: Map[MetaBundle, Seq[PathingArtifact]],
+  ): Unit = {
     val updatedScopes = artifacts.collect { case p: PathingArtifact =>
       val scopeId = p.id.scopeId
       val pathingArtifacts = p +: bundleArtifacts.getOrElse(scopeId.metaBundle, Nil)
       p.id.scopeId.properPath -> pathingArtifacts.map(_.pathingFile.pathString)
     }.toSingleMap
 
-    val plainDest = buildDir.resolveFile(NamingConventions.ClassPathMapping)
-    OutputMappings.updateClasspathPlain(plainDest, updatedScopes)
+    val cpDest = buildDir.resolveFile(NamingConventions.ClassPathMapping)
+    OutputMappings.updateClasspathPlain(cpDest, updatedScopes)
+
+    val updatedSourcesScopes = artifacts.collect {
+      case p: InternalClassFileArtifact if p.id.tpe == ArtifactType.Sources =>
+        p.id.scopeId.properPath -> Seq(p.pathString)
+    }.toSingleMap
+    val sourceDest = buildDir.resolveFile(NamingConventions.SourceArtifactMapping)
+    OutputMappings.updateClasspathPlain(sourceDest, updatedSourcesScopes)
+
   }
 }

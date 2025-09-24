@@ -19,7 +19,6 @@ import optimus.dsi.partitioning.PartitionBrokerLookup
 import optimus.dsi.partitioning.PartitionMap
 import optimus.dsi.session.EstablishSession
 import optimus.dsi.trace.DalRequestId
-import optimus.platform.TimeInterval
 import optimus.platform._
 import optimus.platform.dal.client.PrcKeyProvider
 import optimus.platform.dal.config._
@@ -148,7 +147,8 @@ class PartitionedDsiProxy(
             brokerVirtualHostname(env)),
           brokerProviderResolver,
           partitionMap,
-          secureTransport
+          secureTransport,
+          Some(this)
         )
       }
     )
@@ -498,6 +498,10 @@ object PartitionedDsiProxy {
           val cns = i.className().getOrElse(throwMissingClassException("InvalidateAllCurrentByRefs", i))
           Some(i -> Set(partitionMap.partitionForType(cns)))
 
+        case m: PrepareMonoTemporal =>
+          val cns = m.className().getOrElse(throwMissingClassException("PrepareMonoTemporal", m))
+          Some(m -> Set(partitionMap.partitionForType(cns)))
+
         case p: Put =>
           val cns = p.className().getOrElse(throwMissingClassException("Put", p))
           Some(p -> Set(partitionMap.partitionForType(cns)))
@@ -557,6 +561,7 @@ object PartitionedDsiProxy {
         case s: SerializedKeyQuery          => Some(s.key.typeName)
         case e: EntityCmReferenceQuery      => e.className
         case r: ReferenceQuery              => r.className
+        case v: VersionedReferenceQuery     => Some(v.cn)
         case e: EventCmReferenceQuery       => e.className
         case e: EventReferenceQuery         => e.className
         case s: EventSerializedKeyQuery     => Some(s.key.typeName)

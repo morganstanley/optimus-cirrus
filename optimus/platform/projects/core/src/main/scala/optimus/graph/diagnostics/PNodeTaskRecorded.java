@@ -69,6 +69,11 @@ public class PNodeTaskRecorded extends PNodeTask {
   }
 
   @Override
+  public String stateAsDetailedString(boolean html) {
+    return "(Recorded node; no further details)";
+  }
+
+  @Override
   public NodeName nodeName() {
     return info.nodeName();
   }
@@ -81,6 +86,12 @@ public class PNodeTaskRecorded extends PNodeTask {
   @Override
   public String propertyFlagsAsString() {
     return info.flagsAsString();
+  }
+
+  @Override
+  public String propertyFlagsAsDetailedString(boolean html) {
+    String str = info.flagsAsStringVerbose(html);
+    return html ? "<html>" + str + "</html>" : str;
   }
 
   @Override

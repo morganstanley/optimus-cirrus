@@ -16,6 +16,8 @@ package optimus.platform.dal.messages
 final case class StreamsACLs(
     entitlement: StreamsEntitlement,
     hierarchicalEntities: Seq[Seq[String]],
+    // internal topics here can only be associated with the source entity topics in this class. ACLs will only be set
+    // if the entitlement check on the source entities succeeded.
     internalTopics: Seq[String]
 )
 

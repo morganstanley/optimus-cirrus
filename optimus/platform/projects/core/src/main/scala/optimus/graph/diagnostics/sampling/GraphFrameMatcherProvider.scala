@@ -9,10 +9,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.graph.diagnostics.sampling
-import optimus.graph.OGLocalTables
-import optimus.graph.OGSchedulerContext
-import optimus.graph.TwkResolver
+package optimus.graph
+
 import optimus.graph.cache.CacheSelector
 import optimus.graph.diagnostics.ap.FrameMatcherProvider
 import optimus.graph.diagnostics.ap.SampledTimersExtractor.FrameMatcher
@@ -27,6 +25,7 @@ object GraphFrameMatcherProvider {
   val localTables = "localTables"
   val hotspots = "hotspots"
   val nanotime = "nanotime"
+  val ogroot = "OGRoot"
 }
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
@@ -41,6 +40,7 @@ class GraphFrameMatcherProvider extends FrameMatcherProvider {
     val ogObserver = startsWith(classString[trace.OGEventsObserver].dropRight("Observer".length))
     val javaNano =
       isEqualTo("os::javaTimeNanos") or isEqualTo(methodFrameString[System]("nanoTime")) or isEqualTo("__clock_gettime")
+
     Seq(
       matcher(graph, ogscRun or ogscRunAndWait),
       matcher(syncStack, ogscRun or ogscRunAndWait, ogscRunAndWait),
@@ -49,7 +49,8 @@ class GraphFrameMatcherProvider extends FrameMatcherProvider {
       matcher(tweakLUA, isEqualTo(methodFrameString[TwkResolver[_]]("asyncResolve"))),
       matcher(localTables, startsWith(methodFrameString[OGLocalTables]("forAllRemovables"))),
       matcher(hotspots, ogObserver),
-      matcher(nanotime, javaNano)
+      matcher(nanotime, javaNano),
+      matcher(ogroot, isEqualTo(methodFrameString[OGScheduler#OGLogicalThread]("run")).markRoot())
     )
   }
 }

@@ -318,9 +318,9 @@ object EntitlementCheckFailed {
       erefOrType: Either[EntityReference, Seq[String]],
       failedRuleMessage: Option[String] = None) = {
     if (failedRuleMessage.isEmpty) {
-      val paramWithValue = erefOrType match {
-        case Left(eref)       => s"eref=${base64ToHex(eref)}"
-        case Right(typeNames) => s"hierarchy=${URLEncoder.encode(typeNames.mkString(","), "UTF-8")}"
+      val (paramWithValue, entityOrTypeStr) = erefOrType match {
+        case Left(eref)       => (s"eref=${base64ToHex(eref)}", "entity")
+        case Right(typeNames) => (s"hierarchy=${URLEncoder.encode(typeNames.mkString(","), "UTF-8")}", "type")
       }
 
       val env = MessageContainsDALEnv.tryDetectEnv.map(e => DalEnv.apply(e).mode).getOrElse("")
@@ -328,7 +328,7 @@ object EntitlementCheckFailed {
       if (env != "") {
         val url = s"http://dalent$env/&action=$action&$paramWithValue"
         val hyperlink = s"<a href=$url>$url</a>"
-        s"[$env] $originalMessage. To verify which roles are entitled for given entity check: $hyperlink"
+        s"[$env] $originalMessage. To see which roles have $action entitlements to the $entityOrTypeStr, check out $hyperlink"
       } else {
         log.warn(s"Unable to find env needed for dalent. Link would be skipped in exception message...")
         originalMessage
@@ -439,6 +439,12 @@ class PubSubException(val streamId: String, message: String) extends DSIExceptio
  * Exception thrown when PubSub command receives a DsiSpecificTransientError from PubSub broker
  */
 class PubSubTransientException(streamId: String, message: String) extends PubSubException(streamId, message)
+
+/**
+ * Exception thrown when PubSub tries to publish entities for which the user is not entitled
+ */
+class PubSubEntitlementException(streamId: String, val subId: Int, message: String)
+    extends PubSubException(streamId, message)
 
 /**
  * Exception thrown when PubSub command is executed on a DSI which doesn't support it

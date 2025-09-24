@@ -34,14 +34,24 @@ object DALRegisteredIndexBinder extends DALQueryBinder {
 
     val default = defaultHandler(func)
 
-    def dateExprElem(methodName: String, c: ColumnElement, v: ConstValueElement, inverse: Boolean) = {
+    def dateExprElem(
+        methodName: String,
+        c: ColumnElement,
+        v: ConstValueElement,
+        inverse: Boolean,
+        notExpr: Boolean = false
+    ) = {
       methodName match {
-        case "isAfter" if inverse  => ElementFactory.greaterThan(c, v)
-        case "isAfter"             => ElementFactory.lessThan(c, v)
-        case "isBefore" if inverse => ElementFactory.lessThan(c, v)
-        case "isBefore"            => ElementFactory.greaterThan(c, v)
-        case "isEqual"             => ElementFactory.equal(c, v)
-        case _                     => default
+        case "isAfter" if inverse && notExpr  => ElementFactory.greaterThanOrEqual(c, v)
+        case "isAfter" if inverse             => ElementFactory.lessThan(c, v)
+        case "isAfter" if notExpr             => ElementFactory.lessThanOrEqual(c, v)
+        case "isAfter"                        => ElementFactory.greaterThan(c, v)
+        case "isBefore" if inverse && notExpr => ElementFactory.lessThanOrEqual(c, v)
+        case "isBefore" if inverse            => ElementFactory.greaterThan(c, v)
+        case "isBefore" if notExpr            => ElementFactory.greaterThanOrEqual(c, v)
+        case "isBefore"                       => ElementFactory.lessThan(c, v)
+        case "isEqual"                        => ElementFactory.equal(c, v)
+        case _                                => default
       }
     }
 
@@ -60,10 +70,10 @@ object DALRegisteredIndexBinder extends DALQueryBinder {
     }
 
     default match {
-      case FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement)
+      case FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement)
           if isNonUniqueIndex(c) && isValidDateTimeExpr(mc) =>
         dateExprElem(mc.method.name, c, v, inverse = false)
-      case FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement)
+      case FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement)
           if isNonUniqueIndex(c) && isValidDateTimeExpr(mc) =>
         dateExprElem(mc.method.name, c, v, inverse = true)
       case FuncElement(mc: MethodCallee, List(LambdaElement(_, body, Seq(lp))), c: ColumnElement)
@@ -73,11 +83,28 @@ object DALRegisteredIndexBinder extends DALQueryBinder {
             primitiveExprElem(op, c, const, inverse = false)
           case ("exists", BinaryExpressionElement(op, const: ConstValueElement, p: ParameterElement, _)) if p eq lp =>
             primitiveExprElem(op, c, const, inverse = true)
+          // This is to allow "!dt.isAfter(someDt)" and "!dt.isBefore(someDt)" into <= and >=
+          // expressions respectively.
+          case (
+                "exists",
+                BinaryExpressionElement(
+                  EQ,
+                  FuncElement(mc: MethodCallee, List(arg), inst),
+                  ConstValueElement(false, _),
+                  _)
+              ) if isValidDateTimeExpr(mc) =>
+            (arg, inst) match {
+              case (const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                dateExprElem(mc.method.name, c, const, inverse = false, notExpr = true)
+              case (p: ParameterElement, const: ConstValueElement) if p eq lp =>
+                dateExprElem(mc.method.name, c, const, inverse = true, notExpr = true)
+              case _ => default
+            }
           case ("exists", FuncElement(mc: MethodCallee, List(arg), inst)) if isValidDateTimeExpr(mc) =>
             (arg, inst) match {
-              case (p: ParameterElement, const: ConstValueElement) if p eq lp =>
-                dateExprElem(mc.method.name, c, const, inverse = false)
               case (const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                dateExprElem(mc.method.name, c, const, inverse = false)
+              case (p: ParameterElement, const: ConstValueElement) if p eq lp =>
                 dateExprElem(mc.method.name, c, const, inverse = true)
               case _ => default
             }
@@ -94,13 +121,34 @@ object DALRegisteredIndexBinder extends DALQueryBinder {
             val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
             val v = ElementFactory.constant(Some(const.value), optType)
             primitiveExprElem(op, c, v, inverse = true)
-          case ("exists", FuncElement(mc: MethodCallee, List(arg), inst)) if isValidDateTimeExpr(mc) =>
+          // This is to allow "!dt.isAfter(someDt)" and "!dt.isBefore(someDt)" into <= and >=
+          // expressions respectively.
+          case (
+                "exists",
+                BinaryExpressionElement(
+                  EQ,
+                  FuncElement(mc: MethodCallee, List(arg), inst),
+                  ConstValueElement(false, _),
+                  _)
+              ) if isValidDateTimeExpr(mc) =>
             (arg, inst) match {
+              case (const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
+                val v = ElementFactory.constant(Some(const.value), optType)
+                dateExprElem(mc.method.name, c, v, inverse = false, notExpr = true)
               case (p: ParameterElement, const: ConstValueElement) if p eq lp =>
                 val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
                 val v = ElementFactory.constant(Some(const.value), optType)
-                dateExprElem(mc.method.name, c, v, inverse = false)
+                dateExprElem(mc.method.name, c, v, inverse = true, notExpr = true)
+              case _ => default
+            }
+          case ("exists", FuncElement(mc: MethodCallee, List(arg), inst)) if isValidDateTimeExpr(mc) =>
+            (arg, inst) match {
               case (const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
+                val v = ElementFactory.constant(Some(const.value), optType)
+                dateExprElem(mc.method.name, c, v, inverse = false)
+              case (p: ParameterElement, const: ConstValueElement) if p eq lp =>
                 val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
                 val v = ElementFactory.constant(Some(const.value), optType)
                 dateExprElem(mc.method.name, c, v, inverse = true)

@@ -17,13 +17,10 @@ import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.annotations.scenarioIndependentTransparent
 import optimus.platform.util.Log
 import optimus.platform._
-import optimus.platform.throttle.Throttle
+import optimus.platform.throttle.ThrottleLight
 import optimus.platform.PluginHelpers.toNodeFactory
-import optimus.platform.throttle.OscillatingThrottleLimiter
-import optimus.platform.throttle.SimpleThrottleLimiter
 import optimus.scalacompat.collection.IterableLike
 
-import scala.collection.GenTraversableOnce
 import scala.collection.mutable
 import scala.collection.compat._
 
@@ -107,14 +104,13 @@ sealed class AsyncPipeline[A, CC <: Iterable[A]](
   // noinspection ScalaUnusedSymbol
   def run$withNode[Result](sc: StageManagerCreator[A, Result]): Result = run$newNode(sc).get
   def run$newNode[Result](sc: StageManagerCreator[A, Result]): Node[Result] =
-    runNode(EvaluationContext.scenarioStack, c, workMarker, maxConcurrency, sc)
+    runNode(c, workMarker, maxConcurrency, sc)
 
 }
 
 object AsyncPipeline extends Log {
 
   def runNode[A, CC <: Iterable[A], Result](
-      runScenarioStack: ScenarioStack,
       c: CC,
       workMarker: ProgressMarker,
       maxConcurrency: Int,
@@ -239,7 +235,7 @@ object AsyncPipeline extends Log {
 
     // Return elements to enqueue, embedding the next stage, which knows how to process them.  If isLast==true,
     // then we should release any state we've been accumulating.
-    final def elemsToEnqueue(b: Seq[B], isLast: Boolean): Seq[InputElem[Result]] = {
+    private def elemsToEnqueue(b: Seq[B], isLast: Boolean): Seq[InputElem[Result]] = {
       val zs: Seq[Z] = accumulate(b, isLast)
       val es = zs.map(ElemImpl(_, next))
       if (isLast) es :+ EndMarker(next) else es
@@ -249,7 +245,7 @@ object AsyncPipeline extends Log {
     private var seenLast = false
     private var running = 0
     // Possibly throttle mapper nodes
-    protected val throttle: Option[Throttle]
+    protected val throttle: ThrottleLight
     // Possibly maintain order of mapped results in a queue
     protected val orderedResults: Option[mutable.Queue[PlaceHolder[B]]]
 
@@ -337,26 +333,7 @@ object AsyncPipeline extends Log {
           hs.enqueue(h)
           bNode.map(new IntermediateMappedOrdered(_, h, hs))
       }
-      // Possibly throttle
-      throttle match {
-        case None    => intermediateNode
-        case Some(t) =>
-          // throttle node runs in a constant scenario stack but we need to return a node attached to the current
-          // ScenarioStack so that plugin tags and SI params are correctly propagated to downstream tasks via .map
-          new CompletableNode[Intermediate[Result]] {
-            private var child: NodeFuture[Intermediate[Result]] = _
-            override def run(ec: OGSchedulerContext): Unit = {
-              child match {
-                case null =>
-                  child = t.apply$queued(asNode.apply0$withNode(intermediateNode))
-                  child.continueWith(this, ec)
-                case done: Node[Intermediate[Result]]=>
-                  completeFromNode(done, ec)
-              }
-
-            }
-          }
-      }
+      intermediateNode
     }
   }
 
@@ -409,10 +386,10 @@ object AsyncPipeline extends Log {
     override protected val orderedResults: Option[mutable.Queue[PlaceHolder[Result]]] = None
     override type B = Result
     override type Z = Result
-    override def mapperNode(x: Result) = throw new NotImplementedError()
-    override val next = this
+    override def mapperNode(x: Result): Node[Result] = throw new NotImplementedError()
+    override val next: StageManager[Result, Result] = this
     override protected def accumulate(b: Seq[Result], isLast: Boolean) = throw new NotImplementedError()
-    override val throttle: Option[Throttle] = None
+    override val throttle: ThrottleLight = null
     override def mappedIntermediateLast(): Node[Intermediate[Result]] =
       new AlreadyCompletedNode[Intermediate[Result]](new Intermediate[Result] {
         override def accumulateAndEmit: Iterable[Elem[Result]] = Seq.empty
@@ -429,19 +406,32 @@ object AsyncPipeline extends Log {
    *
    * Underlying `node` will run with tweaks from `tweaksFrom` and SI params from the current scenario
    */
-  private def switchState[A](tweaksFrom: ScenarioState, node: Node[A]): Node[A] = new CompletableNode[A] {
-    private var child: Node[A] = _
-    override def run(ec: OGSchedulerContext): Unit = {
-      child match {
-        case null =>
-          child = AdvancedUtils.givenFullySpecifiedScenario$newNode(tweaksFrom, null)(node)
-          ec.enqueue(child)
-          child.continueWith(this, ec)
-        case done =>
-          completeFromNode(done, ec)
+  private def switchState[A](throttle: ThrottleLight, tweaksFrom: ScenarioState, node: Node[A]): Node[A] =
+    new CompletableNode[A] {
+      private var child: Node[A] = _
+      private var state: Int = 0
+
+      override def run(ec: OGSchedulerContext): Unit = {
+        state += 1
+        if (state == 1 && !throttle.enqueue(this)) return
+        child match {
+          case null =>
+            child = AdvancedUtils.givenFullySpecifiedScenario$newNode(tweaksFrom, null)(node)
+            ec.enqueue(child)
+            child.continueWith(this, ec)
+          case done =>
+            throttle.onChildCompleted(ec, this)
+            state = Integer.MAX_VALUE
+            completeFromNode(done, ec)
+        }
+      }
+
+      override def completeWithException(ex: Throwable, ec: EvaluationQueue): Unit = {
+        super.completeWithException(ex, ec)
+        if (state != Integer.MAX_VALUE)
+          throttle.onChildCompleted(ec, this)
       }
     }
-  }
 
   // Most of the guts of a Stage.
   private abstract class StageImpl[A, B, Z](max: Int = -1, min: Int = -1, ordered: Boolean = false)
@@ -457,13 +447,13 @@ object AsyncPipeline extends Log {
       override final val orderedResults = if (ordered) Some(mutable.Queue.empty[PlaceHolder[B]]) else None
       override protected final val throttle =
         if (max > 0)
-          if (min > 0) {
+          if (min > 1) {
             require(max > min, "Max concurrency must be more than minimum concurrency!")
-            Some(new Throttle(new OscillatingThrottleLimiter(max, min)))
-          } else Some(new Throttle(new SimpleThrottleLimiter(max)))
-        else None
+            new ThrottleLight.Oscillating(max, min)
+          } else new ThrottleLight.Max(max)
+        else ThrottleLight.NoOp
       override protected final val next = createNextStage()
-      override protected final def mapperNode(a: A): Node[BB] = switchState(ss, mapper(a))
+      override protected final def mapperNode(a: A): Node[BB] = switchState(throttle, ss, mapper(a))
       protected def mapper(a: A): Node[B]
       override protected def accumulate(b: Seq[B], isLast: Boolean): Seq[Z]
     }
@@ -480,6 +470,7 @@ object AsyncPipeline extends Log {
     def scan[A, BB, State, ZZ](@nodeLift f: A => BB)(zero: State)(
         acc: (State, Option[BB]) => (State, Seq[ZZ])): Stage[A, ZZ] =
       scan$withNode { toNodeFactory(f) }(zero)(acc)
+    // noinspection ScalaWeakerAccess (has to match the access of the original method)
     def scan$withNode[A, BB, State, ZZ](f: A => Node[BB])(zero: State)(
         acc: (State, Option[BB]) => (State, Seq[ZZ])): Stage[A, ZZ] =
       new StageImpl[A, BB, ZZ](max, min, ordered) {
@@ -512,15 +503,15 @@ object AsyncPipeline extends Log {
       }
 
     @nodeSyncLift
-    def flatMap[A, B1](@nodeLift f: A => GenTraversableOnce[B1]): Stage[A, B1] =
+    def flatMap[A, B1](@nodeLift f: A => IterableOnce[B1]): Stage[A, B1] =
       flatMap$withNode { toNodeFactory(f) }
-    def flatMap$withNode[A, B1](f: A => Node[GenTraversableOnce[B1]]): Stage[A, B1] =
-      new StageImpl[A, GenTraversableOnce[B1], B1](max, min, ordered) {
+    def flatMap$withNode[A, B1](f: A => Node[IterableOnce[B1]]): Stage[A, B1] =
+      new StageImpl[A, IterableOnce[B1], B1](max, min, ordered) {
         override def newStage[Result](next: StageManagerCreator[B1, Result]): StageManager[A, Result] =
           new StageBase[Result](next) {
             override val name = "flatMap"
-            override protected def mapper(a: A): Node[GenTraversableOnce[B1]] = f(a)
-            override protected def accumulate(b: Seq[GenTraversableOnce[B1]], isLast: Boolean): Seq[B1] = b.flatten
+            override protected def mapper(a: A): Node[IterableOnce[B1]] = f(a)
+            override protected def accumulate(b: Seq[IterableOnce[B1]], isLast: Boolean): Seq[B1] = b.flatten
           }
       }
     @nodeSyncLift
@@ -544,7 +535,7 @@ object AsyncPipeline extends Log {
     def opts(max: Int = -1, ordered: Boolean = false): Stages = Stages(max, ordered)
   }
   def StagesOpts(max: Int = -1, ordered: Boolean = false): Stages = Stages(max, ordered)
-  val Step = Stages // this has no purpose other than not having to change Calc.scala yer
+  val Step: Stages.type = Stages // this has no purpose other than not having to change Calc.scala yer
   def stepOpts(max: Int = -1, ordered: Boolean = false): Stages = Stages(max, ordered)
   def stepOptsWithMinConcurrency(max: Int = -1, min: Int = -1, ordered: Boolean = false) = new Stages(max, min, ordered)
 
@@ -561,7 +552,7 @@ object AsyncPipeline extends Log {
     }
     override protected val next: StageManager[CC[A], CC[A]] =
       new NilStageManager[CC[A]](lazyEmptyResult = cbf.newBuilder.result())
-    override protected val throttle: Option[Throttle] = None
+    override protected val throttle: ThrottleLight = null
     override protected val orderedResults: Option[mutable.Queue[PlaceHolder[B]]] = Some(
       new mutable.Queue[PlaceHolder[B]]())
   }

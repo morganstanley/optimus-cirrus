@@ -16,11 +16,13 @@ import static optimus.graph.DiagnosticSettings.lCompilerDebug;
 import static optimus.graph.DiagnosticSettings.lCompilerLevel;
 import static optimus.graph.DiagnosticSettings.lCompilerEnqueueEarlier;
 import static optimus.graph.DiagnosticSettings.lCompilerQueueSizeSensitive;
+import static optimus.graph.DiagnosticSettings.lCompilerSkipFoldingBlocks;
 import static optimus.graph.loom.LoomConfig.CompilerAssumeGlobalMutationParam;
 import static optimus.graph.loom.LoomConfig.CompilerDebugParam;
 import static optimus.graph.loom.LoomConfig.CompilerLevelParam;
 import static optimus.graph.loom.LoomConfig.CompilerEnqueueEarlierParam;
 import static optimus.graph.loom.LoomConfig.CompilerQueueSizeSensitiveParam;
+import static optimus.graph.loom.LoomConfig.CompilerRetainModifiedByteCodeParam;
 import org.objectweb.asm.tree.AnnotationNode;
 
 public class CompilerArgs {
@@ -35,17 +37,21 @@ public class CompilerArgs {
   public boolean queueSizeSensitive;
   public boolean assumeGlobalMutation;
 
+  public boolean retainModifiedByteCode;
+
   public CompilerArgs(
       int level,
       boolean debug,
       boolean enqueueEarlier,
       boolean queueSizeSensitive,
-      boolean assumeGlobalMutation) {
+      boolean assumeGlobalMutation,
+      boolean skipFoldingBlocks) {
     this.level = level;
     this.debug = debug;
     this.enqueueEarlier = enqueueEarlier;
     this.queueSizeSensitive = queueSizeSensitive;
     this.assumeGlobalMutation = assumeGlobalMutation;
+    this.skipFoldingBlocks = skipFoldingBlocks;
   }
 
   public CompilerArgs(CompilerArgs other) {
@@ -56,6 +62,7 @@ public class CompilerArgs {
     this.enqueueEarlier = other.enqueueEarlier;
     this.queueSizeSensitive = other.queueSizeSensitive;
     this.assumeGlobalMutation = other.assumeGlobalMutation;
+    this.retainModifiedByteCode = other.retainModifiedByteCode;
   }
 
   public static final CompilerArgs Default =
@@ -64,7 +71,8 @@ public class CompilerArgs {
           lCompilerDebug,
           lCompilerEnqueueEarlier,
           lCompilerQueueSizeSensitive,
-          lCompilerAssumeGlobalMutation);
+          lCompilerAssumeGlobalMutation,
+          lCompilerSkipFoldingBlocks);
 
   public static CompilerArgs parse(AnnotationNode ann, CompilerArgs defaultCArgs) {
     var values = ann.values;
@@ -88,6 +96,8 @@ public class CompilerArgs {
             break;
           case CompilerAssumeGlobalMutationParam:
             cArgs.assumeGlobalMutation = (boolean) value;
+          case CompilerRetainModifiedByteCodeParam:
+            cArgs.retainModifiedByteCode = (boolean) value;
         }
       }
       return cArgs;

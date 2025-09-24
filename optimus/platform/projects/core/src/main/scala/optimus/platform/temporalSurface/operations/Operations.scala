@@ -35,7 +35,7 @@ trait TemporalSurfaceQuery {
   def toResult$queued(
       contextGenerator: ItemKey => (TemporalContext, ItemData),
       keys: Iterable[ItemKey],
-      storageInfo: Option[StorageInfo] = None): NodeFuture[ResultType]
+      storageInfo: Option[StorageInfo] = None): NodeFuture[ResultType] = null
 
   def itemKeyName = "EntityReference"
   def itemDataName = "PersistentEntity"

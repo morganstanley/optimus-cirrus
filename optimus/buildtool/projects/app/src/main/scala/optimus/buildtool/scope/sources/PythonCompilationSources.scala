@@ -19,8 +19,6 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 import optimus.platform.entity
 
-import scala.collection.immutable.Seq
-
 @entity class PythonCompilationSources(scope: CompilationScope) extends CompilationSources {
   override def id: ScopeId = scope.id
   @node override protected def hashedSources: HashedSources = {
@@ -30,7 +28,7 @@ import scala.collection.immutable.Seq
 
     val fingerprint = scope.fingerprint(hashedFiles, "Source") ++ scope.pythonDependenciesFingerprint
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.PythonFingerprint)
-    HashedSourcesImpl(Seq("Source" -> hashedFiles), Nil, fingerprintHash)
+    HashedSourcesImpl(Seq("Source" -> hashedFiles), fingerprintHash, fingerprint)
   }
 }
 

@@ -15,35 +15,7 @@ import scala.annotation.meta._
 import scala.annotation.StaticAnnotation
 import scala.annotation.Annotation
 
-/**
- * Marks method foo( arg* ): T to have a companion method foo$withNode( arg* ): T
- *
- * By name args marked with nodeLift will be converted to Node[T]
- *
- * nodeSyncLift loses to nodeSync in async context
- */
-class nodeSyncLift extends StaticAnnotation
-
 class backingStore extends StaticAnnotation
-
-/*
- * Used by compiler plugin to produce the following transformation at call site:
- *
- *   1. for an annotated def:
- *      @nodeLift def method[T](arg1 [, arg2]) -> method$node[T](arg1$newNode [, arg2$newNode])
- *
- * 2. for an annotated parameter:
- *     a. def method(@nodeLift arg: => T) -> method( new AlreadyCompletedNode(arg) )
- *     b. def method(@nodeLift @nodeLiftByName arg: => T) -> method( new Node[T] { completeWithResult(arg) } ) (See @nodeLiftByName)
- *     c. def method(@nodeLift @nodeLiftByName @propertyNodeLift arg: => T) -> method( new PropertyNode[T] { completeWithResult(arg) } ) (See @propertyNodeLift)
- */
-class nodeLift extends StaticAnnotation
-
-/**
- * Used by compiler plugin to produce the 2b. transformation of @nodeLift when applied to a function that scopes the
- * enclosing transformation
- */
-class nodeLiftByName extends StaticAnnotation
 
 /**
  * Marks a (closure) parameter of a method to have its environment captured by value rather than by using $outer

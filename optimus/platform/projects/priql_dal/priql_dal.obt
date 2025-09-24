@@ -32,7 +32,7 @@ main {
       optimus.platform.versioning_runtime
     ]
     libs = [
-      msjava.base,
+      msjava.rr-base,
       ossjava.poi,
       ossjava.protobuf-java,
       ossjava.slf4j

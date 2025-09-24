@@ -11,12 +11,13 @@
  */
 package optimus.buildtool.generators
 
-import java.nio.file.Files
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.ExternalBinaryArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
+import optimus.buildtool.config.DependencyDefinition
+import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
@@ -26,6 +27,10 @@ import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceFolder
+import optimus.buildtool.generators.AnyBufGenerator.pluginKey
+import optimus.buildtool.resolvers.CoursierArtifactResolver
+import optimus.buildtool.resolvers.DependencyCopier
+import optimus.buildtool.resolvers.MavenUtils
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.trace.GenerateSource
 import optimus.buildtool.trace.ObtTrace
@@ -34,19 +39,33 @@ import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import java.nio.file.Files
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 
-@entity class ProtobufGenerator(val workspaceSourceRoot: Directory) extends AnyBufGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.ProtoBuf
+@entity class ProtobufGenerator(
+    dependencyResolver: CoursierArtifactResolver,
+    dependencyCopier: DependencyCopier,
+    val workspaceSourceRoot: Directory)
+    extends AnyBufGenerator {
+  override val generatorType: String = "protobuf"
 
-  override val generatorDefaults: PortableAfsExecutable = {
-    val fsfprotoc = AfsExecutable("fsf", "protoc", "exec/bin/protoc", None)
-    PortableAfsExecutable(windows = fsfprotoc, linux = fsfprotoc)
-  }
+  override val generatorDefaults: PortableMavenExecutable =
+    PortableMavenExecutable(
+      dependencyResolver,
+      dependencyCopier,
+      windows = MavenExecutable(
+        organisation = "com.google.protobuf",
+        project = "protoc",
+        classifier = Some(Platforms.Windows.classifier)),
+      linux = MavenExecutable(
+        organisation = "com.google.protobuf",
+        project = "protoc",
+        classifier = Some(Platforms.Linux.classifier))
+    )
+
   override val generatorExecutableNameForLog = "protoc"
   override val sourcePredicate = Directory.fileExtensionPredicate("proto")
 
@@ -60,17 +79,36 @@ import scala.sys.process.ProcessLogger
       SourceGenerator.validateFiles(root, files).root
     }
 
+    val pluginArgs = inp.plugins.apar.flatMap { case (pluginName, pluginMavenDep) =>
+      val res =
+        dependencyResolver.resolveDependencies(DependencyDefinitions(List(pluginMavenDep), Nil))
+      res.resolvedArtifacts.toList match {
+        case (exec: ExternalBinaryArtifact) :: Nil =>
+          val depCopyExec = dependencyCopier.atomicallyDepCopyFileIfMissing(exec.file)
+          MavenUtils.setExecutablePermissions(depCopyExec)
+          Seq(
+            s"--plugin=protoc-gen-$pluginName=${depCopyExec.path.toString}",
+            s"--${pluginName}_out=${outputDir.path.toString}")
+        case rest =>
+          throw new IllegalStateException(s"There should be exactly one artifact downloaded but was $rest")
+      }
+    }
+
     // protoc requires template and dependency directories to be specified as include arguments
     // use platform-appropriate Strings
     val includeArgs = (templateDirs ++ dependencyDirs).distinct.map(d => s"-I=${PathUtils.mappedPathString(d)}")
     val templateArgs = templateFiles.flatten.map(PathUtils.mappedPathString)
-    Seq(s"--java_out=${outputDir.path.toString}") ++ includeArgs ++ templateArgs
+
+    val mainArgLine =
+      (Seq(s"--java_out=${outputDir.path.toString}") ++ includeArgs)
+
+    mainArgLine ++ pluginArgs ++ templateArgs
   }
 }
 
 @entity class FlatbufferGenerator(val workspaceSourceRoot: Directory) extends AnyBufGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.FlatBuffer
-  override val generatorDefaults: PortableAfsExecutable =
+  override val generatorType: String = "flatbuffer"
+  override val generatorDefaults: PortableExecutable =
     PortableAfsExecutable(
       windows = AfsExecutable("dotnet3rd", "google-flatbuffers", "flatc", None),
       linux = AfsExecutable("fsf", "google-flatbuffers", "bin/flatc", None)
@@ -84,13 +122,15 @@ import scala.sys.process.ProcessLogger
       validated.files
     }
 
-    Seq("--gen-mutable", "--java", "-o", outputDir.path.toString) ++ templateFiles.flatten.map(_.path.toString)
+    Seq(
+      (Seq("--gen-mutable", "--java", "-o", outputDir.path.toString) ++ templateFiles.flatten
+        .map(_.path.toString)).mkString(" "))
   }
 }
 
 @entity trait AnyBufGenerator extends SourceGenerator {
   val workspaceSourceRoot: Directory
-  val generatorDefaults: PortableAfsExecutable
+  val generatorDefaults: ResolvableResource
   val sourcePredicate: PathFilter
   val generatorExecutableNameForLog: String
 
@@ -111,12 +151,8 @@ import scala.sys.process.ProcessLogger
       configuration: Map[String, String],
       scope: CompilationScope
   ): Inputs = {
-    val generator = generatorDefaults.configured(configuration)
-    val execDep = generator.dependencyDefinition(scope)
-    val executable = generator.file(execDep.version)
-
-    // we don't want the platform-specific execDir to be part of the fingerprint
-    val execFingerprint = generatorDefaults.linux.file(execDep.version)
+    val executable = generatorDefaults.resolve(configuration, scope)
+    val execFingerprint = generatorDefaults.fingerprint(configuration, scope)
 
     val filter = sourceFilter && sourcePredicate
     val (templates, templateFingerprint) = SourceGenerator.rootedTemplates(
@@ -169,12 +205,26 @@ import scala.sys.process.ProcessLogger
 
     val dependencies = localDependencies ++ upstreamDependencies.flatten
 
-    val fingerprint = s"[${generatorExecutableNameForLog}]${execFingerprint.pathString}" +:
-      (templateFingerprint ++ localDependencyFingerprint ++ upstreamDependencyFingerprints.flatten)
+    val plugins: Seq[(String, DependencyDefinition)] = configuration
+      .collect { case (k, v) if k.startsWith(pluginKey) => (k, v) }
+      .map { case (pluginName, pluginMavenKey) =>
+        val maybeDep = scope.externalDependencyResolver.dependencyDefinitions.find(p => pluginMavenKey == p.key)
+        maybeDep match {
+          case Some(dep) => (pluginName.stripPrefix(pluginKey), dep.withClassifier(Some(Platforms.current.classifier)))
+          case None      => throw new IllegalStateException(s"Could not find matching dependency for $pluginMavenKey")
+        }
+      }
+      .toSeq
+
+    val pluginsFingerprint: Seq[String] = plugins.map { case (pluginName: String, b: DependencyDefinition) =>
+      s"[$generatorExecutableNameForLog]:$pluginName:${b.fingerprint("Executable")}"
+    }
+    val fingerprint = s"[$generatorExecutableNameForLog]$execFingerprint" +:
+      (pluginsFingerprint ++ templateFingerprint ++ localDependencyFingerprint ++ upstreamDependencyFingerprints.flatten)
     val fingerprintHash =
       scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(generatorName))
 
-    AnyBufGenerator.Inputs(generatorName, executable, templates, dependencies, fingerprintHash)
+    AnyBufGenerator.Inputs(generatorName, executable, templates, dependencies, fingerprintHash, plugins)
   }
 
   @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
@@ -188,8 +238,7 @@ import scala.sys.process.ProcessLogger
     val resolvedInputs = inputs()
     import resolvedInputs._
     ObtTrace.traceTask(scopeId, GenerateSource) {
-
-      val cmd = resolvedInputs.exec.path.toString
+      val protocExecCmd: String = resolvedInputs.exec.path.toString
 
       val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
         val tempJar = JarAsset(tempOut)
@@ -197,28 +246,30 @@ import scala.sys.process.ProcessLogger
         val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
         val outputDir = tempDir.resolveDir(AnyBufGenerator.SourcePath)
         Utils.createDirectories(outputDir)
-        val cmdLine = Seq(cmd) ++ args(resolvedInputs, outputDir)
-
-        log.debug(s"[$scopeId:$generatorName] command line: ${cmdLine.mkString(" ")}")
+        val cmdLine = s"$protocExecCmd ${args(resolvedInputs, outputDir).mkString(" ")}"
+        log.debug(s"[$scopeId:$generatorName] executing: '$cmdLine''")
         val logging = mutable.Buffer[String]()
         // Note: this is a blocking call. See Optimus-49290 if this gets too slow.
-        val ret = Process(cmdLine) ! ProcessLogger { s =>
-          val line = s"[$scopeId:$generatorName:protoc] $s"
-          logging += line
-          log.debug(line)
-        }
+        val res: Int =
+          Process(cmdLine) ! ProcessLogger { s =>
+            val line = s"[$scopeId:$generatorName] $s"
+            logging += line
+            log.debug(line)
+          }
 
         val sourcePath = AnyBufGenerator.SourcePath
-        val messages = if (ret == 0) Nil else logging.map(s => CompilationMessage(None, s, CompilationMessage.Error))
+        val messages = logging.toIndexedSeq
+          .map(s => CompilationMessage(None, s, if (res == 0) CompilationMessage.Info else CompilationMessage.Error))
+
         val a = GeneratedSourceArtifact.create(
           scopeId,
+          tpe,
           generatorName,
-          artifactType,
           outputJar,
           sourcePath,
-          messages.toIndexedSeq
+          messages
         )
-        SourceGenerator.createJar(generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
+        SourceGenerator.createJar(tpe, generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
         a
       }
       Some(artifact)
@@ -228,12 +279,14 @@ import scala.sys.process.ProcessLogger
 
 object AnyBufGenerator {
   private val SourcePath = RelativePath("src")
+  val pluginKey = "plugins."
 
   final case class Inputs(
       generatorName: String,
       exec: FileAsset,
       templates: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
       dependencies: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      fingerprint: FingerprintArtifact
+      fingerprint: FingerprintArtifact,
+      plugins: Seq[(String, DependencyDefinition)]
   ) extends SourceGenerator.Inputs
 }

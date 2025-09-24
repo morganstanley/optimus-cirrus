@@ -22,8 +22,6 @@ import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.utils.JarUtils
 import spray.json._
 
-import scala.collection.immutable.Seq
-
 final case class JarDefinition(
     manifest: Map[String, String]
 ) {

@@ -27,8 +27,6 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Hashing
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class MavenPomInstaller(
     scopeConfigSource: ScopeConfigurationSource,
     cache: BundleFingerprintsCache,

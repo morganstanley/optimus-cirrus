@@ -11,7 +11,7 @@
  */
 
 package optimus.platform
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
 import scala.collection.mutable
@@ -19,7 +19,7 @@ import scala.collection.mutable
 trait IsolatedLazySeq {
   implicit class IsolatedLazySequenceOps[T](private val in: Iterable[T]) {
     @alwaysAutoAsyncArgs @async def laze[U](nBatch: Int, nTake: Int)(f: Iterable[T] => Iterable[U]): Iterable[U] =
-      needsPlugin
+      needsPluginAlwaysAutoAsyncArgs
     @async def laze$NF[U](nBatch: Int, nTake: Int)(f: NodeFunction1[Iterable[T], Iterable[U]]): Iterable[U] = {
       val res = mutable.ArrayBuffer.empty[U]
       val it: Iterator[Iterable[T]] = in.grouped(nBatch)

@@ -512,7 +512,10 @@ abstract class SequenceNodeOnIterator[A, B, R](
     override val sequenceExecutionInfo: SequenceNodeTaskInfo,
     workMarker: ProgressMarker,
     maxConcurrency: Int)
-    extends SequenceNode[B, R](workMarker, maxConcurrency, iterable.knownSize) {
+    extends SequenceNode[B, R](
+      workMarker,
+      maxConcurrency,
+      if (workMarker == TrackProgress && iterable.hasDefiniteSize) iterable.size else iterable.knownSize) {
 
   override def collection: AnyRef = iterable.asInstanceOf[AnyRef] // For reporting only
   private[this] val iterator: Iterator[A] = iterable.iterator
@@ -583,7 +586,10 @@ abstract class PartitioningSequenceNode[A, I, B, ResultT](
     override val sequenceExecutionInfo: SequenceNodeTaskInfo,
     workMarker: ProgressMarker,
     maxConcurrency: Int = Integer.MAX_VALUE)
-    extends SequenceNode[B, ResultT](workMarker, maxConcurrency, iterable.knownSize) {
+    extends SequenceNode[B, ResultT](
+      workMarker,
+      maxConcurrency,
+      if (workMarker == TrackProgress && iterable.hasDefiniteSize) iterable.size else iterable.knownSize) {
 
   private val iterator: Iterator[A] = iterable.iterator
   override def collection: AnyRef = iterable.asInstanceOf[AnyRef] // For reporting only

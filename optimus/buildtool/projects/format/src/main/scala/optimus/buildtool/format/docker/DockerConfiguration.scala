@@ -19,7 +19,6 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.Success
 
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 
 final case class DockerConfiguration(defaults: DockerDefaults, extraDependencies: Set[Path], excludes: Seq[String])
 

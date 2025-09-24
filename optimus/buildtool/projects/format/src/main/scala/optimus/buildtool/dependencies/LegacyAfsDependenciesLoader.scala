@@ -26,7 +26,6 @@ import optimus.buildtool.format.Success
 
 import java.nio.file.FileSystems
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 final case class LegacyAfsDependencies(

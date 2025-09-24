@@ -506,6 +506,11 @@ object Tracer {
     getAggregateTime(ids, TraceEvent.LsqtWait)
   }
 
+  def getPinningAggregateTime(id: TraceId): Long = getPinningAggregateTime(Seq(id))
+  def getPinningAggregateTime(ids: Seq[TraceId]): Long = {
+    getAggregateTime(ids, TraceEvent.MongoPinning)
+  }
+
   def getExecQAggregateTime(id: TraceId): Long = getExecQAggregateTime(Seq(id))
   def getExecQAggregateTime(ids: Seq[TraceId]): Long = {
     getAggregateTime(ids, TraceEvent.ExecQ)
@@ -946,6 +951,11 @@ object Tracer {
   def getGpbSize(ids: Seq[TraceId]): Long =
     ids.map { id =>
       getEventAggregateData(id, TraceEvent.GpbSize)
+    }.sum
+
+  def getIgnoreListCount(ids: Seq[TraceId]): Long =
+    ids.map { id =>
+      getEventAggregateData(id, TraceEvent.ReferenceResolverIgnoreListCount)
     }.sum
   def getArchiveReadStats(ids: Seq[TraceId]): Map[SerializedEntity.TypeRef, Long] = {
     val gpfsStats =

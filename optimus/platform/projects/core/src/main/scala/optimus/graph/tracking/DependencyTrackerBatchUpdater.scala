@@ -673,7 +673,8 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
               token.release()
             }
           },
-          callbackInline = true
+          callbackInline = true,
+          effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) eventCause else null
         )
       } else {
         val msg = "evaluateNodeKeysAsync failure: BatchUpdater already closed or is updating!"
@@ -717,8 +718,17 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
         node.attach(ss)
         evalCause.root.keepAliveWhileEvaluating(node)
         StateManager.keepTrackOfNode(node)
+
         // need to run callback inline, otherwise there will deadlock
-        ec.scheduler.evaluateNodeAsync(node, maySAS = true, trackCompletion = false, cb, callbackInline = true)
+        ec.scheduler.evaluateNodeAsync(
+          node,
+          maySAS = true,
+          trackCompletion = false,
+          cb,
+          callbackInline = true,
+          cbSS = null,
+          effectiveEnqueuer = if (DiagnosticSettings.eventCauseAsEnqueuers) eventCause else null
+        )
       } else {
         val msg = "evaluateAsync failure: BatchUpdater already closed or is updating!"
         DependencyTracker.log.error(msg, new GraphInInvalidState(msg))

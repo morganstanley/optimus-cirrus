@@ -14,8 +14,6 @@ package optimus.platform_profiler.config
 import com.typesafe.config.ConfigFactory
 import scala.collection.compat._
 
-import scala.collection.immutable.Seq
-
 object StaticConfig {
 
   private val config = ConfigFactory.parseResources("PlatformProfiler.conf")

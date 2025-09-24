@@ -11,6 +11,8 @@
  */
 package optimus.collection
 
+import optimus.scala212.DefaultSeq
+
 import scala.runtime.AbstractFunction1
 
 object OptimusSeqUtils {
@@ -26,7 +28,7 @@ object OptimusSeqUtils {
    *   the content type
    * @return
    */
-  def mapConserve[T](source: collection.Seq[T], fn: T => T): collection.Seq[T] = {
+  def mapConserve[T](source: Seq[T], fn: T => T): Seq[T] = {
     if (source.isEmpty) source
     else
       source match {

@@ -20,7 +20,6 @@ import java.nio.file.Files
 import java.util.jar
 import java.util.jar.Attributes.Name
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object JarUtils {
   object nme {

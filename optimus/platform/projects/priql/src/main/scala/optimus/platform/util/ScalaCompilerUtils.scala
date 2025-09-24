@@ -54,7 +54,7 @@ import com.typesafe.config.ConfigFactory
 import scala.reflect.runtime.universe._
 import scala.tools.nsc.plugins.Plugin
 import scala.tools.reflect.ToolBoxError
-import scala.xml.XML
+import optimus.platform.util.xml.XmlLoader
 
 object ScalaCompilerUtils {
   private val log = getLogger[ScalaCompilerUtils.type]
@@ -159,7 +159,7 @@ object ScalaCompilerUtils {
     import scala.jdk.CollectionConverters._
     // there can be multiple plugins on the classpath (e.g. staging, entity) so we need to find the right one
     resources.asScala
-      .find(r => (XML.load(r) \ "name").text == pluginName)
+      .find(r => (XmlLoader.load(r) \ "name").text == pluginName)
       .map(path => extractResourcePath(path).toString)
       .toSeq
   }

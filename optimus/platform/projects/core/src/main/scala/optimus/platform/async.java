@@ -20,11 +20,16 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.CLASS)
 @Target({ElementType.METHOD})
 public @interface async {
-
   /**
    * Former @createNodeTrait. It tells the plugin to create a "trait foo$node" on the entity class
    * with fields for all of the node parameters. The actual (hidden) node class will implement this
    * trait. This is mainly useful for plugins which need to extract fields from the node.
    */
   boolean exposeArgTypes() default false;
+
+  /**
+   * Specifies whether to always trace the execution of this async method. Default is false. Useful
+   * for graph debugger visualization
+   */
+  boolean traceAlways() default false;
 }

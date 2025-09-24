@@ -34,7 +34,7 @@ private[buildtool] object OptimusBuildTool
   val originalStdOut: PrintStream = System.out
   val originalStdErr: PrintStream = System.err
 
-  val DefaultArtifactVersionNumber = "1.57"
+  val DefaultArtifactVersionNumber = "1.63"
 
   override protected def parseCmdline(args: Array[String], exitHandler: ExitHandler): Unit = {
     super.parseCmdline(args, exitHandler)

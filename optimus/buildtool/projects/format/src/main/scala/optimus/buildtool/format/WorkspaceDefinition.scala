@@ -12,6 +12,7 @@
 package optimus.buildtool.format
 
 import com.typesafe.config.Config
+import optimus.buildtool.config.FingerprintsDiffConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.dependencies
 import optimus.buildtool.dependencies.CentralDependencies
@@ -23,7 +24,6 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.docker.DockerStructure
 
 import java.util.{Map => JMap}
-import scala.collection.immutable.Seq
 
 final case class WorkspaceDefinition(
     structure: WorkspaceStructure,
@@ -34,7 +34,8 @@ final case class WorkspaceDefinition(
     appValidator: AppValidator,
     runConfSubstitutionsValidator: RunConfSubstitutionsValidator,
     dockerStructure: DockerStructure,
-    globalRules: RulesStructure
+    globalRules: RulesStructure,
+    fingerprintsDiffConfig: FingerprintsDiffConfiguration
 )
 
 object WorkspaceDefinition {
@@ -87,6 +88,7 @@ object WorkspaceDefinition {
     appValidator <- AppValidator.load(loadFileWithProperties)
     runConfSubstitutions <- RunConfSubstitutionsValidator.load(loadFileWithProperties)
     dockerStructure <- DockerStructure.load(loadFileWithProperties, validScopes)
+    fingerprintsDiffConfig <- FingerprintsDiffConfiguration.load(loadFileWithProperties)
   } yield {
     WorkspaceDefinition(
       workspace,
@@ -97,7 +99,8 @@ object WorkspaceDefinition {
       appValidator,
       runConfSubstitutions,
       dockerStructure,
-      rules
+      rules,
+      fingerprintsDiffConfig
     )
   }
 }

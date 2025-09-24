@@ -24,7 +24,6 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.utils.PathUtils
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.reflect.runtime.universe._
 
 final case class CppToolchainStructure(toolchains: Set[CppToolchain])

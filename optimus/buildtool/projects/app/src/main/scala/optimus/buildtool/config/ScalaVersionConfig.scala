@@ -12,8 +12,19 @@
 package optimus.buildtool.config
 
 import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
+import optimus.buildtool.format.OrderingUtils
 
-final case class ScalaVersionConfig(scalaVersion: String, scalaLibPath: ReactiveDirectory, scalaJars: Seq[JarAsset]) {
-  def scalaMajorVersion: String = scalaVersion.split('.').take(2).mkString(".")
+final case class ScalaVersionConfig(scalaVersion: ScalaVersion, scalaJars: Seq[JarAsset]) {
+  def scalaMajorVersion: String = scalaVersion.scalaMajorVersion
+}
+
+final case class ScalaVersion(value: String) extends AnyVal {
+  def scalaMajorVersion: String = value.split('.').take(2).mkString(".")
+  override def toString: String = value
+}
+
+object ScalaVersion {
+  implicit val scalaVersionOrdering: Ordering[ScalaVersion] = (x: ScalaVersion, y: ScalaVersion) => {
+    OrderingUtils.versionOrdering.compare(x.value, y.value)
+  }
 }

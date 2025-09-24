@@ -1703,7 +1703,7 @@ public class MSNetTCPConnection extends MSNetAbstractConnection {
             logSyncConnectError("establish failed", e);
         } catch (MSNetSelectTimeoutException e) {
             
-            logSyncConnectError(millisec + "ms timeout expired", e);
+            logSyncConnectError(millisec + "ms timeout expired. This could be due to prodperim. More info here: http://optimusguide/OptimusCoreDAL/DalEntityFAQ#why-couldnt-my-app-connect-to-the-dal", e);
         } catch (MSNetException e) {
             
             logSyncConnectError("connect failed", e);

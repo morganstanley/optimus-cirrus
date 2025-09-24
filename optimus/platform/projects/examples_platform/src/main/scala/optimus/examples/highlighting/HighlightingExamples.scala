@@ -12,6 +12,11 @@
 package optimus.examples.highlighting
 
 import optimus.platform._
+import optimus.platform.dal.config.DalEnv
+import optimus.platform.dal.config.DalLocation
+import optimus.platform.util.Log
+
+import scala.annotation.nowarn
 
 @event class MyEvent(i: Int = 1)
 
@@ -21,12 +26,26 @@ object HighlightingExamples {
       @async def foo(): Unit = {
         MyEvent.uniqueInstance(1) // works fine
 
-        // gives an error saying "required Int found Instant" before OPTIMUS-60745
-        MyEvent.uniqueInstance(validTime = At.now)
+        MyEvent.uniqueInstance(validTime = At.now) // works fine
 
-        // gives an error saying "too many arguments found" before OPTIMUS-60745
-        MyEvent.uniqueInstance(1, At.now)
+        MyEvent.uniqueInstance(1, At.now) // works fine
       }
     }
+  }
+
+  // docs-snippet:optimus-warnings
+  @entity object SyncStackHighlighting {
+    @async private def asyncDef: Int = 0
+
+    // regex-ignore-line (17001) intentional new warning added for demo/testing
+    def syncStackDef: Int = asyncDef + 1 // Expect a gutter icon warning AFTER building this examples_platform scope
+  }
+  // docs-snippet:optimus-warnings
+}
+
+object HighlightingExamplesApp extends OptimusApp with Log {
+  override def dalLocation: DalLocation = DalEnv.none
+  @entersGraph override def run(): Unit = {
+    log.info(s"syncStackDef: ${HighlightingExamples.SyncStackHighlighting.syncStackDef}")
   }
 }

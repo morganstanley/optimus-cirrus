@@ -11,8 +11,6 @@
  */
 package optimus.stratosphere.logger
 
-import scala.collection.immutable.Seq
-
 final case class InMemoryLogger() extends Logger {
   protected var loggedLines: Seq[String] = Nil
   override def handleAnswer(answer: String): Unit = info(answer)

@@ -31,6 +31,7 @@ import optimus.buildtool.config.DependencyId
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.Id
 import optimus.buildtool.config.MetaBundle
+import optimus.buildtool.config.ModuleId
 import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.NamingConventions._
@@ -56,23 +57,18 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.util.matching.Regex
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 final case class CustomScopesDefinition(
     include: Seq[Regex],
     exclude: Seq[Regex],
+    includeDownstreamsOf: Seq[Regex],
+    excludeCircularDownstreams: Boolean,
     compile: Boolean,
     id: ScopeId,
     origin: ObtFile,
     line: Int
-) extends (ScopeId => Boolean) {
-  def apply(scopeId: ScopeId): Boolean = {
-    val properPath = scopeId.properPath
-    val included = id != scopeId && (include.isEmpty || include.exists(_.unapplySeq(properPath).isDefined))
-    included && exclude.forall(_.unapplySeq(properPath).isEmpty)
-  }
-}
+)
 
 class ScopeDefinitionCompiler(
     loadConfig: ObtFile.Loader,
@@ -84,8 +80,25 @@ class ScopeDefinitionCompiler(
 ) {
   import ScopeDefinitionCompiler._
 
-  private val moduleSetsByModule = structure.moduleSets.flatMap { case (_, moduleSet) =>
-    moduleSet.publicModules.map(_.id -> (moduleSet, true)) ++ moduleSet.privateModules.map(_.id -> (moduleSet, false))
+  private val moduleSetsByModule: Map[ModuleId, (ModuleSetDefinition, Boolean)] =
+    structure.moduleSets.flatMap { case (_, moduleSet) =>
+      moduleSet.modules.map(module => module.id -> (moduleSet, module.public))
+    }
+
+  private val transitiveCanDependOn: Map[ModuleSetId, Set[ModuleSetId]] = {
+    def transitiveCdo(moduleSet: ModuleSetId, accum: mutable.Set[ModuleSetId]): Unit = {
+      // avoid walking the same path repeatedly (also prevents stack overflows due to circular dependencies)
+      if (accum.add(moduleSet)) {
+        structure.moduleSets(moduleSet).canDependOn.foreach { case (id, _) =>
+          transitiveCdo(id, accum)
+        }
+      }
+    }
+    structure.moduleSets.keySet.map { id =>
+      val set = mutable.Set[ModuleSetId]()
+      transitiveCdo(id, set)
+      id -> set.toSet
+    }.toMap
   }
 
   private def expandParents(scopes: Map[ScopeId, ScopeDefinition]): Result[Map[ScopeId, ScopeDefinition]] = {
@@ -124,25 +137,99 @@ class ScopeDefinitionCompiler(
   private def expandAllCustomScopes(scopesToExpand: Map[ScopeId, ScopeDefinition]): Map[ScopeId, ScopeDefinition] = {
     val allScopes = scopesToExpand.keySet.to(Seq).sorted
 
-    def expandCustomScopes(scope: ScopeDefinition, customScopesDefinition: CustomScopesDefinition): ScopeDefinition = {
+    def expand(scope: ScopeDefinition, csd: CustomScopesDefinition)(f: ScopeId => Boolean): ScopeDefinition = {
       val cfg = scope.configuration
-      val scopesToAdd = allScopes.filter(customScopesDefinition)
+      val exc = csd.exclude
+
+      val scopesToAdd = allScopes.filter { scopeId =>
+        val properPath = scopeId.properPath
+        csd.id != scopeId && f(scopeId) && exc.forall(_.unapplySeq(properPath).isEmpty)
+      }
       val dependenciesToAdd = Dependencies(scopesToAdd, Nil, Nil)
       val newDeps =
-        if (customScopesDefinition.compile) cfg.dependencies appendCompile dependenciesToAdd
+        if (csd.compile) cfg.dependencies appendCompile dependenciesToAdd
         else cfg.dependencies appendRuntime dependenciesToAdd
       val newRels =
-        scopesToAdd.map(d =>
-          ScopeRelationship(d, custom = true, customScopesDefinition.origin, customScopesDefinition.line))
+        scopesToAdd.map(d => ScopeRelationship(d, custom = true, csd.origin, csd.line))
       scope.copy(
         configuration = cfg.copy(dependencies = newDeps),
         relationships = scope.relationships ++ newRels
       )
     }
 
-    scopesToExpand.map { case (id, scope) =>
-      id -> scope.customScopesDefinitions.foldLeft(scope) { case (scope, customScopesDefinition) =>
-        expandCustomScopes(scope, customScopesDefinition)
+    // first expand all the includes, and then afterwards expand the downstream includes. we do these in two phases
+    // so that we can avoid cycles due to the includes in the dependency graph.
+    val partiallyExpanded = scopesToExpand.map { case (id, scope) =>
+      id -> scope.customScopesDefinitions.foldLeft(scope) { case (scope, csd) =>
+        val inc = csd.include
+
+        expand(scope, csd) { candidateScopeId =>
+          val properPath = candidateScopeId.properPath
+          inc.exists(_.unapplySeq(properPath).isDefined)
+        }
+      }
+    }
+
+    def reverseGrouped(ids: Seq[(ScopeId, ScopeId)]) =
+      ids.groupBy(_._2).map { case (target, rels) => target -> rels.map(_._1).toSet }
+
+    def allDownstreams(s: ScopeId, reverseDeps: Map[ScopeId, Set[ScopeId]]): Set[ScopeId] = {
+      val accum = mutable.Set[ScopeId]()
+      def inner(target: ScopeId): Unit = {
+        if (accum.add(target)) {
+          reverseDeps.getOrElse(target, Set.empty[ScopeId]).foreach(inner)
+        }
+      }
+      inner(s)
+      accum.toSet
+    }
+
+    val allRelationships =
+      partiallyExpanded.toSeq.flatMap { case (source, scope) => scope.relationships.map(source -> _.target) }
+    val reverseDependencies = reverseGrouped(allRelationships)
+
+    val newCandidateReverseDependencies = reverseGrouped(for {
+      (id, scope) <- partiallyExpanded.toSeq
+      csd <- scope.customScopesDefinitions
+      ido <- csd.includeDownstreamsOf
+      idoScope <- allScopes.filter(candidateId => ido.matches(candidateId.properPath))
+      idoDownstream <- allDownstreams(idoScope, reverseDependencies)
+    } yield id -> idoDownstream)
+
+    // if we don't try to prevent cycles due to colliding `includeDownstreamsOf`, there are the relationships we'll get
+    val allPotentialReverseDependencies =
+      (reverseDependencies.keySet ++ newCandidateReverseDependencies.keySet).map { id =>
+        id -> (reverseDependencies.getOrElse(id, Set.empty) ++ newCandidateReverseDependencies.getOrElse(id, Set.empty))
+      }.toMap
+
+    partiallyExpanded.map { case (id, scope) =>
+      id -> scope.customScopesDefinitions.foldLeft(scope) { case (scope, csd) =>
+        val ido = csd.includeDownstreamsOf
+        val includedDownstreamScopes = if (ido.nonEmpty) {
+
+          val excludedDownstreams = if (csd.excludeCircularDownstreams) {
+            // exclude this scope and any of its potential downstreams to prevent a cycle, at the cost
+            // of potentially excluding scopes we might be interested in
+            allDownstreams(scope.id, allPotentialReverseDependencies)
+          } else {
+            // only exclude other colliding `includeDownstreamsOf`
+            allDownstreams(scope.id, newCandidateReverseDependencies)
+          }
+
+          val scopes = allScopes
+            .filter { scopeId =>
+              val properPath = scopeId.properPath
+              ido.exists(_.unapplySeq(properPath).isDefined)
+            }
+            .flatMap(allDownstreams(_, reverseDependencies))
+            .filterNot(excludedDownstreams)
+            .toSet
+          scopes
+        } else Set.empty[ScopeId]
+
+        expand(scope, csd) { candidateScopeId =>
+          includedDownstreamScopes.contains(candidateScopeId)
+        }
       }
     }
   }
@@ -162,25 +249,26 @@ class ScopeDefinitionCompiler(
     val allScopes = for {
       scopes <- scopes.value
       scopesById = scopes.map(s => s.id -> s).toMap
-      expanded <- expandParents(scopesById).map(mods => expandAllCustomScopes(mods))
-    } yield expanded
+      // `enrichScopes` needs to happen before `expandAllCustomScopes`, so that it can see the non-main -> main rels
+      enriched = enrichScopes(scopesById)
+      withParents <- expandParents(enriched)
+      withCustom = expandAllCustomScopes(withParents)
+    } yield withCustom
 
     if (!allScopes.hasErrors) {
-      allScopes
-        .map(enrichScopes)
-        .withProblems { scopes =>
-          val scopeModules = scopes.keySet.map(_.fullModule)
-          val missingModuleProblems = (structure.modules.keySet -- scopeModules)
-            .map(structure.modules)
-            .map { module =>
-              val msg = s"Module ${module.id} has no defined scopes in ${module.path}"
-              Error(msg, BundlesConfig, module.line)
-            }
-            .to(Seq)
+      allScopes.withProblems { scopes =>
+        val scopeModules = scopes.keySet.map(_.fullModule)
+        val missingModuleProblems = (structure.modules.keySet -- scopeModules)
+          .map(structure.modules)
+          .map { module =>
+            val msg = s"Module ${module.id} has no defined scopes in ${module.path}"
+            Error(msg, BundlesConfig, module.line)
+          }
+          .to(Seq)
 
-          val scopeProblems = checkScopes(scopes)
-          missingModuleProblems ++ scopeProblems
-        }
+        val scopeProblems = checkScopes(scopes)
+        missingModuleProblems ++ scopeProblems
+      }
     } else allScopes
   }
 
@@ -226,6 +314,7 @@ class ScopeDefinitionCompiler(
     relationships
       .flatMap { case (sourceId, rel) =>
         val source = scopes(sourceId)
+        val sourceModuleSet = source.configuration.moduleSet.id
 
         def mavenOnly(scope: ScopeDefinition): Boolean = scope.configuration.flags.mavenOnly
 
@@ -277,82 +366,99 @@ class ScopeDefinitionCompiler(
         def problem(msg: String, error: Boolean) =
           if (error) Error(msg, rel.origin, rel.line) else Warning(msg, rel.origin, rel.line)
 
-        def transitiveCanDependOn(scope: ScopeDefinition): Set[ModuleSetId] = {
-          def inner(moduleSet: ModuleSetId, seen: Set[ModuleSetId]): Set[ModuleSetId] = {
-            if (!seen.contains(moduleSet)) { // prevent stack overflows due to circular dependencies
-              structure.moduleSets(moduleSet).canDependOn.flatMap { case (id, _) =>
-                inner(id, seen + moduleSet)
-              } + moduleSet
-            } else Set.empty
+        val checks = Seq[PartialFunction[Option[ScopeDefinition], Seq[Message]]](
+          {
+            case None if modules.contains(rel.target.fullModule) =>
+              Seq(error(s"Module ${rel.target.fullModule} exists but scope ${rel.target} does not"))
+          },
+          {
+            case None if !modules.contains(rel.target.fullModule) =>
+              Seq(error(s"Module ${rel.target.fullModule} does not exist"))
+          },
+          {
+            case Some(target) if !target.configuration.open && !rel.custom =>
+              // Note - we allow dependency on closed scopes from customScopes/customModules declaration
+              Seq(error(invalidDependencyMsg(target.id.toString, "is not open", sourceId.toString)))
+          },
+          {
+            case Some(target) if mavenOnly(source) && !mavenCompatible(target) =>
+              val listLoadedLibs = target.configuration.dependencies.allExternal.listExternalLibs()
+              val msg =
+                if (!mavenOnly(target))
+                  s"is not maven compatible(both libs & mavenLibs defined): $listLoadedLibs"
+                else "is not mavenOnly"
+              // just warn on cross-maven/AFS dependencies from customScopes/customModules declaration for now
+              Seq(problem(invalidDependencyMsg(target.id.toString, msg, sourceId.toString), !rel.custom))
+          },
+          // TODO (OPTIMUS-58917): clean up special case that allow maven release frontier depends on mavenOnly modules
+          {
+            case Some(target)
+                if (!mavenOnly(source) && source.id.module != MavenReleaseFrontier) && mavenOnly(
+                  target) && !rel.custom =>
+              // just warn on cross-maven/AFS dependencies from customScopes/customModules declaration for now
+              Seq(problem(invalidDependencyMsg(target.id.toString, "is mavenOnly", sourceId.toString), !rel.custom))
+          },
+          {
+            case Some(target) if javaRel(source) < javaRel(target) =>
+              // just warn on invalid java versions from customScopes/customModules declaration for now
+              Seq(
+                problem(
+                  invalidDependencyMsg(
+                    target.id.toString,
+                    s"uses javac.release ${javaRel(target)}",
+                    sourceId.toString,
+                    s"which uses earlier javac.release ${javaRel(source)}"),
+                  !rel.custom
+                ))
+          },
+          {
+            case Some(target) if source.configuration.flags.installIvy && !target.configuration.flags.installIvy =>
+              Seq(
+                error(
+                  invalidDependencyMsg(
+                    target.id.toString,
+                    "has 'installIvy = false'",
+                    sourceId.toString,
+                    "which has 'installIvy = true'")))
+          },
+          {
+            case Some(target)
+                if !transitiveCanDependOn(sourceModuleSet).contains(target.configuration.moduleSet.id)
+                  && (!rel.custom || (!source.configuration.flags.allowSetViolatingCustomScopes && !target.configuration.flags.allowSetViolatingCustomScopes)) =>
+              // relationships breaking can-depends on rules are only allowed for relationships from customScopes/customModules
+              // and only if either the source or the target has `allowSetViolatingCustomScopes = true`
+              val sourceModuleSetName = sourceModuleSet.name
+              val targetModuleSetName = target.configuration.moduleSet.id.name
+              Seq(
+                error(invalidDependencyMsg(
+                  target.id.toString,
+                  s"is in module set $targetModuleSetName",
+                  sourceId.toString,
+                  s"in module set $sourceModuleSetName ($targetModuleSetName is not a transitive 'can-depend-on' of $sourceModuleSetName)"
+                )))
+          },
+          {
+            case Some(target)
+                if source.configuration.moduleSet != target.configuration.moduleSet && !target.configuration.flags.public && !rel.custom =>
+              // Note - we allow dependency on private scopes from customScopes/customModules declaration
+              val sourceModuleSet = source.configuration.moduleSet.id.name
+              val targetModuleSet = target.configuration.moduleSet.id.name
+              Seq(
+                error(
+                  invalidDependencyMsg(
+                    target.id.toString,
+                    s"is private to module set $targetModuleSet",
+                    sourceId.toString,
+                    s"in module set $sourceModuleSet"
+                  )))
           }
-          inner(scope.configuration.moduleSet.id, Set.empty)
+        )
+
+        checks.flatMap { check =>
+          val target = scopes.get(rel.target)
+          check.lift(target).getOrElse(Nil)
         }
 
-        scopes.get(rel.target) match {
-          case None if modules.contains(rel.target.fullModule) =>
-            Seq(error(s"Module ${rel.target.fullModule} exists but scope ${rel.target} does not"))
-          case None =>
-            Seq(error(s"Module ${rel.target.fullModule} does not exist"))
-          case Some(target) if !target.configuration.open && !rel.custom =>
-            // Note - we allow dependency on closed scopes from customScopes/customModules declaration
-            Seq(error(invalidDependencyMsg(target.id.toString, "is not open", sourceId.toString)))
-          case Some(target) if mavenOnly(source) && !mavenCompatible(target) =>
-            val listLoadedLibs = target.configuration.dependencies.allExternal.listExternalLibs()
-            val msg =
-              if (!mavenOnly(target))
-                s"is not maven compatible(both libs & mavenLibs defined): $listLoadedLibs"
-              else "is not mavenOnly"
-            // just warn on cross-maven/AFS dependencies from customScopes/customModules declaration for now
-            Seq(problem(invalidDependencyMsg(target.id.toString, msg, sourceId.toString), !rel.custom))
-          // TODO (OPTIMUS-58917): clean up special case that allow maven release frontier depends on mavenOnly modules
-          case Some(target)
-              if (!mavenOnly(source) && source.id.module != MavenReleaseFrontier) && mavenOnly(target) && !rel.custom =>
-            // just warn on cross-maven/AFS dependencies from customScopes/customModules declaration for now
-            Seq(problem(invalidDependencyMsg(target.id.toString, "is mavenOnly", sourceId.toString), !rel.custom))
-          case Some(target) if javaRel(source) < javaRel(target) =>
-            // just warn on invalid java versions from customScopes/customModules declaration for now
-            Seq(
-              problem(
-                invalidDependencyMsg(
-                  target.id.toString,
-                  s"uses javac.release ${javaRel(target)}",
-                  sourceId.toString,
-                  s"which uses earlier javac.release ${javaRel(source)}"),
-                !rel.custom
-              ))
-          case Some(target) if source.configuration.flags.installIvy && !target.configuration.flags.installIvy =>
-            Seq(
-              error(
-                invalidDependencyMsg(
-                  target.id.toString,
-                  "has 'installIvy = false'",
-                  sourceId.toString,
-                  "which has 'installIvy = true'")))
-          case Some(target) if !transitiveCanDependOn(source).contains(target.configuration.moduleSet.id) =>
-            val sourceModuleSet = source.configuration.moduleSet.id.name
-            val targetModuleSet = target.configuration.moduleSet.id.name
-            Seq(
-              error(invalidDependencyMsg(
-                target.id.toString,
-                s"is in module set $targetModuleSet",
-                sourceId.toString,
-                s"in module set $sourceModuleSet ($targetModuleSet is not a transitive 'can-depend-on' of $sourceModuleSet)"
-              )))
-          case Some(target)
-              if source.configuration.moduleSet != target.configuration.moduleSet && !target.configuration.flags.public && !rel.custom =>
-            // Note - we allow dependency on private scopes from customScopes/customModules declaration
-            val sourceModuleSet = source.configuration.moduleSet.id.name
-            val targetModuleSet = target.configuration.moduleSet.id.name
-            Seq(
-              error(
-                invalidDependencyMsg(
-                  target.id.toString,
-                  s"is private to module set $targetModuleSet",
-                  sourceId.toString,
-                  s"in module set $sourceModuleSet"
-                )))
-          case _ => Nil
-        }
       }
       .to(Seq)
       .distinct
@@ -472,8 +578,9 @@ class ScopeDefinitionCompiler(
       val libs = Array.newBuilder[DependencyDefinition]
       val fromMavenLibs = libsType.contains(MavenLibsKey)
 
+      val lookup = centralDependencies.jvmDependencies.lookup(moduleSet, fromMavenLibs)
       processDependencyList(config, libsType, error, allowUnorderedDependencies) { (id, loc) =>
-        centralDependencies.jvmDependencies.forId(id, moduleSet, fromMavenLibs) match {
+        lookup.forId(id) match {
           case loadedDeps if loadedDeps.nonEmpty =>
             if (!fromMavenLibs) libs ++= loadedDeps
             else {
@@ -633,6 +740,7 @@ class ScopeDefinitionCompiler(
           mavenOnly = config.optionalBoolean(MavenOnlyKey),
           skipDependencyMappingValidation = config.optionalBoolean("skipDependencyMappingValidation"),
           allowUnorderedAndDuplicateDependencies = scopeAllowUnorderedDependencies,
+          allowSetViolatingCustomScopes = config.optionalBoolean("allowSetViolatingCustomScopes"),
           relationships =
             (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels ++ extraRels).distinct,
           extraLibs = extraLibs,
@@ -746,15 +854,18 @@ class ScopeDefinitionCompiler(
           }
         val includes = loadRegs("includes")
         val excludes = loadRegs("excludes")
+        val includeDownstreamsOf = loadRegs("includeDownstreamsOf")
 
         val res = for {
           is <- includes
           es <- excludes
-        } yield CustomScopesDefinition(is, es, isCompile, scopeId, module, config.origin.lineNumber)
+          idos <- includeDownstreamsOf
+          ecd = config.optionalBoolean("excludeCircularDownstreams").getOrElse(false)
+        } yield CustomScopesDefinition(is, es, idos, ecd, isCompile, scopeId, module, config.origin.lineNumber)
 
         res
           .withProblems { cs =>
-            if (cs.include.isEmpty && cs.exclude.isEmpty && !res.hasErrors)
+            if (cs.include.isEmpty && cs.includeDownstreamsOf.isEmpty && cs.exclude.isEmpty && !res.hasErrors)
               Seq(module.errorAt(config.root(), s"Missing excludes and includes"))
             else Nil
           }
@@ -860,7 +971,7 @@ class ScopeDefinitionCompiler(
             jmh = jmh,
             javaOnly = !resolvedConfiguration.compile
               .externalDeps(useMavenLibs)
-              .exists(dep => if (mavenOnly) "scala-library" == dep.name else dep.isScalaSdk),
+              .exists(dep => "scala-library" == dep.name || dep.isScalaSdk),
             usePipelining = resolvedConfiguration.usePipelining.getOrElse(true),
             empty = resolvedConfiguration.empty.getOrElse(false),
             installSources = resolvedConfiguration.installSources.getOrElse(false),
@@ -868,7 +979,8 @@ class ScopeDefinitionCompiler(
             installIvy = resolvedConfiguration.installIvy.getOrElse(false),
             pathingBundle = resolvedConfiguration.bundle.getOrElse(false),
             mavenOnly = mavenOnly,
-            skipDependencyMappingValidation = skipDependencyMappingValidation
+            skipDependencyMappingValidation = skipDependencyMappingValidation,
+            allowSetViolatingCustomScopes = resolvedConfiguration.allowSetViolatingCustomScopes.getOrElse(false)
           )
 
           val cfg = ScopeConfiguration(
@@ -942,7 +1054,7 @@ class ScopeDefinitionCompiler(
   }
 
   // prevent multiple instances of the same module set being created
-  private val moduleSetCache = new ConcurrentHashMap[ModuleSetId, ModuleSet]()
+  private val moduleSetCache = new ConcurrentHashMap[ModuleSetId, Result[ModuleSet]]()
 
   private def moduleSet(id: ScopeId, config: Config, file: ObtFile): Result[(ModuleSet, Boolean)] = {
     moduleSetsByModule.get(id.fullModule) match {
@@ -951,16 +1063,17 @@ class ScopeDefinitionCompiler(
     }
   }
 
-  private def moduleSet(msd: ModuleSetDefinition): Result[ModuleSet] =
-    for {
-      canDependOnDefns <- loadSets(msd.file, msd.canDependOn, structure.moduleSets)
-      canDependOn <- Result.sequence[ModuleSet](canDependOnDefns.map(moduleSet).to(Seq))
-    } yield moduleSetCache.computeIfAbsent(
-      msd.id,
-      { _ =>
-        ModuleSet(msd.id, canDependOn.toSet, msd.dependencySets.map(_._1), msd.variantSets.map(_._1))
-      }
-    )
+  private def moduleSet(msd: ModuleSetDefinition): Result[ModuleSet] = {
+    // Can't just use `computeIfAbsent` here, since CHM doesn't support updating recursively
+    val cached = Option(moduleSetCache.get(msd.id))
+    cached.getOrElse {
+      val ms = for {
+        canDependOnDefns <- loadSets(msd.file, msd.canDependOn, structure.moduleSets)
+        canDependOn <- Result.sequence[ModuleSet](canDependOnDefns.map(moduleSet).to(Seq))
+      } yield ModuleSet(msd.id, canDependOn.toSet, msd.dependencySets.map(_._1), msd.variantSets.map(_._1))
+      Option(moduleSetCache.putIfAbsent(msd.id, ms)).getOrElse(ms)
+    }
+  }
 
   private def loadSets[A, B](
       file: ObtFile,

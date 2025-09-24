@@ -23,7 +23,6 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.utils.app.StringOptionOptionHandler
-import optimus.rest.bitbucket.MergeCommitUtils
 import optimus.utils.app.DelimitedStringOptionHandler
 import optimus.utils.app.PositiveIntOptionOptionHandler
 import optimus.utils.MemSize
@@ -35,7 +34,6 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Duration
 import java.{util => ju}
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 object OptimusBuildToolCmdLineT {
@@ -85,9 +83,6 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
     usage = "Dep copy root (defaults to <workspace root>/../.stratosphere/depcopy"
   )
   val depCopyDir: String = ""
-
-  @args.Option(name = "--scalaDir", required = false, aliases = Array("--scalaPath"), usage = "Scala directory")
-  val scalaDir: String = ""
 
   @args.Option(
     name = "--outputDir",
@@ -196,11 +191,20 @@ private[buildtool] trait GitCmdLine { this: OptimusAppCmdLine =>
   val gitLength = 30
 
   @args.Option(
+    name = "--targetBranch",
+    required = false,
+    usage = "Target branch for PR builds, used to discover baseline"
+  )
+  val targetBranch: String = "staging"
+
+  @args.Option(
     name = "--gitFilterRe",
     required = false,
-    usage = "Regex for matching git merge commit messages"
+    usage =
+      "Regex for matching git merge commit messages. If not provided, it is calculated based on the targetBranch parameter",
+    handler = classOf[StringOptionOptionHandler]
   )
-  val gitFilterRe: String = MergeCommitUtils.stagingPrMessagePattern.toString
+  val gitFilterRe: Option[String] = None
 
   @args.Option(
     name = "--gitAwareMessages",
@@ -227,14 +231,14 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     required = false,
     usage = "Remote cache mode. Available modes: readWrite, readOnly, writeOnly, forceWrite, forceWriteOnly"
   )
-  val remoteCacheMode: String = NoneArg
+  private val remoteCacheMode: String = NoneArg
 
   @args.Option(
     name = "--remoteCacheWritable",
     required = false,
     usage = "Write artifacts to remote cache (defaults to false)"
   )
-  val remoteCacheWritable: Boolean = false
+  protected val remoteCacheWritable: Boolean = false
 
   @args.Option(
     name = "--remoteCacheForceWrite",
@@ -242,7 +246,7 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     depends = Array("--remoteCacheWritable"),
     usage = "Force writing of artifacts to remote cache even on cache hits (defaults to false)"
   )
-  val remoteCacheForceWrite: Boolean = false
+  protected val remoteCacheForceWrite: Boolean = false
 
   lazy val cacheMode: CacheMode =
     if (remoteCacheMode == NoneArg) {
@@ -321,7 +325,8 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   @args.Option(
     name = "--buildModifiedScopes",
     required = false,
-    usage = "Include scopes with git changes when building (defaults to false)"
+    usage = "Include scopes with git changes when building (defaults to false)",
+    depends = Array("--gitAwareMessages")
   )
   val buildModifiedScopes: Boolean = false
 
@@ -728,6 +733,13 @@ private[buildtool] trait OptimusBuildToolCmdLineT
       "(defaults to value defined in 'optimus.buildtool.memconfig', typically '3,3,10,100')"
   )
   val memConfig: String = ""
+
+  @args.Option(
+    name = "--resolverThrottle",
+    required = false,
+    usage = "Thottle number of concurrently running Coursier resolutions (default 100)"
+  )
+  val resolverThrottle: Int = 100
 
   @args.Option(
     name = "--breadcrumbs",

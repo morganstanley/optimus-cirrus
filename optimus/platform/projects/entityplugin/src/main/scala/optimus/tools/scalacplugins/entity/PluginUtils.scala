@@ -84,6 +84,8 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
       val outerHash = newTermName("outerHash")
       val outerEquals = newTermName("outerEquals")
       val avoidZero = newTermName("avoidZero")
+      val strictEquals = newTermName("strictEquals")
+      val strictEqualsIsActive = newTermName("strictEqualsIsActive")
     }
 
     object localDefns {

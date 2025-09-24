@@ -93,7 +93,8 @@ class AppEventBlock(
   @async def createCommit(
       asserts: Set[(EntityReference, BusinessEventBlock)],
       ops: Iterable[PersistCacheEntry],
-      events: Iterable[CacheValue]
+      events: Iterable[CacheValue],
+      ignoreListForReferenceResolution: Set[EntityReference]
   ): (Map[WriteBusinessEvent.Put, Entity], List[PutApplicationEvent]) = {
     val assertMap = asserts groupBy { _._2 }
     val opsMap = ops.groupBy { _.vt }
@@ -148,20 +149,24 @@ class AppEventBlock(
         -1,
         clientTxTime,
         elevatedForUser,
-        minAssignableTtOpt = minAssignableTtOpt) :: Nil)
+        minAssignableTtOpt = minAssignableTtOpt,
+        ignoreListForReferenceResolution = ignoreListForReferenceResolution
+      ) :: Nil)
   }
 
   override def createCommandsInternal(
       asserts: Set[(EntityReference, BusinessEventBlock)],
-      cache: Iterable[PersistCacheEntry]): Seq[WriteCommand] =
-    createCommit(asserts, cache, validateAndGetBusinessEventBlocks(cache))._2
+      cache: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): Seq[WriteCommand] =
+    createCommit(asserts, cache, validateAndGetBusinessEventBlocks(cache), ignoreListForReferenceResolution)._2
 
   @async final def commit(
       asserts: Set[(EntityReference, BusinessEventBlock)],
-      ops: Iterable[PersistCacheEntry]): PersistResult = {
+      ops: Iterable[PersistCacheEntry],
+      ignoreListForReferenceResolution: Set[EntityReference]): PersistResult = {
     val eventsCache = validateAndGetBusinessEventBlocks(ops)
 
-    val (cmdToEntity, cmds) = createCommit(asserts, ops, eventsCache)
+    val (cmdToEntity, cmds) = createCommit(asserts, ops, eventsCache, ignoreListForReferenceResolution)
 
     def extractRef(ref: EntityReference): Entity = {
       Option(ref) flatMap { r =>
@@ -280,9 +285,10 @@ class DelayedAppEventBlock(
         saveState()
       else
         restoreState()
-      val asserts = prepareFlush()
+      val (asserts, ignoreListForReferenceResolution) = prepareFlush()
       val cmdsCache = cacheValues.flatten
-      val (cmdToEnt, cmds) = createCommit(asserts, cmdsCache, validateAndGetBusinessEventBlocks(cmdsCache))
+      val (cmdToEnt, cmds) =
+        createCommit(asserts, cmdsCache, validateAndGetBusinessEventBlocks(cmdsCache), ignoreListForReferenceResolution)
       completeFlush()
       Transaction.CommandCreatorResult(cmds.head, cmdToEnt)
     })

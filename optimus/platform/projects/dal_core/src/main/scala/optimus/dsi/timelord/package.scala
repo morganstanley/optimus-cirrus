@@ -48,7 +48,7 @@ package object timelord {
    */
   def primaryTypesOfReq(cmds: Seq[LeadWriterCommand]): Seq[String] = {
     val b = cmds flatMap {
-      case PutApplicationEvent(bes, _, _, Some(externalTxTime), _, _, _, _) =>
+      case PutApplicationEvent(bes, _, _, Some(externalTxTime), _, _, _, _, _) =>
         Some(bes)
       case _ =>
         None

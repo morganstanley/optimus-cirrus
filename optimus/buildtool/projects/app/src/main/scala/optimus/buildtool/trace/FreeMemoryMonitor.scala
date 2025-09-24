@@ -12,6 +12,7 @@
 package optimus.buildtool.trace
 
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils
 
 import java.util.Timer
@@ -21,11 +22,11 @@ object FreeMemoryMonitor {
   private val log = getLogger(this)
 
   def fromProperties(): FreeMemoryMonitor = {
-    val crit = sys.props.get("optimus.buildtool.memory.criticalMb").map(_.toInt).getOrElse(1000)
-    val warn = sys.props.get("optimus.buildtool.memory.warningMb").map(_.toInt).getOrElse(5000)
-    val checkFreq = sys.props.get("optimus.buildtool.memory.checkFrequencyMillis").map(_.toLong).getOrElse(60000L)
-    val maxCrit = sys.props.get("optimus.buildtool.memory.maxCritical").map(_.toInt).getOrElse(3)
-    val warnRepeat = sys.props.get("optimus.buildtool.memory.warningRepeat").map(_.toInt).getOrElse(5)
+    val crit = OptimusBuildToolProperties.asInt("memory.criticalMb").getOrElse(1000)
+    val warn = OptimusBuildToolProperties.asInt("memory.warningMb").getOrElse(5000)
+    val checkFreq = OptimusBuildToolProperties.asLong("memory.checkFrequencyMillis").getOrElse(60000L)
+    val maxCrit = OptimusBuildToolProperties.asInt("memory.maxCritical").getOrElse(3)
+    val warnRepeat = OptimusBuildToolProperties.asInt("memory.warningRepeat").getOrElse(5)
     new FreeMemoryMonitor(crit, warn, checkFreq, maxCrit, warnRepeat)
   }
 }

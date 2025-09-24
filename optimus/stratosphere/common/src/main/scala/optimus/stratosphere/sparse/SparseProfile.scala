@@ -19,7 +19,6 @@ import optimus.stratosphere.utils.ConfigUtils
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.security.InvalidParameterException
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 

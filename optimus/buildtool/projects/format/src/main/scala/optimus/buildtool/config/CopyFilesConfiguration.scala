@@ -15,8 +15,6 @@ import java.nio.file.Path
 
 import optimus.buildtool.files.RelativePath
 
-import scala.collection.immutable.Seq
-
 final case class CopyFilesConfiguration(tasks: Set[CopyFileTask])
 
 object CopyFilesConfiguration {

@@ -28,7 +28,6 @@ import optimus.buildtool.utils.PathUtils
 import optimus.platform.impure
 
 import java.net.URI
-import scala.collection.immutable.Seq
 
 trait Pathed {
 
@@ -221,6 +220,12 @@ object FileAsset {
     override def lastModified: Instant = throw new UnsupportedOperationException("last modified of no file")
     override def path: Path = throw new UnsupportedOperationException("path of no file")
   }
+}
+
+final case class HttpFileAsset(override val url: URL) extends BaseHttpAsset {
+  override type LocalAsset = FileAsset
+  override def asLocal(localPath: Path): FileAsset = FileAsset(localPath)
+  override protected def validate(): Unit = () // This is generic HttpFileAsset, we don't need to validate it
 }
 
 sealed trait JarAsset extends FileAsset {

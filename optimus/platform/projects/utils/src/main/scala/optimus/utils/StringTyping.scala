@@ -30,6 +30,7 @@ object StringTyping {
    * methodFrameName[Clazz]("method") will return "fully/qualified/Clazz.method"
    * Valid for ScalaClass#method, JavaClass#method and a static JavaClass.method.
    * For scala object methods, see objectMethodFrameName below.
+   * Turn # into $ so inner classes match java .getClass
    */
   def methodFrameString[X](method: String): String = macro methodFrameString$impl[X]
   def methodFrameString$impl[X: c.WeakTypeTag](c: whitebox.Context)(method: c.Expr[String]): c.Expr[String] = {
@@ -44,7 +45,7 @@ object StringTyping {
       !(tpe.typeSymbol.isJava && tpe.companion.members.exists(_.name.toString == m))
     )
       c.error(c.enclosingPosition, s"Method $m not found in $tpe")
-    val ret = tpe.typeConstructor.toString.replaceAllLiterally(".", "/") + "." + m
+    val ret = tpe.typeConstructor.toString.replace(".", "/").replace("#", "$") + "." + m
     c.Expr[String](Literal(Constant(ret)))
   }
 

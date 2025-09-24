@@ -65,10 +65,11 @@ private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => ne
   def isOldIndexRegistrationModeAllowed(className: String): Boolean =
     oldIndexRegistrationModeAllowList.exists(pattern => pattern.matcher(className).matches())
 
+  def registeredIndexesEnabledDefaultValue: Boolean = true
   def areRegisteredIndexesEnabled: Boolean =
     DiagnosticSettings.getBoolProperty(
       EnableProp,
-      "true".toBoolean
+      registeredIndexesEnabledDefaultValue
     )
 
   def isForceBrokerCacheUpdateForRegressionAndPerfTestsEnabled: Boolean =

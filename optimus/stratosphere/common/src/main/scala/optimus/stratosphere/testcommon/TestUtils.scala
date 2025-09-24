@@ -22,7 +22,6 @@ import org.junit.Assert._
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
 import scala.reflect.ClassTag
 import scala.util.Random
 

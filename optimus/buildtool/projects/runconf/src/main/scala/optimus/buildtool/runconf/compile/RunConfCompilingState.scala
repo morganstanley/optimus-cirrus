@@ -20,7 +20,6 @@ import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.ScopedName
 import optimus.buildtool.runconf.Template
 
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 private[compile] object RunConfCompilingState {
@@ -111,7 +110,9 @@ private[compile] class RunConfCompilingState(
 ) extends ResolvedRunConfCompilingState
     with UnresolvedRunConfCompilingState {
 
-  private val reporter: Reporter = Reporter(block, ScopedName(id, name), config, file, sourceRoot, initialProblems)
+  override def toString: String = s"RunConfCompilingState($scopedName)"
+
+  private val reporter: Reporter = Reporter(block, scopedName, config, file, sourceRoot, initialProblems)
 
   private val warnReporter: Reporter = reporter.withLevel(Level.Warn)
 

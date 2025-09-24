@@ -46,7 +46,6 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.FileTime
 import java.util.Collections
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -269,6 +268,8 @@ final case class GitFile(path: String, repo: Repository, fileId: ObjectId) {
   def exists: Boolean = fileId != ObjectId.zeroId
 }
 
+final case class GitStatus(modifiedFiles: Set[FileAsset], untrackedFiles: Set[FileAsset])
+
 final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorkspace) extends Log {
   val gitProcess = new GitProcess(ws.config)
 
@@ -282,10 +283,36 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorksp
     files(linesUntracked)
   }
 
+  // `status` uses the untracked cache, so is faster than `ls-files` (at the expense of not showing the content
+  // of untracked dirs)
+  def status(): GitStatus = {
+    val linesStatus = execute("-C", workspaceSourceRoot.pathString, "status", "--porcelain")
+    val (untracked, modifiedFileStrs) = linesStatus.partition(_.startsWith("??"))
+    val (untrackedDirStrs, untrackedFileStrs) = untracked.partition(_.endsWith("/"))
+
+    val modifiedFiles = files(modifiedFileStrs.map { s =>
+      // handle renames like: `R  foo.txt -> bar.txt`
+      val renameIndex = s.indexOf(" -> ")
+      val index = if (renameIndex > 0) renameIndex + 4 else 3
+      s.substring(index)
+    })
+    val untrackedFiles = files(untrackedFileStrs.map(_.substring(3)))
+    val untrackedDirs = dirs(untrackedDirStrs.map(_.substring(3)))
+    val untrackedDirFiles = untrackedDirs.flatMap(d => Directory.findFiles(d).toSet)
+
+    GitStatus(modifiedFiles, untrackedFiles ++ untrackedDirFiles)
+  }
+
   private def files(lines: Seq[String]): Set[FileAsset] =
     lines
       .filter(!_.contains(": "))
       .map(l => workspaceSourceRoot.resolveFile(l))
+      .toSet
+
+  private def dirs(lines: Seq[String]): Set[Directory] =
+    lines
+      .filter(!_.contains(": "))
+      .map(l => workspaceSourceRoot.resolveDir(l))
       .toSet
 
   private[utils] def analyzeDiffOutput(output: Seq[String]): Map[FileAsset, Set[Int]] = {

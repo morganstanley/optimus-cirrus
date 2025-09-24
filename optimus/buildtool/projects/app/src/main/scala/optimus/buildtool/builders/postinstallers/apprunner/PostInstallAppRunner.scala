@@ -30,7 +30,6 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 object PostInstallAppRunner {

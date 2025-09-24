@@ -15,6 +15,7 @@ import static optimus.graph.EvaluationState.IN_NON_CONCURRENT_SEQ;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -153,6 +154,7 @@ public class OGSchedulerLostConcurrency {
     }
 
     /** lazy initialisation of nameAndSource */
+    @Serial
     private void writeObject(ObjectOutputStream out) throws IOException {
       getNameAndSource();
       out.defaultWriteObject();
@@ -252,7 +254,7 @@ public class OGSchedulerLostConcurrency {
     /* Note: we can record based on level, but will dump into logs only if dumpCriticalSyncStacks is set */
     if (Settings.dumpCriticalSyncStacks && isCriticalSS && breached > 0) {
       StringBuilder sb = new StringBuilder();
-      NodeTask.NodeStackVisitor v =
+      var v =
           ntsk.waitersToNodeStack(
               false,
               new PrettyStringBuilder(sb),
@@ -361,7 +363,7 @@ public class OGSchedulerLostConcurrency {
         (tpe, sbpart) -> {
           lostCCStrBuilder.append("\n").append("\"").append(tpe).append("\"").append(": [\n");
           sbpart.setLength(sbpart.length() - 2); // drop last comma and \n
-          lostCCStrBuilder.append(sbpart.toString());
+          lostCCStrBuilder.append(sbpart);
           lostCCStrBuilder.append("\n],\n");
         });
     if (!lostCCMap.isEmpty())

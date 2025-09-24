@@ -41,7 +41,7 @@ public class OGSchedulerContext extends EvaluationQueue
       queue_h = MethodHandles.arrayElementVarHandle(NodeTask[].class);
       base_h = lookup.findVarHandle(WorkQueue.class, "_base", int.class);
     } catch (NoSuchFieldException | IllegalAccessException e) {
-      throw new GraphException("Unable to get varhandle for _currentNode", e);
+      throw new GraphException("Unable to get VarHandle", e);
     }
   }
 
@@ -896,7 +896,7 @@ public class OGSchedulerContext extends EvaluationQueue
             e);
         try {
           OGScheduler.log.error(
-              "Node trace where adapt threw: " + ntsk.waitersToNodeStack(false, false, false, -1));
+              "Node trace where adapt threw: {}", ntsk.waitersToNodeStack(false, false, false, -1));
         } catch (Throwable ignored) {
         }
         InfoDumper$.MODULE$.graphPanic(
@@ -937,10 +937,8 @@ public class OGSchedulerContext extends EvaluationQueue
    * Reasonable usage is from method$queued methods
    */
   public final void enqueueDirect(NodeTask task) {
-    OGTrace.enqueue(
-        _currentNode,
-        task,
-        false); // draw the edge even if not really enqueuing (for concurrency tracing)
+    // draw the edge even if not really enqueuing (for concurrency tracing)
+    OGTrace.enqueue(_currentNode, task, false);
     if (task.isDoneOrNotRunnable()) return; // [CAN_DROP] No point to enqueue
     if (Settings.schedulerAsserts) schedulerAssertOnEnqueue(task);
     localQ.localPush(task);

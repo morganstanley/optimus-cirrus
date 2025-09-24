@@ -41,7 +41,7 @@ import scala.collection.immutable.{IndexedSeq, Seq}
     override protected val sources: CppCompilationSources,
     compiler: AsyncCppCompiler,
     private[scope] val cppFallback: Boolean
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import scope._
 
   @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = upstream.cppForOurOsCompiler(sources.osVersion)

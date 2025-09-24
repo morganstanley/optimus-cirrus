@@ -28,6 +28,7 @@ import optimus.buildtool.files.Pathed
 import optimus.buildtool.files.PathedEntity
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
+import optimus.buildtool.generators.GeneratorType
 import optimus.buildtool.resolvers.DependencyInfo
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace
@@ -36,6 +37,7 @@ import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Validation
+import optimus.buildtool.utils.TrackedExternalState
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
@@ -72,7 +74,17 @@ object Artifacts {
       .map { case (scopeId, dupes) =>
         val messages = dupes
           .map { case (id, as) =>
-            CompilationMessage.error(s"Multiple (${as.size}) artifacts for key $id\n\t${as.mkString("\n\t")}")
+            val suffix = as match {
+              case Seq(a: MessagesArtifact, b: MessagesArtifact) =>
+                val aMessages = a.messages.toSet
+                val bMessages = b.messages.toSet
+                val onlyInA = aMessages.diff(bMessages)
+                val onlyInB = bMessages.diff(aMessages)
+                s"\t$a\n\tUnique messages:\n\t\t${onlyInA.mkString("\n\t\t")}\n\t$b\n\tUnique messages:\n\t\t${onlyInB.mkString("\n\t\t")}"
+              case _ =>
+                s"\t${as.mkString("\n\t")}"
+            }
+            CompilationMessage.error(s"Multiple (${as.size}) artifacts for key $id\n$suffix")
           }
           .to(Seq)
         InMemoryMessagesArtifact(
@@ -90,15 +102,12 @@ final case class Artifacts(scope: Seq[Artifact], upstream: Seq[Artifact]) {
 }
 
 private[buildtool] object PathedArtifact {
-  @entity private class ArtifactVersion(path: String) {
-    // a (fake) version number representing the state of the artifact we have written. By incrementing this we can
-    // invalidate the cache and cause a recreation of the artifact.
-    @node(tweak = true) private[artifacts] def version: Int = 1
-  }
+  // Represents the state of the artifact we have written.
+  // By tweaking this we can invalidate the cache and cause a recreation of the artifact.
+  @entity private class ArtifactVersion(path: String) extends TrackedExternalState
   @entersGraph def registerDeletion(p: Path): Tweak = {
     ObtTrace.addToStat(ObtStats.DeletedArtifacts, 1)
-    val v = ArtifactVersion(Pathed.pathString(p))
-    Tweak.byValue(v.version := v.version + 1)
+    ArtifactVersion(Pathed.pathString(p)).tweakVersion()
   }
   @node def version(asset: Asset): Int = ArtifactVersion(asset.pathString).version
 }
@@ -119,8 +128,7 @@ private[buildtool] object PathedArtifact {
   final def shouldBeStored: Boolean = storeWithErrors || !hasErrors
 
   @node def watchForDeletion(): this.type = {
-    // read version number simply to establish (fake) dependency
-    require(ArtifactVersion(pathString).version >= 0)
+    ArtifactVersion(pathString).establishDependency()
     this
   }
 
@@ -189,6 +197,44 @@ object Artifact {
   @node final def fingerprint: String = PathUtils.fingerprintElement(id.fingerprint, contentsHash)
 }
 
+@entity private[buildtool] sealed trait ExternalHashedArtifact extends HashedArtifact {
+  type ThisCachedArtifact <: CachedArtifact[ExternalHashedArtifact]
+  val isMaven: Boolean
+  override val id: ExternalArtifactId
+  def file: FileAsset
+  private[buildtool] def cached: ThisCachedArtifact
+}
+
+sealed trait CachedArtifact[+T <: ExternalHashedArtifact] {
+  @entersGraph def asEntity: T
+}
+
+@entity private[buildtool] final class ExternalBinaryArtifact(
+    val id: ExternalArtifactId,
+    val isMaven: Boolean,
+    val file: FileAsset,
+) extends ExternalHashedArtifact {
+  type ThisCachedArtifact = ExternalBinaryArtifact.CachedExternalBinaryArtifact
+
+  def cached: ExternalBinaryArtifact.CachedExternalBinaryArtifact =
+    ExternalBinaryArtifact.CachedExternalBinaryArtifact(id, isMaven, file)
+  @node override protected def contentsHash: String = Hashing.hashFileContent(file)
+  override def path: Path = file.path
+
+  @node def copy(newFile: FileAsset): ExternalBinaryArtifact =
+    ExternalBinaryArtifact(id, isMaven, newFile)
+}
+
+object ExternalBinaryArtifact {
+  final case class CachedExternalBinaryArtifact(
+      id: ExternalArtifactId,
+      isMaven: Boolean,
+      file: FileAsset
+  ) extends CachedArtifact[ExternalBinaryArtifact] {
+    @entersGraph override def asEntity: ExternalBinaryArtifact = ExternalBinaryArtifact(id, isMaven, file)
+  }
+}
+
 @entity private[buildtool] sealed trait MessagesArtifact extends Artifact {
   def id: InternalArtifactId
   def messages: Seq[CompilationMessage]
@@ -219,14 +265,12 @@ object MessagesArtifact {
 
 @entity trait FingerprintArtifact extends Artifact {
   def id: InternalArtifactId
-  val fingerprint: Seq[String]
   val hash: String
 }
 
 @entity final class FingerprintArtifactImpl private[artifacts] (
     val id: InternalArtifactId,
     val fingerprintFile: FileAsset,
-    val fingerprint: Seq[String],
     val hash: String
 ) extends FingerprintArtifact
     with PathedArtifact {
@@ -234,10 +278,9 @@ object MessagesArtifact {
 
   @node def copy(
       fingerprintFile: FileAsset = fingerprintFile,
-      fingerprint: Seq[String] = fingerprint,
       hash: String = hash,
   ): FingerprintArtifact with PathedArtifact =
-    FingerprintArtifact.create(id, fingerprintFile, fingerprint, hash)
+    FingerprintArtifact.create(id, fingerprintFile, hash)
 }
 
 // we don't want to store empty fingerprints on disk
@@ -253,20 +296,18 @@ object FingerprintArtifact {
   @node def create(
       id: InternalArtifactId,
       fingerprintFile: FileAsset,
-      fingerprint: Seq[String],
       hash: String
   ): FingerprintArtifact with PathedArtifact =
-    FingerprintArtifactImpl(id, fingerprintFile, fingerprint.toVector, hash).watchForDeletion()
+    FingerprintArtifactImpl(id, fingerprintFile, hash).watchForDeletion()
   // Artifacts created with `unwatched` will not be monitored for deletion automatically, and so will need to be
   // watched separately. All uses of `unwatched` outside tests should be accompanied by a method detailing how the
   // deletion monitoring will be achieved.
   def unwatched(
       id: InternalArtifactId,
       fingerprintFile: FileAsset,
-      fingerprint: Seq[String],
       hash: String
   ): FingerprintArtifact with PathedArtifact =
-    FingerprintArtifactImpl(id, fingerprintFile, fingerprint.toVector, hash)
+    FingerprintArtifactImpl(id, fingerprintFile, hash)
 
   def empty(
       id: InternalArtifactId,
@@ -277,18 +318,24 @@ object FingerprintArtifact {
 
 @entity private[buildtool] final class GeneratedSourceArtifact private (
     scopeId: ScopeId,
+    val generatorType: GeneratorType,
     val generatorName: String,
-    val tpe: GeneratedSourceArtifactType,
     val sourceJar: JarAsset,
     val sourcePath: RelativePath,
     override val messages: Seq[CompilationMessage],
     override protected val cachedHasErrors: Boolean
 ) extends MessagesArtifact
     with PathedArtifact {
-  override val id: InternalArtifactId = InternalArtifactId(scopeId, tpe, Some(generatorName))
+  override val id: InternalArtifactId = InternalArtifactId(
+    scopeId,
+    ArtifactType.GeneratedSource,
+    GeneratedSourceArtifact.discriminator(generatorType, generatorName)
+  )
   override val taskCategory: MessageTrace = trace.GenerateSource
 
   override def path: Path = sourceJar.path
+
+  def generator: String = GeneratedSourceArtifact.generator(generatorType, generatorName)
 
   @node def hashedContent(filter: PathFilter = NoFilter): SortedMap[SourceUnitId, HashedContent] = {
     Jars.withJar(sourceJar) { root =>
@@ -298,7 +345,7 @@ object FingerprintArtifact {
         val jarRootToSourceFilePath = root.relativize(f)
         val sourceFolderToFilePath = sourceDir.relativize(f)
         val id =
-          GeneratedSourceUnitId(scopeId, generatorName, tpe, sourceJar, jarRootToSourceFilePath, sourceFolderToFilePath)
+          GeneratedSourceUnitId(scopeId, generatorName, sourceJar, jarRootToSourceFilePath, sourceFolderToFilePath)
         val content = Hashing.hashFileWithContent(f)
         id -> content
       }: _*)
@@ -311,44 +358,52 @@ object FingerprintArtifact {
 object GeneratedSourceArtifact {
   @node def create(
       scopeId: ScopeId,
+      generatorType: GeneratorType,
       generatorName: String,
-      tpe: GeneratedSourceArtifactType,
       sourceJar: JarAsset,
       sourcePath: RelativePath,
       messages: Seq[CompilationMessage]
   ): GeneratedSourceArtifact =
-    create(scopeId, generatorName, tpe, sourceJar, sourcePath, messages, MessagesArtifact.hasErrors(messages))
+    create(scopeId, generatorType, generatorName, sourceJar, sourcePath, messages, MessagesArtifact.hasErrors(messages))
 
   @node private[artifacts] def create(
       scopeId: ScopeId,
+      generatorType: GeneratorType,
       generatorName: String,
-      tpe: GeneratedSourceArtifactType,
       sourceJar: JarAsset,
       sourcePath: RelativePath,
       messages: Seq[CompilationMessage],
       hasErrors: Boolean
   ): GeneratedSourceArtifact =
-    GeneratedSourceArtifact(scopeId, generatorName, tpe, sourceJar, sourcePath, messages, hasErrors).watchForDeletion()
+    GeneratedSourceArtifact(scopeId, generatorType, generatorName, sourceJar, sourcePath, messages, hasErrors)
+      .watchForDeletion()
 
   // Artifacts created with `unwatched` will not be monitored for deletion automatically, and so will need to be
   // watched separately. All uses of `unwatched` outside tests should be accompanied by a method detailing how the
   // deletion monitoring will be achieved.
   def unwatched(
       scopeId: ScopeId,
+      generatorType: GeneratorType,
       generatorName: String,
-      tpe: GeneratedSourceArtifactType,
       sourceJar: JarAsset,
       sourcePath: RelativePath,
       messages: Seq[CompilationMessage]
   ): GeneratedSourceArtifact =
     GeneratedSourceArtifact(
       scopeId,
+      generatorType,
       generatorName,
-      tpe,
       sourceJar,
       sourcePath,
       messages,
-      MessagesArtifact.hasErrors(messages))
+      MessagesArtifact.hasErrors(messages)
+    )
+
+  def generator(generatorType: GeneratorType, generatorName: String): String =
+    if (generatorType.name == generatorName) generatorName else s"${generatorType.name}-$generatorName"
+
+  def discriminator(generatorType: GeneratorType, generatorName: String): Option[String] =
+    Some(generator(generatorType, generatorName))
 }
 
 @entity private[buildtool] sealed trait ClassFileArtifact extends HashedArtifact {
@@ -483,9 +538,11 @@ object InternalClassFileArtifact {
     val containsAgent: Boolean,
     val containsOrUsedByMacros: Boolean,
     val isMaven: Boolean
-) extends ClassFileArtifact {
-  private[buildtool] def cached: ExternalClassFileArtifact.Cached =
-    ExternalClassFileArtifact.Cached(
+) extends ClassFileArtifact
+    with ExternalHashedArtifact {
+  type ThisCachedArtifact = ExternalClassFileArtifact.CachedExternalClassFileArtifact
+  private[buildtool] def cached: ExternalClassFileArtifact.CachedExternalClassFileArtifact =
+    ExternalClassFileArtifact.CachedExternalClassFileArtifact(
       id,
       file,
       source,
@@ -540,7 +597,7 @@ object InternalClassFileArtifact {
 }
 
 @entity object ExternalClassFileArtifact {
-  final case class Cached(
+  final case class CachedExternalClassFileArtifact(
       id: ExternalArtifactId,
       file: JarAsset,
       source: Option[JarAsset],
@@ -550,7 +607,7 @@ object InternalClassFileArtifact {
       containsAgent: Boolean,
       containsOrUsedByMacros: Boolean,
       isMaven: Boolean
-  ) {
+  ) extends CachedArtifact[ExternalClassFileArtifact] {
     @entersGraph def asEntity: ExternalClassFileArtifact =
       create(
         id,
@@ -620,16 +677,12 @@ object InternalClassFileArtifact {
    * codetree) we currently don't track changes to those libraries individually and instead have a single central
    * version which is incremented for every new build
    */
-  @node(tweak = true) private def mutableExternalArtifactVersion: Int = 1
+  @entity object mutableExternalArtifactState extends TrackedExternalState
 
   @node def witnessMutableExternalArtifactState(externalPath: Path): Unit = {
     ObtTrace.addToStat(ObtStats.MutableExternalDependencies, Set(externalPath))
-    // just read the value to establish a dependency
-    assert(mutableExternalArtifactVersion > 0)
+    mutableExternalArtifactState.establishDependency()
   }
-
-  @entersGraph def updateMutableExternalArtifactState(): Seq[Tweak] =
-    Tweaks.byValue(mutableExternalArtifactVersion := mutableExternalArtifactVersion + 1).toIndexedSeq
 }
 
 @entity sealed trait CppArtifact extends HashedArtifact
@@ -945,7 +998,7 @@ object PathingArtifact {
 object ResolutionArtifact {
   final case class Cached(
       id: InternalArtifactId,
-      resolvedArtifactsToDepInfos: Seq[(ExternalClassFileArtifact.Cached, Seq[DependencyInfo])],
+      resolvedArtifactsToDepInfos: Seq[(CachedArtifact[ExternalHashedArtifact], Seq[DependencyInfo])],
       messages: Seq[CompilationMessage],
       // IMPORTANT - why are we not using Asset for jniPaths and sticking with String?
       // one client ivy file uses an objectively unusual workaround where the linux-specific AFS .exec path is

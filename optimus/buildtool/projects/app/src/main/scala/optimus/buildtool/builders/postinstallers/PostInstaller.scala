@@ -15,7 +15,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.FileAsset
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.Set
 
 /**

@@ -33,7 +33,6 @@ import optimus.buildtool.utils.Hide
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.util.Try
 

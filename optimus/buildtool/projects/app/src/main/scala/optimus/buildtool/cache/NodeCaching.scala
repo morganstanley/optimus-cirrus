@@ -29,7 +29,7 @@ object NodeCaching {
   // custom cache to ensure that nodes that would be undesirable to evaluate more than necessary are not evicted
   private[buildtool] val optimizerCache = new UNodeCache(
     name = "OptimizerCache",
-    maxSize = 10000,
+    maxSize = 100000,
     requestedConcurrency = Settings.cacheConcurrency,
     cacheBatchSize = NodeCCache.defaultCacheBatchSize,
     cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding
@@ -39,6 +39,15 @@ object NodeCaching {
   private[buildtool] val sourceCache = new UNodeCache(
     name = "SourceCache",
     maxSize = 500000,
+    requestedConcurrency = Settings.cacheConcurrency,
+    cacheBatchSize = NodeCCache.defaultCacheBatchSize,
+    cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding
+  )
+
+  // custom cache to reduce chance of re-uploading already uploaded artifacts even in forceWriteMode
+  private[buildtool] val uploadCache = new UNodeCache(
+    name = "UploaderCache",
+    maxSize = 100000,
     requestedConcurrency = Settings.cacheConcurrency,
     cacheBatchSize = NodeCCache.defaultCacheBatchSize,
     cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding

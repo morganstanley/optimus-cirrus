@@ -15,6 +15,7 @@ import static optimus.NodeTaskTransformer.nodeTaskDesc;
 import static optimus.NodeTaskTransformer.nodeTaskTpe;
 import static optimus.NodeTaskTransformer.tpdMaskDesc;
 import static optimus.NodeTaskTransformer.tpdMaskTpe;
+import static org.objectweb.asm.Opcodes.ASM9;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
@@ -261,12 +262,12 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
 }
 
 /** [SEE_MASK_SUPPORT_GENERATION] */
-class NodeTaskAdapter extends AddFieldsAdapter {
+class NodeTaskAdapter extends ClassVisitor implements Opcodes {
   private static final String removeField0 = "_tpd0";
   private static final String removeField1 = "_tpd1";
 
   NodeTaskAdapter(List<String> properties, ClassVisitor cv) {
-    super(properties, cv);
+    super(ASM9, FieldInjector.forProperties(properties, null, cv));
   }
 
   @Override

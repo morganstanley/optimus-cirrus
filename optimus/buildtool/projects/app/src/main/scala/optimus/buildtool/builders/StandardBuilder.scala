@@ -41,7 +41,6 @@ import optimus.graph.CancellationScope
 import optimus.graph.OptimusCancellationException
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 sealed trait BuildResult {
@@ -199,7 +198,12 @@ class StandardBuilder(
                     case ce: CompilationException => ce.scopeId
                     case _                        => scopeId
                   }
-                  throw new RuntimeException(s"Failed to build $exceptionScopeId", e)
+                  val (translated, errorMessage) = Utils.translateException(e)
+                  val message = errorMessage match {
+                    case Some(s) => s"Compilation failed for $exceptionScopeId: $s"
+                    case None    => s"Compilation failed for $exceptionScopeId"
+                  }
+                  throw new RuntimeException(message, translated)
                 }
 
                 // Make this a def so we can call it (and add to completedScopes) at the point of logging
@@ -221,32 +225,37 @@ class StandardBuilder(
                 artifacts.all
               }.distinct
 
-              val compiledScopeIds = Artifact.scopeIds(compiledArtifacts).toSet
-              // Note: We deliberately exclude `compiledScopeIds` here since if we've explicitly built them
-              // then we don't need to build their pathing jars again
-              val bundleScopes = {
-                val compiledPathingBundles = factory.scopeConfigSource.pathingBundles(compiledScopeIds)
-                minimalInstallScopes match {
-                  case Some(minimal) =>
-                    // when --minimal, we only includes direct bundle=true modules artifacts in related pathing jars
-                    // since we won't install transitive modules app scripts, install trans-bundle pathing jar here for
-                    // runtime usages(/bin dir) doesn't make any sense
-                    factory.scopeConfigSource.pathingBundles(minimal).intersect(compiledPathingBundles)
-                  case None => compiledPathingBundles
-                }
-              } -- compiledScopeIds
-              // search all bundle=true modules as additional build targets to generate bundle artifacts
-              val bundleCompilations = bundleScopes.toSeq.apar.flatMap(factory.lookupScope)
-              val bundleArtifacts = bundleCompilations.apar.flatMap { sc =>
-                val scopeId = sc.id
-                log.debug(s"[$scopeId] Generating bundle artifacts...")
-                val artifacts = sc.bundlePathingArtifacts(compiledArtifacts)
-                artifacts match {
-                  case Seq(_) => log.debug(s"[$scopeId] 1 bundle artifact generated")
-                  case _      => log.debug(s"[$scopeId] ${artifacts.size} bundle artifacts generated")
-                }
-                artifacts
-              }.distinct
+              val bundleArtifacts = if (!Artifact.hasErrors(compiledArtifacts)) {
+                val compiledScopeIds = Artifact.scopeIds(compiledArtifacts).toSet
+                // Note: We deliberately exclude `compiledScopeIds` here since if we've explicitly built them
+                // then we don't need to build their pathing jars again
+                val bundleScopes = {
+                  val compiledPathingBundles = factory.scopeConfigSource.pathingBundles(compiledScopeIds)
+                  minimalInstallScopes match {
+                    case Some(minimal) =>
+                      // when --minimal, we only includes direct bundle=true modules artifacts in related pathing jars
+                      // since we won't install transitive modules app scripts, install trans-bundle pathing jar here for
+                      // runtime usages(/bin dir) doesn't make any sense
+                      factory.scopeConfigSource.pathingBundles(minimal).intersect(compiledPathingBundles)
+                    case None => compiledPathingBundles
+                  }
+                } -- compiledScopeIds
+                // search all bundle=true modules as additional build targets to generate bundle artifacts
+                val bundleCompilations = bundleScopes.toSeq.apar.flatMap(factory.lookupScope)
+                bundleCompilations.apar.flatMap { sc =>
+                  val scopeId = sc.id
+                  log.debug(s"[$scopeId] Generating bundle artifacts...")
+                  val artifacts = sc.bundlePathingArtifacts(compiledArtifacts)
+                  artifacts match {
+                    case Seq(_) => log.debug(s"[$scopeId] 1 bundle artifact generated")
+                    case _      => log.debug(s"[$scopeId] ${artifacts.size} bundle artifacts generated")
+                  }
+                  artifacts
+                }.distinct
+              } else {
+                log.debug("Skipping bundle artifact generation due to errors")
+                Nil
+              }
 
               Artifacts.validate(factory.globalMessages ++ compiledArtifacts ++ bundleArtifacts)
             }
@@ -255,8 +264,9 @@ class StandardBuilder(
       }
 
       val res = BuildResult(allArtifacts, modifiedFiles)
-      val directScopes = scopedCompilations.map(_.id).toSet
+      ObtTrace.finalizeBuild(res.successful)
 
+      val directScopes = scopedCompilations.map(_.id).toSet
       if (res.successful) {
         log.info(s"${allArtifacts.size} artifacts successfully generated")
         val transitiveScopes = Artifact.transitiveIds(directScopes, allArtifacts)
@@ -355,7 +365,7 @@ class StandardBuilder(
          |\tTotal scala CPU time (after signatures ready): ${timings(Scala)}%,dms
          |\tTotal CPU time to signatures ready: ${timings(Signatures)}%,dms
          |\tTotal java CPU time: ${timings(Java)}%,dms
-         |\tTotal queue time: ${timings(Queue)}%,dms""".stripMargin
+         |\tTotal scala queue time: ${timings(Queue(Scala))}%,dms""".stripMargin
     )
   }
 

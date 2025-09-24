@@ -21,6 +21,7 @@ main {
     ]
 
     libs = [
+      nl.grons.metrics4-scala,
       org.scala-lang.modules.scala-parser-combinators
       ossjava.args4j
       ossjava.commons-compress
@@ -31,6 +32,7 @@ main {
       ossjava.junit
       ossscala.scala
       ossscala.scala-collection-compat
+      ossscala.scala-xml
       ossscala.spray-json
     ]
   }
@@ -45,7 +47,6 @@ test {
 }
 
 integrationTest {
-  root = "src/test-integration"
   compile {
     libs = [
       ossjava.junit

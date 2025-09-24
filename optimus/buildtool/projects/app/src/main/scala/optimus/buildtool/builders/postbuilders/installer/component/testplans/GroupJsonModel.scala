@@ -29,7 +29,6 @@ import optimus.buildtool.format.WorkspaceStructure
 import optimus.utils.CollectionUtils._
 
 import scala.collection.Set
-import scala.collection.immutable.Seq
 
 object TestType {
   private val defaultAdditionalBindings: Map[String, String] = Map(
@@ -223,7 +222,7 @@ final case class Group(
 
   def enrichedSingleTestOwner(workspaceStructure: WorkspaceStructure): Map[String, String] = {
     val uniqueOwners = entries.flatMap { entry =>
-      workspaceStructure.modules.get(entry.moduleId).map(_.owningGroup.split(',').head)
+      workspaceStructure.modules.get(entry.moduleId).flatMap(_.owningGroup.map(_.split(',').head))
     }.distinct
 
     if (uniqueOwners.size == 1) {

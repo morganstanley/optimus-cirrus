@@ -268,6 +268,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
           if (valSym.hasAttachment[NodeFieldType.BareVal] || valSym.hasAttachment[StoredGetter]) {
             // If we don't have a separate DefDef getter to transform later, convert the ValDef to a DefDef
             valSym.resetFlag(STABLE | ACCESSOR)
+            markAsGenerated(valSym)
             val newRhs = {
               if (getterSym eq NoSymbol) EmptyTree // deferred
               else if (needsLazyUnpickling) {
@@ -280,10 +281,12 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
             // we've already got a getter, so we don't need this ValDef
             valSym.enclClass.info.decls.unlink(valSym)
             valSym.removeAttachment[Attachment.Node]
+
             // valSym.attachments.get[StoredBackingVal] match {
             // case Some(StoredBackingVal(getterSym0, _)) =>
             val getterSym: Symbol = valSym.getter
             getterSym.resetFlag(STABLE | ACCESSOR)
+            markAsGenerated(getterSym)
             if (valSym.hasAnnotation(StoredAnnotation))
               getterSym.addAnnotation(StoredAnnotation)
             // case _ =>
@@ -530,15 +533,18 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
 
       if (includeOuter || args.nonEmpty) {
         val hashSym =
-          entitySymbol.newMethod(names.argsHash).setFlag(OVERRIDE | PROTECTED).setInfo(NullaryMethodType(IntClass.tpe))
+          entitySymbol
+            .newMethod(names.argsHash)
+            .setFlag(OVERRIDE | PROTECTED | SYNTHETIC)
+            .setInfo(NullaryMethodType(IntClass.tpe))
         entitySymbol.info.decls enter hashSym
         val hashStart =
           if (includeOuter) Apply(PluginSupport.outerHash, gen.mkAttributedThis(entitySymbol) :: Nil) else LIT(1)
         val hashDef = localTyper.typedPos(pos) { DefDef(hashSym, mkArgsHashT(args, entitySymbol, hashStart)) }
 
-        val equalsSym = entitySymbol.newMethod(names.argsEquals, pos).setFlag(OVERRIDE | PROTECTED)
+        val equalsSym = entitySymbol.newMethod(names.argsEquals, pos).setFlag(OVERRIDE | PROTECTED | SYNTHETIC)
         val argSym = equalsSym.newValueParameter(names.arg, pos).setInfo(EntityClass.tpe)
-        equalsSym.setInfo(MethodType(List(argSym), BooleanClass.tpe))
+        equalsSym.setInfoAndEnter(MethodType(List(argSym), BooleanClass.tpe))
         val equalsDef = localTyper.typedPos(pos) {
           mkArgsEqualsT(argSym, entitySymbol, args, includeOuter).setSymbol(equalsSym)
         }
@@ -554,20 +560,20 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       // to generate def foo$impl: X = PluginHelpers.resolveRef(...)
       val implGetter = entityCls
         .newMethod(newTermName("" + valName + "$impl"))
-        .setFlag(flags | PRIVATE | (if (valSym.isParamAccessor) PARAMACCESSOR | ACCESSOR else 0L))
+        .setFlag(flags | SYNTHETIC | PRIVATE | (if (valSym.isParamAccessor) PARAMACCESSOR | ACCESSOR else 0L))
         .setInfo(NullaryMethodType(valSym.tpe))
       implGetter.setAttachments(implGetter.attachments.addElement(StoredGetter(true)))
 
       // to generate def foo$queued: NodeFuture[X] = PluginHelpers.resolveRefQueued(...)
       val queuedGetter = entityCls
         .newMethod(newTermName("" + valName + "$queued"))
-        .setFlag(flags)
+        .setFlag(flags | SYNTHETIC)
         .setInfo(NullaryMethodType(appliedType(NodeFuture.tpe, List(valSym.tpe.finalResultType))))
 
       // to generate def foo#newNode(): Node[X] = PluginHelpers.resolveRefNewNode(...)
       val newNodeGetter = entityCls
         .newMethod(newTermName("" + valName + "$newNode"))
-        .setFlag(flags)
+        .setFlag(flags | SYNTHETIC)
         .setInfo(
           MethodType(
             Nil,
@@ -606,6 +612,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         .newMethod(getterName, valDef.pos)
         .setFlag(flags)
         .setInfo(NullaryMethodType(if (tpe ne null) tpe else symbol.tpe))
+      markAsGenerated(getterSym)
       entityCls.info.decls enter getterSym
       val block = gen.mkAttributedRef(symbol)
       localTyper.typedPos(valDef.pos) { DefDef(getterSym, block) }.asInstanceOf[DefDef]
@@ -651,7 +658,13 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         ValDef(NoMods, names.key, TypeTree(entitySym.tpe), mkCast(Ident(names.arg), TypeTree(entitySym.tpe))),
         mkLogicalAnd(listOfEquals.result()))
       val rhs = If(cond, body, FALSE)
-      DefDef(Modifiers(OVERRIDE | PROTECTED), names.argsEquals, Nil, objArg, gen.mkAttributedRef(BooleanClass), rhs)
+      DefDef(
+        Modifiers(OVERRIDE | PROTECTED | SYNTHETIC),
+        names.argsEquals,
+        Nil,
+        objArg,
+        gen.mkAttributedRef(BooleanClass),
+        rhs)
     }
   }
 

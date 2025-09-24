@@ -107,22 +107,31 @@ public class NodeMetaFactory {
         }
       }
       case CMD_OBSERVED_VALUE_NODE -> {
-        var propertyID = getPropertyID(entityCls, info);
-        // observedValueNode(e.method, e, 148 aka propertyID)
-        var mhIncomplete =
-            foldArguments(mhPluginOVN, nodeMethod.asType(methodType(Object.class, Entity.class)));
-        yield mkConstantCallSite(insertArguments(mhIncomplete, 1, propertyID), factoryType);
+        if (isEntity) {
+          var propertyID = getPropertyID(entityCls, info);
+          // observedValueNode(e.method, e, 148 aka propertyID)
+          var mhIncomplete =
+              foldArguments(mhPluginOVN, nodeMethod.asType(methodType(Object.class, Entity.class)));
+          yield mkConstantCallSite(insertArguments(mhIncomplete, 1, propertyID), factoryType);
+        } else {
+          // acn(e.method)
+          var value = nodeMethod.asType(methodType(Object.class, entityCls));
+          yield mkConstantCallSite(filterReturnValue(value, mhPluginACN), factoryType);
+        }
       }
       case CMD_NODE, CMD_ASYNC -> {
-        var methodName = unmangleName(entityCls, info.getName());
-        var clsID = register(entityCls, methodName, source, line, COLUMN_NA, -1);
-        var pd = LPropertyDescriptor.get(clsID);
-        pd.methodType = info.getMethodType();
+
         // Consider: Making all of the flags should come from byte code
         var customTrait = (nodeFlags & NF_EXPOSE_ARGS_TRAIT) != 0;
         var async = cmd.startsWith(CMD_ASYNC);
         var hasProperty = (isEntity && !async) || customTrait;
         var propertyID = hasProperty ? getPropertyID(entityCls, info) : -1;
+
+        var methodName = unmangleName(entityCls, info.getName());
+        var clsID = register(entityCls, methodName, source, line, COLUMN_NA, -1, propertyID);
+        var pd = LPropertyDescriptor.get(clsID);
+        pd.methodType = info.getMethodType();
+
         var flags = nodeFlags;
         flags |= isEntity && !async ? 0 : NF_PLAIN_ASYNC;
         if (hasProperty && NodeTrace.forID(propertyID).hasTweakHandler()) flags |= NF_TWEAKHANDLER;
@@ -200,7 +209,7 @@ public class NodeMetaFactory {
     int flags = NF_NODE_FUNCTION;
     flags |= lambdaFlags & NF_TRIVIAL;
 
-    var clsID = register(entityCls, methodName, source, lineNumber, columnNumber, localId);
+    var clsID = register(entityCls, methodName, source, lineNumber, columnNumber, localId, -1);
     assignProfileID(LPropertyDescriptor.get(clsID));
 
     var gen = new NodeClassGenerator(1, info, invokedType, flags);

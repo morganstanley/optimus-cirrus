@@ -40,8 +40,6 @@ import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class GenericFileInstaller(installer: Installer, fileInstaller: FileInstaller) extends ComponentInstaller {
   import installer._
 

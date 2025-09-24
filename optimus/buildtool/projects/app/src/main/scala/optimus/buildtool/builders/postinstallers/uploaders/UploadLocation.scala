@@ -22,7 +22,7 @@ import org.apache.commons.lang3.SystemUtils
 import java.nio.file.FileSystem
 import java.nio.file.FileSystems
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
+import java.util.UUID
 
 sealed abstract class UploadLocation {
 
@@ -74,6 +74,14 @@ sealed abstract class UploadLocation {
 
 object UploadLocation {
 
+  trait UUIDGenerator {
+    def generate(): String
+  }
+
+  object UUIDGenerator {
+    def getDefault: UUIDGenerator = () => UUID.randomUUID().toString
+  }
+
   val useRsync: Boolean =
     sys.props.get("UploadLocation.useRsync").map { _.toBoolean }.getOrElse(!OsUtils.isWindows)
 
@@ -94,11 +102,12 @@ object UploadLocation {
     override def initCmds(format: UploadFormat) = Seq.empty
   }
 
-  final case class Remote(host: String, target: Directory, decompressAfterUpload: Boolean) extends UploadLocation {
+  final case class Remote(host: String, target: Directory, decompressAfterUpload: Boolean, uuidGenerator: UUIDGenerator)
+      extends UploadLocation {
     override protected val location: String = s"$host:${str(target)}"
 
     // We assume the remote host is always linux. Don't use "//tmp" here because Paths.get will fail on windows.
-    private val Tmp = Directory(Paths.get("//tmp/obt-upload"))
+    private val Tmp = Directory(Paths.get(s"//tmp/obt-upload-${uuidGenerator.generate()}"))
     private val AND = Seq("&&")
 
     // remotely, we need to (for files):
@@ -205,13 +214,17 @@ object UploadLocation {
     }
   }
 
-  def apply(text: String, decompressAfterUpload: Boolean, fs: FileSystem = FileSystems.getDefault): UploadLocation = {
+  def apply(
+      text: String,
+      decompressAfterUpload: Boolean,
+      fs: FileSystem = FileSystems.getDefault,
+      uuidGenerator: UUIDGenerator = UUIDGenerator.getDefault): UploadLocation = {
     text.split(":").filter(_.nonEmpty) match {
       case Array(volume, _) if volume.length == 1 =>
         // assuming we have a local Windows path here
         // since in Windows volumes are identified by a single digit letter
         Local(Directory(fs.getPath(text)), decompressAfterUpload)
-      case Array(h, d) => Remote(h, Directory(fs.getPath(d)), decompressAfterUpload)
+      case Array(h, d) => Remote(h, Directory(fs.getPath(d)), decompressAfterUpload, uuidGenerator)
       case Array(d)    => Local(Directory(fs.getPath(d)), decompressAfterUpload)
       case _           => throw new IllegalArgumentException(s"Invalid upload location $text")
     }

@@ -103,7 +103,7 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
 
   override def matchesKeyFromRSS(key: NodeKey[_]): Boolean = key.propertyInfo == propertyInfo
 
-  def tweakByValueExtractor(extractor: TweakKeyExtractor, key: AnyRef, valueProvider: SITweakValueProvider): Tweak = {
+  def tweakByValueExtractor(extractor: TweakKeyExtractor, key: Any, valueProvider: SITweakValueProvider): Tweak = {
     val fullKey = ExtractorTweakableKey(key, this)
     val target = new TweakKeyExtractorTarget(this, extractor, fullKey)
     new Tweak(target, new TweakNode(new TweakValueProviderNode(valueProvider, modify = false)))
@@ -111,13 +111,13 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
 
   def tweakByValueExtractor(
       extractor: TweakKeyExtractor,
-      keys: Seq[AnyRef],
+      keys: Seq[Any],
       valueProvider: SITweakValueProvider): Seq[Tweak] =
     keys.map(tweakByValueExtractor(extractor, _, valueProvider))
 
   def tweakByModifyValueExtractor(
       extractor: TweakKeyExtractor,
-      key: AnyRef,
+      key: Any,
       valueProvider: SITweakValueProvider): Tweak = {
     val fullKey = ExtractorTweakableKey(key, this)
     val target = new TweakKeyExtractorTarget(this, extractor, fullKey)

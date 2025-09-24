@@ -17,9 +17,8 @@ import java.nio.file.Path
 import optimus.buildtool.files.Directory.NoFilter
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.Directory.fileExtensionPredicate
+import optimus.buildtool.utils.TrackedExternalState
 import optimus.platform._
-
-import scala.collection.immutable.Seq
 
 @entity trait PathedEntity {
   self: Pathed =>
@@ -91,11 +90,7 @@ import scala.collection.immutable.Seq
   import ReactiveDirectory._
 
   private val _version = DirectoryVersion(pathString)
-  @node final def declareVersionDependence(): Unit = {
-    // read version number simply to establish (fake) dependency
-    require(_version.version >= 0)
-  }
-  @node private[files] def peekAtVersionForUnitTest: Int = _version.version
+  @node final def declareVersionDependence(): Unit = _version.establishDependency()
 
   @node final def listFiles: Seq[FileAsset] = {
     declareVersionDependence()
@@ -118,15 +113,8 @@ import scala.collection.immutable.Seq
 }
 
 object ReactiveDirectory {
-  @entity private class DirectoryVersion(path: String) {
-    // a (fake) version number representing the state of the filesystem that we have read. By incrementing this we can
-    // invalidate the cache and cause a re-read of the filesystem
-    @node(tweak = true) private[files] def version: Int = 1
-  }
-  @entersGraph def tweakVersion(p: Path): Tweak = {
-    val v = DirectoryVersion(Pathed.pathString(p))
-    Tweak.byValue(v.version := v.version + 1)
-  }
+  @entity private class DirectoryVersion(path: String) extends TrackedExternalState
+  @entersGraph def tweakVersion(p: Path): Tweak = DirectoryVersion(Pathed.pathString(p)).tweakVersion()
 
   @entity private[files] class SimpleReactiveDirectory(
       val path: Path,

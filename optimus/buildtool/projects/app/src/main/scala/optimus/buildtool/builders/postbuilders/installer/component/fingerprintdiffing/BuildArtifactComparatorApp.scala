@@ -13,6 +13,8 @@ package optimus.buildtool.builders.postbuilders.installer.component.fingerprintd
 
 import optimus.buildtool.artifactcomparator.BuildArtifactComparatorDeps
 import optimus.buildtool.builders.postbuilders.installer.component.fingerprintdiffing.BuildArtifactComparator.fingerprintDiffs
+import optimus.buildtool.builders.postbuilders.installer.component.testplans.GitChanges
+import optimus.buildtool.config.FingerprintsDiffConfiguration
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.platform._
@@ -43,8 +45,10 @@ import scala.util.Using
 class BuildArtifactComparator(
     deps: BuildArtifactComparatorDeps,
     scopeConfigSource: ScopeConfigurationSource,
+    fingerprintsConfig: FingerprintsDiffConfiguration,
     regCopyLocal: Boolean,
-    version: String) {
+    version: String,
+    gitChanges: GitChanges) {
 
   private val regArtifactsSearchStrategy: ArtifactsSearchStrategy =
     new StandardArtifactsSearchStrategy(None, deps.params.regArtifactsPathOpt)
@@ -144,14 +148,19 @@ class BuildArtifactComparator(
       case None           => printFingerprints(diffs)
     }
 
-    val changedScopesStr = diffs.map(_.scope) ++ runtimeDependencyChangedScopes.map(_.properPath)
-    deps.params.outputChangedScopesPathOpt match {
-      case Some(filePath) => saveChangedScopesReport(filePath, changedScopesStr)
-      case None           => printChangedScopes(changedScopesStr)
+    val gitScopes = gitChangedScopes()
+    if (gitScopes.nonEmpty) {
+      log.info(s"[Dynamic Scoping] Falling back to git for scopes: ${gitScopes.mkString(", ")}")
     }
 
     val changedScopes =
-      diffs.map(_.scope).flatMap(FingerprintDependencyAnalyzer.toScopeId) ++ runtimeDependencyChangedScopes
+      diffs.map(_.scope).flatMap(FingerprintDependencyAnalyzer.toScopeId) ++ runtimeDependencyChangedScopes ++ gitScopes
+
+    val changedScopesPaths = changedScopes.map(_.properPath)
+    deps.params.outputChangedScopesPathOpt match {
+      case Some(filePath) => saveChangedScopesReport(filePath, changedScopesPaths)
+      case None           => printChangedScopes(changedScopesPaths)
+    }
 
     changedScopes
   }
@@ -235,6 +244,20 @@ class BuildArtifactComparator(
     log.info(s"Got total of ${changedScopes.size} runtime changed scopes: ${changedScopes.mkString(",")}")
     changedScopes
   }
+
+  /**
+   * Fingerprints do not support all of the file types, so we need to fall back to Git
+   */
+  private def gitChangedScopes(): Set[ScopeId] = {
+    def isFingerprintsUnsupportedFile(filePath: Path): Boolean =
+      !fingerprintsConfig.supportedExtensions.exists(filePath.toString.endsWith)
+
+    gitChanges.changesByScope
+      .getOrElse(Map.empty)
+      .filter { case (_, changedFiles) => changedFiles.exists(isFingerprintsUnsupportedFile) }
+      .map { case (scope, _) => scope }
+      .toSet
+  }
 }
 
 object BuildArtifactComparator extends Log {
@@ -243,7 +266,7 @@ object BuildArtifactComparator extends Log {
       lhs: JarToHashes,
       rhs: JarToHashes,
       fingerprints: Seq[FingerprintDirComparison]): Set[ScopeFingerprintDiffs] = {
-    val differingJars = (lhs.keySet ++ rhs.keySet).toSeq.sorted
+    val differingJars = rhs.keySet.toSeq.sorted
       .map(jarName => JarComparison(jarName, lhs.get(jarName), rhs.get(jarName)))
       .filter(_.diffMode != DiffMode.SAME)
       .flatMap { jarComparison =>
@@ -262,6 +285,7 @@ object BuildArtifactComparator extends Log {
         .filter { case (_, diff) => diff.nonEmpty }
         .groupBy { case (scope, _) => scope }
         .mapValuesNow(diff => diff.flatMap { case (_, lines) => lines }.toSet)
+        .filter { case (_, diff) => diff.exists(_.rhs.isDefined) }
 
     (differingJars.keys ++ differingFingerprints.keys).toSet.map(scope =>
       ScopeFingerprintDiffs(

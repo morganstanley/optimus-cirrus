@@ -77,27 +77,28 @@ object AsyncCollectionHelpers extends AsyncCollectionHelpers
 
 class AsyncIterableMarker[A, CC <: Iterable[A]](private val c: CC with IterableLike[A, CC]) extends AnyVal {
   def asyncOff: CC with IterableLike[A, CC] = c
-  @nowarn("msg=10500 optimus.platform.Async.seq")
-  def aseq: asyncSeq[A, CC] = Async.seq[A, CC](c)
-  @nowarn("msg=10500 optimus.platform.Async.seq")
-  def aseq(marker: ProgressMarker): asyncSeq[A, CC] = Async.seq[A, CC](c, marker)
-  @nowarn("msg=10500 optimus.platform.Async.par")
-  def apar: asyncPar[A, CC] = Async.par[A, CC](c)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.seq")
+  def aseq: asyncSeq[A, CC] = AsyncInternals.seq[A, CC](c)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.seq")
+  def aseq(marker: ProgressMarker): asyncSeq[A, CC] = AsyncInternals.seq[A, CC](c, marker)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.par")
+  def apar: asyncPar[A, CC] = AsyncInternals.par[A, CC](c)
   // reason is documentation only ATM
-  @nowarn("msg=10500 optimus.platform.Async.par")
-  def apar(parallelGraphCallWithoutNodesReason: String): asyncPar[A, CC] = Async.par[A, CC](c)
-  @nowarn("msg=10500 optimus.platform.Async.parImp")
-  def apar(maxConcurrency: Int): asyncPar[A, CC] = Async.parImp[A, CC](c, maxConcurrency)
-  @nowarn("msg=10500 optimus.platform.Async.par")
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.par")
+  def apar(parallelGraphCallWithoutNodesReason: String): asyncPar[A, CC] = AsyncInternals.par[A, CC](c)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.parImp")
+  def apar(maxConcurrency: Int): asyncPar[A, CC] = AsyncInternals.parImp[A, CC](c, maxConcurrency)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.par")
   def apar(marker: ProgressMarker, maxConcurrency: Int = Int.MaxValue): asyncPar[A, CC] =
-    Async.par[A, CC](c, marker, maxConcurrency)
-  @nowarn("msg=10500 optimus.platform.Async.parCustom")
-  def apar(runtimeChecks: Boolean): asyncPar[A, CC] = Async.parCustom[A, CC](c, Async.DefaultConcurrency, runtimeChecks)
-  @nowarn("msg=10500 optimus.platform.Async.parCustom")
+    AsyncInternals.par[A, CC](c, marker, maxConcurrency)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.parCustom")
+  def apar(runtimeChecks: Boolean): asyncPar[A, CC] =
+    AsyncInternals.parCustom[A, CC](c, AsyncInternals.DefaultConcurrency, runtimeChecks)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.parCustom")
   def apar(maxConcurrency: Int, runtimeChecks: Boolean): asyncPar[A, CC] =
-    Async.parCustom[A, CC](c, maxConcurrency, runtimeChecks)
-  @nowarn("msg=10500 optimus.platform.Async.seq")
-  def asyncSequential: asyncSeq[A, Iterable[A]] = Async.seq(c)
+    AsyncInternals.parCustom[A, CC](c, maxConcurrency, runtimeChecks)
+  @nowarn("msg=10500 optimus.platform.AsyncInternals.seq")
+  def asyncSequential: asyncSeq[A, Iterable[A]] = AsyncInternals.seq(c)
 
   def pipeline = new AsyncPipeline(c)
 
@@ -120,7 +121,9 @@ class AsyncMapMarker[K, V, CC <: Map[K, V] with MapLike[K, V, CC]](private val m
  */
 class asyncAlwaysUnique extends annotation.StaticAnnotation
 
-object Async {
+// We must not call this object `Async`, because doing so creates a file name clash on Windows where both this and the
+// `async` annotation is compiled to `optimus/platform/async.class` (same path in a case-insensitive file system)
+object AsyncInternals {
 
   // noinspection ScalaUnusedSymbol (Suppress for scope of import (if imported) See AutoAsyncComponent.scala)
   object suppressInlining
@@ -160,7 +163,7 @@ final class OptAsync[A](val c: Option[A]) {
   @scenarioIndependentTransparent
   def collectPF[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectPF$withNode(pf)
   // noinspection ScalaUnusedSymbol
-  def collectPF$queued[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] = collectPF$newNode(pf).enqueue
+  def collectPF$queued[B](pf: OptimusPartialFunction[A, B]): NodeFuture[Option[B]] = collectPF$newNode(pf).enqueue
   def collectPF$withNode[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectPF$newNode(pf).get
   private[this] def collectPF$newNode[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] =
     if (c.isEmpty)
@@ -185,6 +188,7 @@ private[optimus /*platform*/ ] object AsyncBase {
   private val emptyMapNode = acn(Map.empty)
 }
 
+@loom
 private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     val c: CC with IterableLike[A, CC],
     val workMarker: ProgressMarker,
@@ -269,7 +273,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
       cbf: BuildFrom[CC, B, That]): That = partitionMap$withNode(p)(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
   def partitionMap$queued[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => Node[B])(implicit
-      cbf: BuildFrom[CC, B, That]): Node[That] = partitionMap$newNode(p)(f).enqueue
+      cbf: BuildFrom[CC, B, That]): Node[That] = partitionMap$newNode(p)(toNodeFQ(f)).enqueue
   def partitionMap$withNode[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => Node[B])(implicit
       cbf: BuildFrom[CC, B, That]): That = partitionMap$newNode(p)(f).get
   def partitionMap$newNode[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => Node[B])(implicit
@@ -296,7 +300,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   // noinspection ScalaUnusedSymbol
   def mapWithRethrow$queued[B, That](f: A => Node[B])(
       processExceptions: Iterable[(A, NodeResult[B])] => Node[Option[String]])(implicit
-      cbf: BuildFrom[CC, B, That]): Node[That] = mapWithRethrow$newNode(f)(processExceptions).enqueue
+      cbf: BuildFrom[CC, B, That]): Node[That] = mapWithRethrow$newNode(toNodeFQ(f))(processExceptions).enqueue
   def mapWithRethrow$withNode[B, That](f: A => Node[B])(
       processExceptions: Iterable[(A, NodeResult[B])] => Node[Option[String]])(implicit
       cbf: BuildFrom[CC, B, That]): That = mapWithRethrow$newNode(f)(processExceptions).get
@@ -385,7 +389,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def foreach[U](@nodeLift f: A => U): Unit = foreach$withNode { toNodeFactory(f) }
   // noinspection ScalaUnusedSymbol
-  def foreach$queued[U](f: A => Node[U]): Node[Unit] = foreach$newNode[U](f).enqueue
+  def foreach$queued[U](f: A => Node[U]): Node[Unit] = foreach$newNode[U](toNodeFQ(f)).enqueue
   def foreach$withNode[U](f: A => Node[U]): Unit = foreach$newNode[U](f).get
   final private[this] def foreach$newNode[U](f: A => Node[U]): Node[Unit] =
     if (isEmpty) unitNode
@@ -407,7 +411,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     "foldLeft is inherently sequential. Consider a different combinator, or use .aseq.foldLeft if you " +
       "absolutely must use foldLeft",
     since = "2020-11-02")
-  def foldLeft[B](z: B)(@nodeLift op: (B, A) => B): B = needsPlugin
+  def foldLeft[B](z: B)(@nodeLift op: (B, A) => B): B = foldLeft$withNode(z)(toNodeFactory(op))
   def foldLeft$queued[B](z: B)(op: (B, A) => Node[B]): NodeFuture[B] = foldLeft$newNode(z)(toNodeFQ(op)).enqueue
   def foldLeft$withNode[B](z: B)(op: (B, A) => Node[B]): B = foldLeft$newNode(z)(op).get
   protected def foldLeft$newNode[B](z: B)(op: (B, A) => Node[B]): Node[B] =
@@ -477,7 +481,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
   def flatMop$queued[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
-    flatMop$newNode(f).enqueue
+    flatMop$newNode(toNodeFQ(f)).enqueue
   // noinspection ScalaUnusedSymbol
   def flatMop$withNode[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]): That =
     flatMop$newNode(f).get
@@ -498,7 +502,8 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def groupBy[K](@nodeLift f: A => K): Map[K, CC] = groupBy$withNode(toNodeFactory(f))
-  def groupBy$queued[K](f: A => Node[K]): Node[Map[K, CC]] = groupBy$newNode(f).enqueue
+  def groupBy$queued[K](f: A => Node[K]): Node[Map[K, CC]] = groupBy$newNode(toNodeFQ(f)).enqueue
+  def groupBy$queued[K](f: A => K): NodeFuture[Map[K, CC]] = groupBy$newNode(toNodeFactory(f(_))).enqueue
   def groupBy$withNode[K](f: A => Node[K]): immutable.Map[K, CC] = groupBy$newNode(f).get
   final private[this] def groupBy$newNode[K](f: A => Node[K]): Node[Map[K, CC]] =
     if (isEmpty) emptyMapNode.asInstanceOf[AlreadyCompletedNode[Map[K, CC]]]
@@ -523,7 +528,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def groupByStable[K](@nodeLift f: A => K): Seq[(K, Seq[A])] = groupByStable$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def groupByStable$queued[K](f: A => Node[K]): Node[Seq[(K, Seq[A])]] = groupByStable$newNode(f).enqueue
+  def groupByStable$queued[K](f: A => Node[K]): Node[Seq[(K, Seq[A])]] = groupByStable$newNode(toNodeFQ(f)).enqueue
   def groupByStable$withNode[K](f: A => Node[K]): Seq[(K, Seq[A])] = groupByStable$newNode(f).get
   final private[this] def groupByStable$newNode[K](f: A => Node[K]): Node[Seq[(K, Seq[A])]] =
     if (isEmpty) emptyMapNode.asInstanceOf[AlreadyCompletedNode[Seq[(K, Seq[A])]]]
@@ -546,7 +551,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def partition(@nodeLift f: A => Boolean): (CC, CC) = partition$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def partition$queued(f: A => Node[Boolean]): NodeFuture[(CC, CC)] = partition$newNode(f).enqueue
+  def partition$queued(f: A => Node[Boolean]): NodeFuture[(CC, CC)] = partition$newNode(toNodeFQ(f)).enqueue
   def partition$withNode(f: A => Node[Boolean]): (CC, CC) = partition$newNode(f).get
   final private[this] def partition$newNode(f: A => Node[Boolean]) =
     if (isEmpty) new AlreadyCompletedNode(c, c)
@@ -581,7 +586,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def find(@nodeLift f: A => Boolean): Option[A] = find$withNode(toNodeFactory(f))
-  def find$queued(f: A => Node[Boolean]): NodeFuture[Option[A]] = find$newNode(f).enqueue
+  def find$queued(f: A => Node[Boolean]): NodeFuture[Option[A]] = find$newNode(toNodeFQ(f)).enqueue
   def find$withNode(f: A => Node[Boolean]): Option[A] = find$newNode(f).get
   final private[this] def find$newNode(f: A => Node[Boolean]): Node[Option[A]] =
     if (isEmpty) noneNode
@@ -598,7 +603,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def exists(@nodeLift f: A => Boolean): Boolean = exists$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def exists$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = exists$newNode(f).enqueue
+  def exists$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = exists$newNode(toNodeFQ(f)).enqueue
   def exists$withNode(f: A => Node[Boolean]): Boolean = exists$newNode(f).get
   final private[this] def exists$newNode(f: A => Node[Boolean]) =
     if (isEmpty) falseNode
@@ -650,7 +655,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def collectFirstPF[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectFirstPF$withNode(pf)
   // noinspection ScalaUnusedSymbol
-  def collectFirstPF$queued[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] =
+  def collectFirstPF$queued[B](pf: OptimusPartialFunction[A, B]): NodeFuture[Option[B]] =
     collectFirstPF$newNode(pf).enqueue
   def collectFirstPF$withNode[B](pf: OptimusPartialFunction[A, B]): Option[B] =
     collectFirstPF$newNode(pf).get
@@ -672,10 +677,11 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
-  def sortBy[B](@nodeLift f: A => B)(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): CC = needsPlugin
+  def sortBy[B](@nodeLift f: A => B)(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): CC = sortBy$withNode(
+    toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
   def sortBy$queued[B](f: A => Node[B])(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): Node[CC] =
-    sortBy$newNode(f).enqueue
+    sortBy$newNode(toNodeFQ(f)).enqueue
   // noinspection ScalaUnusedSymbol
   def sortBy$withNode[B](f: A => Node[B])(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): CC =
     sortBy$newNode(f).get
@@ -697,7 +703,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def minBy[B: Ordering](@nodeLift f: A => B): A = minBy$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def minBy$queued[B: Ordering](f: A => Node[B]): Node[A] = minBy$newNode(f).enqueue
+  def minBy$queued[B: Ordering](f: A => Node[B]): Node[A] = minBy$newNode(toNodeFQ(f)).enqueue
   def minBy$withNode[B: Ordering](f: A => Node[B]): A = minBy$newNode(f).get
   final private[this] def minBy$newNode[B](f: A => Node[B])(implicit ord: Ordering[B]): Node[A] =
     if (c.isEmpty) new AlreadyFailedNode(new NoSuchElementException("empty.minBy"))
@@ -723,7 +729,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def maxBy[B: Ordering](@nodeLift f: A => B): A = maxBy$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def maxBy$queued[B: Ordering](f: A => Node[B]): Node[A] = maxBy$newNode(f).enqueue
+  def maxBy$queued[B: Ordering](f: A => Node[B]): Node[A] = maxBy$newNode(toNodeFQ(f)).enqueue
   def maxBy$withNode[B: Ordering](f: A => Node[B]): A = maxBy$newNode(f).get
   final private[this] def maxBy$newNode[B](f: A => Node[B])(implicit ord: Ordering[B]): Node[A] =
     if (c.isEmpty) new AlreadyFailedNode(new NoSuchElementException("empty.maxBy"))
@@ -749,7 +755,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def count(@nodeLift p: A => Boolean): Int = count$withNode(toNodeFactory(p))
   // noinspection ScalaUnusedSymbol
-  def count$queued(p: A => Node[Boolean]): NodeFuture[Int] = count$newNode(p).enqueue
+  def count$queued(p: A => Node[Boolean]): NodeFuture[Int] = count$newNode(toNodeFQ(p)).enqueue
   def count$withNode(p: A => Node[Boolean]): Int = count$newNode(p).get
   final private[this] def count$newNode(f: A => Node[Boolean]): Node[Int] =
     if (isEmpty) zeroNode
@@ -785,6 +791,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
 
 /** Async versions of some nice map-only methods. */
 // Neither of these are auto-asynced right now.
+@loom
 trait AsyncMapBase[K, V, CC <: Map[K, V] with MapLike[K, V, CC]] { base: AsyncBase[(K, V), CC] =>
 
   /** Map key-value pairs to new values (same key). Just like [[Map#transform]] but more asyncy. */
@@ -795,7 +802,9 @@ trait AsyncMapBase[K, V, CC <: Map[K, V] with MapLike[K, V, CC]] { base: AsyncBa
     transform$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
   final def transform$queued[W, That](f: (K, V) => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): Node[That] =
-    transform$newNode(f)(cbf).enqueue
+    transform$newNode(toNodeFQ(f))(cbf).enqueue
+  final def transform$queued[W, That](f: (K, V) => W, cbf: BuildFrom[CC, (K, W), That]): NodeFuture[That] =
+    transform$newNode(toNodeFactory(f))(cbf).enqueue
   final def transform$withNode[W, That](f: (K, V) => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): That =
     transform$newNode(f)(cbf).get
   private[this] def transform$newNode[W, That](
@@ -839,9 +848,9 @@ class asyncPar[A, CC <: Iterable[A]](
     runtimeCheck: Boolean = true)
     extends AsyncBase[A, CC](c, workMarker, maxConcurrency, runtimeCheck) {
   if (maxConcurrency < 0) throw new IllegalArgumentException("maxConcurrency must be >= 0")
-  def this(c: CC with IterableLike[A, CC]) = this(c, null, Async.DefaultConcurrency)
+  def this(c: CC with IterableLike[A, CC]) = this(c, null, AsyncInternals.DefaultConcurrency)
   def this(c: CC with IterableLike[A, CC], runtimeCheck: Boolean) =
-    this(c, null, Async.DefaultConcurrency, runtimeCheck)
+    this(c, null, AsyncInternals.DefaultConcurrency, runtimeCheck)
 
   // implement withFilter to avoid scalac warnings on for-comprehensions with guards.
   // This used returns an asyncPar so that the next operation is asynced as well.
@@ -881,7 +890,7 @@ class asyncPar[A, CC <: Iterable[A]](
 // Identical to asyncPar above, but with a different name, so we can distinguish implicitly created classes in the plugin.
 final class asyncParImp[A, CC <: Iterable[A]](
     c: CC with IterableLike[A, CC],
-    maxConcurrency: Int = Async.DefaultConcurrency,
+    maxConcurrency: Int = AsyncInternals.DefaultConcurrency,
     runtimeCheck: Boolean = true)
     extends asyncPar[A, CC](c, null, maxConcurrency, runtimeCheck)
 
@@ -899,7 +908,7 @@ sealed class asyncSeq[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def withFilter(@nodeLift f: A => Boolean): CC = withFilter$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def withFilter$queued(f: A => Node[Boolean]): NodeFuture[CC] = withFilter$newNode(f).enqueue
+  def withFilter$queued(f: A => Node[Boolean]): NodeFuture[CC] = withFilter$newNode(toNodeFQ(f)).enqueue
   def withFilter$withNode(f: A => Node[Boolean]): CC = withFilter$newNode(f).get
   final private[this] def withFilter$newNode(f: A => Node[Boolean]) =
     if (isEmpty) new AlreadyCompletedNode(c)
@@ -922,7 +931,7 @@ sealed class asyncSeq[A, CC <: Iterable[A]](
 final class asyncParMap[K, V, CC <: Map[K, V] with MapLike[K, V, CC]](
     c: CC with IterableLike[(K, V), CC],
     workMarker: ProgressMarker = null,
-    maxConcurrency: Int = Async.DefaultConcurrency,
+    maxConcurrency: Int = AsyncInternals.DefaultConcurrency,
     runtimeCheck: Boolean = true
 ) extends asyncPar[(K, V), CC](c, workMarker, maxConcurrency, runtimeCheck)
     with AsyncMapBase[K, V, CC]

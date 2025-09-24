@@ -14,7 +14,6 @@ package optimus.buildtool.config
 import optimus.buildtool.config.MetaBundle.toMavenCompatibleStr
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import scala.util.hashing.MurmurHash3
 

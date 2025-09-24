@@ -12,7 +12,7 @@
 package optimus.ui
 
 import msjava.slf4jutils.scalalog._
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.graph.AuxiliaryScheduler
 import optimus.graph.LowerPriorityScheduler
 import optimus.graph.ProgressTrackerParams
@@ -110,7 +110,7 @@ final case class HandlerResult(
    * Creates a new HandlerResult comprising of the current one plus the given tweak lambda evaluated in Root scenario
    */
   @alwaysAutoAsyncArgs
-  def withTweaksToRootScenario(newTweakLambda: () => Seq[Tweak]): HandlerResult = needsPlugin
+  def withTweaksToRootScenario(newTweakLambda: () => Seq[Tweak]): HandlerResult = needsPluginAlwaysAutoAsyncArgs
   def withTweaksToRootScenario$NF(newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(ScenarioReference.Root, newTweakLambda)
 
@@ -184,7 +184,7 @@ final case class HandlerResult(
    */
   @alwaysAutoAsyncArgs
   def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => Seq[Tweak]): HandlerResult =
-    needsPlugin
+    needsPluginAlwaysAutoAsyncArgs
   def withTweaksEvaluatedIn$NF(sr: ScenarioReference, newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(sr, newTweakLambda)
 
@@ -333,7 +333,7 @@ object HandlerResult {
    */
   @alwaysAutoAsyncArgs
   def withTweaksEvaluatedIn(sr: ScenarioReference, newTweakLambda: () => Seq[Tweak]): HandlerResult =
-    needsPlugin
+    needsPluginAlwaysAutoAsyncArgs
   def withTweaksEvaluatedIn$NF(sr: ScenarioReference, newTweakLambda: AsyncFunction0[Seq[Tweak]]): HandlerResult =
     withTweakLambda(sr, newTweakLambda)
 
@@ -415,6 +415,7 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
   protected def buildHandlerStep(
       target: ScenarioReference,
       createIfNotExists: Boolean,
+      warnIfNotExists: Boolean,
       func: => HandlerResult,
       sourceLocation: SourceLocation,
       tag: String,
@@ -426,7 +427,14 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
   @closuresEnterGraph
   final def apply(target: ScenarioReference)(func: => HandlerResult)(implicit sourceLocation: SourceLocation): T = {
     checkInScope(target)
-    buildHandlerStep(target, createIfNotExists = true, func, sourceLocation, tag = "", progressTrackerParams = null)
+    buildHandlerStep(
+      target,
+      createIfNotExists = true,
+      warnIfNotExists = true,
+      func,
+      sourceLocation,
+      tag = "",
+      progressTrackerParams = null)
   }
 
   /**
@@ -437,7 +445,32 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
   final def apply(target: ScenarioReference, createIfNotExists: Boolean)(func: => HandlerResult)(implicit
       sourceLocation: SourceLocation): T = {
     checkInScope(target)
-    buildHandlerStep(target, createIfNotExists, func, sourceLocation, tag = "", progressTrackerParams = null)
+    buildHandlerStep(
+      target,
+      createIfNotExists,
+      warnIfNotExists = true,
+      func,
+      sourceLocation,
+      tag = "",
+      progressTrackerParams = null)
+  }
+
+  /**
+   * Creates a step which will be evaluated later under the specified scenario
+   * createIfNotExists to control whether to create the scenario if it doesn't exist
+   */
+  @closuresEnterGraph
+  final def apply(target: ScenarioReference, createIfNotExists: Boolean, warnIfNotExists: Boolean)(
+      func: => HandlerResult)(implicit sourceLocation: SourceLocation): T = {
+    checkInScope(target)
+    buildHandlerStep(
+      target,
+      createIfNotExists,
+      warnIfNotExists,
+      func,
+      sourceLocation,
+      tag = "",
+      progressTrackerParams = null)
   }
 
   /**
@@ -449,6 +482,7 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
     buildHandlerStep(
       ScenarioReference.current,
       createIfNotExists = true,
+      warnIfNotExists = true,
       func,
       sourceLocation,
       tag = "",
@@ -467,6 +501,7 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
     buildHandlerStep(
       ScenarioReference.current,
       createIfNotExists = true,
+      warnIfNotExists = true,
       func,
       sourceLocation,
       tag,
@@ -479,6 +514,7 @@ private[optimus] sealed trait TransactionalHandlerStepBuilder[T <: HandlerStep] 
     buildHandlerStep(
       ScenarioReference.current,
       createIfNotExists = true,
+      warnIfNotExists = true,
       func,
       sourceLocation,
       tag = "",
@@ -537,6 +573,7 @@ object Immediately extends TransactionalHandlerStepBuilder[Immediately] {
   override protected def buildHandlerStep(
       target: ScenarioReference,
       createIfNotExists: Boolean,
+      warnIfNotExists: Boolean,
       func: => HandlerResult,
       sourceLocation: SourceLocation,
       tag: String,
@@ -566,6 +603,7 @@ sealed trait SeparatelyMaybeWithProfilingMetadata {
 final case class Separately(
     private[optimus] val target: ScenarioReference,
     private[optimus] val createIfNotExists: Boolean,
+    private[optimus] val warnIfNotExists: Boolean,
     private[optimus] val handler: () => HandlerResult,
     private[optimus] val sourceLocation: SourceLocation,
     private[optimus] val tag: String,
@@ -601,10 +639,12 @@ object NoResult {
     Separately(
       ScenarioReference.Dummy,
       createIfNotExists = false,
+      warnIfNotExists = true,
       () => throw new NoResultEvaluated(),
       SourceLocation.makeSourceLocation,
       "",
-      progressTrackerParams = null)
+      progressTrackerParams = null
+    )
   }
 
   def apply(): Separately = instance
@@ -623,22 +663,33 @@ object Separately extends TransactionalHandlerStepBuilder[Separately] {
   override protected def buildHandlerStep(
       target: ScenarioReference,
       createIfNotExists: Boolean,
+      warnIfNotExists: Boolean,
       func: => HandlerResult,
       sourceLocation: SourceLocation,
       tag: String,
       progressTrackerParams: ProgressTrackerParams): Separately = {
     val maybeCancellableParams = maybeCancellableTrackerParams(progressTrackerParams)
-    new Separately(target, createIfNotExists, () => func, sourceLocation, tag, maybeCancellableParams)
+    new Separately(target, createIfNotExists, warnIfNotExists, () => func, sourceLocation, tag, maybeCancellableParams)
   }
 
   /**
    * Creates a step which will be evaluated later under the specified scenario
    */
   @closuresEnterGraph
-  final def apply(target: ScenarioReference, tag: String, createIfNotExists: Boolean = true)(func: => HandlerResult)(
-      implicit sourceLocation: SourceLocation): Separately = {
+  final def apply(
+      target: ScenarioReference,
+      tag: String,
+      createIfNotExists: Boolean = true,
+      warnIfNotExists: Boolean = true)(func: => HandlerResult)(implicit sourceLocation: SourceLocation): Separately = {
     checkInScope(target)
-    buildHandlerStep(target, createIfNotExists, func, sourceLocation, tag, progressTrackerParams = null)
+    buildHandlerStep(
+      target,
+      createIfNotExists,
+      warnIfNotExists,
+      func,
+      sourceLocation,
+      tag,
+      progressTrackerParams = null)
   }
 
   override def toString: String = "Separately"
@@ -696,7 +747,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def apply(target: ScenarioReference, tag: String)(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def apply$NF(target: ScenarioReference, tag: String)(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(
       implicit sourceLocation: SourceLocation): InBackground = {
     checkInScope(target)
@@ -710,7 +761,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def apply(tag: String)(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def apply$NF(tag: String)(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(implicit
       sourceLocation: SourceLocation): InBackground =
     buildHandlerStep(ScenarioReference.current, func, sourceLocation, tag, progressTrackerParams = null)
@@ -721,7 +772,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def apply(target: ScenarioReference)(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def apply$NF(target: ScenarioReference)(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(implicit
       sourceLocation: SourceLocation): InBackground = {
     checkInScope(target)
@@ -735,7 +786,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def apply(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def apply$NF(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(implicit
       sourceLocation: SourceLocation): InBackground =
     buildHandlerStep(ScenarioReference.current, func, sourceLocation, tag = "", progressTrackerParams = null)
@@ -746,7 +797,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def lowerPriority(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def lowerPriority$NF(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(implicit
       sourceLocation: SourceLocation): InBackground =
     buildHandlerStep(
@@ -764,7 +815,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def lowerPriority(target: ScenarioReference)(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def lowerPriority$NF(target: ScenarioReference)(func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(
       implicit sourceLocation: SourceLocation): InBackground = {
     checkInScope(target)
@@ -780,7 +831,7 @@ object InBackground extends ExecutableStepType {
   @alwaysAutoAsyncArgs
   @poisoned("InBackground cannot be used in code not processed by AutoAsync")
   final def withProgress(weight: Double, message: String = null)(func: => SeparatelyMaybeWithProfilingMetadata)(implicit
-      sourceLocation: SourceLocation): InBackground = needsPlugin
+      sourceLocation: SourceLocation): InBackground = needsPluginAlwaysAutoAsyncArgs
   final def withProgress$NF(weight: Double, message: String = null)(
       func: NodeFunction0[SeparatelyMaybeWithProfilingMetadata])(implicit
       sourceLocation: SourceLocation): InBackground = {

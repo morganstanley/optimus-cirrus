@@ -49,7 +49,9 @@ object UpsertableTransactionSerializer extends Log {
       serializedEntityFilter: SerializedEntity => Boolean
   ): Seq[Entity] = {
     log.info(
-      s"Deserializing Transaction with SerializedEntities [size:${serializedEntities.size}; StoredRefs: ${storedEntityReferences.size}] @ (vt=$vt, tt=$tt)")
+      s"Deserializing Transaction with SerializedEntities [size:${serializedEntities.size}; type:${serializedEntities
+          .map(_.className)
+          .distinct}; StoredRefs: ${storedEntityReferences.size}] @ (vt=$vt, tt=$tt)")
     val heapEnts: Map[EntityReference, SerializedContainedEvent.ContainedEntity] =
       serializedEntities.map(se => se.entityRef -> SerializedContainedEvent.UniqueHeapEntity(se)).toMap
     val storedEntities: Map[EntityReference, SerializedContainedEvent.ContainedEntity] =

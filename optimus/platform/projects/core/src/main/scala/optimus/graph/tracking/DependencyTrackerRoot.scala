@@ -211,13 +211,20 @@ final class DependencyTrackerRoot private (
     }
 
   private[optimus] def getOrCreateScenario(ref: ScenarioReference): DependencyTracker =
-    getOrCreateScenario(ref, failRatherThanCreate = false)
+    getOrCreateScenario(ref, failRatherThanCreate = false, warnIfNotExists = true)
   private[optimus] def getScenarioOrThrow(ref: ScenarioReference): DependencyTracker =
-    getOrCreateScenario(ref, failRatherThanCreate = true)
-  private[optimus] def getScenarioIfExists(ref: ScenarioReference): Option[DependencyTracker] =
-    Try(getOrCreateScenario(ref, failRatherThanCreate = true)).toOption
+    getOrCreateScenario(ref, failRatherThanCreate = true, warnIfNotExists = true)
+  private[optimus] def getScenarioIfExists(
+      ref: ScenarioReference,
+      warnIfNotExists: Boolean = true
+  ): Option[DependencyTracker] =
+    Try(getOrCreateScenario(ref, failRatherThanCreate = true, warnIfNotExists)).toOption
 
-  private[this] def getOrCreateScenario(ref: ScenarioReference, failRatherThanCreate: Boolean): DependencyTracker =
+  private[this] def getOrCreateScenario(
+      ref: ScenarioReference,
+      failRatherThanCreate: Boolean,
+      warnIfNotExists: Boolean
+  ): DependencyTracker =
     withNameLock {
       if (ref == ScenarioReference.Root)
         this
@@ -241,8 +248,12 @@ final class DependencyTrackerRoot private (
                       s"existing scenario ${existing.scenarioReference}")
 
               case None =>
-                if (failRatherThanCreate) throw new GraphInInvalidState(s"Requested scenario $ref does not exist")
-                val parent = getOrCreateScenario(parentRef, failRatherThanCreate)
+                if (failRatherThanCreate && warnIfNotExists)
+                  throw new GraphInInvalidState(s"Requested scenario $ref does not exist")
+                // throw an exception that won't log as part of its creation
+                if (failRatherThanCreate && !warnIfNotExists)
+                  throw new IllegalStateException(s"Requested scenario $ref does not exist")
+                val parent = getOrCreateScenario(parentRef, failRatherThanCreate, warnIfNotExists)
                 log.debug(s"Creating scenario '$name' as child of parent '${parent.name}'")
                 parent.newChildScenario(ref)
             }

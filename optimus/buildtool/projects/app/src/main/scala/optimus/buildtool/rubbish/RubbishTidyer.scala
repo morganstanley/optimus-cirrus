@@ -31,7 +31,6 @@ import optimus.utils.ErrorIgnoringFileVisitor
 import optimus.utils.MiscUtils.{NumericFoldable, OrderingChain}
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal

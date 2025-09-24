@@ -312,6 +312,14 @@ class PostTyperCodingStandardsComponent(
               alarm(CodeStyleNonErrorMessages.DISCOURAGED_CONSTRUCT, fun.pos, sym.name, AnnotatingComponent.lazyReason)
           case _ =>
         }
+
+        // Warn on `foo(array: _*)`. The Scala compiler issues the same warning in uncurry, but in codetree we have
+        // an easier workaround `foo(array.toVarArgsSeq: _*)` which is mentioned in the alarm message.
+        if (!sym.isJavaDefined) argss.foreach(_.lastOption match {
+          case Some(treeInfo.WildcardStarArg(arg)) if arg.tpe.typeSymbol == ArrayClass =>
+            alarm(CodeStyleNonErrorMessages.ARRAY_SEQUENCE_ARG, arg.pos)
+          case _ =>
+        })
       }
 
       if (isScala2_12) {
@@ -426,6 +434,12 @@ class PostTyperCodingStandardsComponent(
     def checkCase(selector: Tree, caseDef: CaseDef): Unit = {
       if (enclosingDefs.head.name == nme.isDefinedAt) return
 
+      // given `(x: T) match { case U(..) => }`, the pattern type can be a refinement `T with U`. we want `U`.
+      def patType(tp: Type, scrut: Symbol): Type = tp match {
+        case RefinedType(ps, _) => ps.filterNot(_.typeSymbol == scrut).headOption.getOrElse(tp)
+        case _ => tp
+      }
+
       // no alarm for `case Nil`, it matches other `Seq`s
 
       val testCons = (s: Symbol, p: Symbol, pos: Position) =>
@@ -438,8 +452,9 @@ class PostTyperCodingStandardsComponent(
 
       val testSeq = (s: Symbol, p: Symbol, pos: Position) =>
         Option.when(
-          !s.isNonBottomSubClass(definitions.SeqClass) &&
-            p == definitions.SeqClass &&
+          p == definitions.SeqClass &&
+            s.isNonBottomSubClass(CollectionSeqClass) &&
+            !s.isNonBottomSubClass(definitions.SeqClass) &&
             !sourceAt(pos).contains("immutable.Seq"))(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_SEQ_PATTERN)
 
       def check(
@@ -457,8 +472,9 @@ class PostTyperCodingStandardsComponent(
                 case Apply(fun, _) =>
                   check(param, arg.tpe, testCons, fun.pos)
                 case UnApply(fun, _) =>
-                  check(param, arg.tpe, testList, fun.pos)
-                  check(param, arg.tpe, testSeq, fun.pos)
+                  val patTp = patType(arg.tpe, param.typeSymbol)
+                  check(param, patTp, testList, fun.pos)
+                  check(param, patTp, testSeq, fun.pos)
                 case Typed(_, tpt) =>
                   check(param, tpt.tpe, testSeq, tpt.pos)
                 case Bind(_, pat) =>
@@ -477,8 +493,9 @@ class PostTyperCodingStandardsComponent(
         case Apply(fun, _) =>
           check(selector.tpe, fun.tpe.resultType, testCons, fun.pos)
         case UnApply(fun, _) =>
-          check(selector.tpe, pat.tpe, testList, fun.pos)
-          check(selector.tpe, pat.tpe, testSeq, fun.pos)
+          val patTp = patType(pat.tpe, selector.tpe.typeSymbol)
+          check(selector.tpe, patTp, testList, fun.pos)
+          check(selector.tpe, patTp, testSeq, fun.pos)
         case Typed(_, tpt) =>
           check(selector.tpe, tpt.tpe, testSeq, tpt.pos)
         case Bind(_, pat) =>

@@ -11,7 +11,6 @@
  */
 package optimus.platform.pickling
 
-import optimus.platform.AdvancedUtils
 import optimus.platform.TemporalContext
 import optimus.platform.storable.InlineEntityHolder
 import optimus.platform.storable.StorableReference
@@ -25,6 +24,10 @@ final class PickledMapWrapper(
     extends PickledInputStream
     with Serializable {
 
+  def newMutStream: PickledInputStreamMut = new PickledInputStreamMut(properties, this)
+}
+
+class PickledInputStreamMut(properties: Map[String, Any], context: PickledInputStream) {
   @inline private[this] def setIfFound(key: String, set: Any => Unit): Boolean = {
     val a = properties.get(key)
     if (a.isDefined) {
@@ -36,17 +39,7 @@ final class PickledMapWrapper(
   }
 
   def seek[T](k: String, unpickler: Unpickler[T]): Boolean = {
-    // Seek should only called from entity constructors on properties that are known to be nonblocking (barring bugs).
-    // However, the unpickler code path is necessarily async (unless we duplicate the logic everywhere).
-    // In order to support assertAsync tests that load from the DAL, suppress syncStack failure during entity unpickling.
-    // Note that we turn it off here instead of in EntitySerialization because we DO want to catch entity constructors
-    // that call into async nodes, e.g.:
-    //   @entity class Foo { val badProperty = blockingCall }
-    setIfFound(
-      k,
-      { v =>
-        value = AdvancedUtils.suppressSyncStackDetection { unpickler.unpickle(v, this) }
-      })
+    setIfFound(k, { v => value = unpickler.unpickle(v, context) })
   }
 
   def seekRaw(k: String): Boolean = {

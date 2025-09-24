@@ -11,6 +11,8 @@
  */
 package optimus.profiler
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+
 import java.awt.event.ActionListener
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -160,6 +162,11 @@ object DebuggerUI extends Log {
     }
   }
 
+  def debugLabel(debugString: String): Option[NodeTask] = {
+    val trimmedString: String = debugString.trim
+    MarkObject.getMarkedObjectByLabel(trimmedString.stripSuffix("_DebugLabel"))
+  }
+
   def browse(title: String, filter: Predicate[NodeTask]): Unit = {
     browse(NodeTrace.getTraceBy(filter, false), title)
   }
@@ -223,25 +230,36 @@ object DebuggerUI extends Log {
   private[profiler] def getPropertyNodesInCaches(
       filter: PropertyNode[_] => Boolean,
       showInternal: Boolean = GraphDebuggerUI.showInternal.get): JArrayList[PNodeTask] = {
-    val r = new JArrayList[PNodeTask]
     val caches = Caches.allCaches(
       includeSiGlobal = true,
       includeGlobal = true,
       includeNamedCaches = true,
       includePerPropertyCaches = true)
+    // for some proxies we will have cacheUnderlyingNode report another node already in the cache, so we dedup
+    val map = new Int2ObjectOpenHashMap[PNodeTask]()
     caches.foreach {
-
       _.foreach(candidate => {
         if (candidate != null && filter(candidate)) {
           val toAdd =
             if (showInternal) Some(candidate)
             else if (candidate.isStarted) Some(candidate.cacheUnderlyingNode)
             else None
-          toAdd.foreach(cand => r.add(NodeTrace.accessProfile(cand)))
+
+          toAdd.foreach(cand => {
+            map.putIfAbsent(
+              cand.getId,
+              NodeTrace.accessProfile(cand)
+            )
+          })
         }
       })
     }
-    r
+
+    val out = new JArrayList[PNodeTask](map.size())
+    map.int2ObjectEntrySet().fastForEach(k => out.add(k.getValue))
+    // inplace sort by incrementing id so that the nodes end up in approx order of execution
+    out.sort((t1: PNodeTask, t2: PNodeTask) => Integer.compare(t1.id(), t2.id()))
+    out
   }
 
   def diff(a: NodeTask, b: NodeTask): Unit =
@@ -387,6 +405,7 @@ object DebuggerUI extends Log {
   /** Returns the first common parent index and -1 if roots are different */
   def getCommonScenarioStackDepth(ss1: ScenarioStack, ss2: ScenarioStack): Int = {
     var r = -1 // A sentinel to show that they have nothing in common
+    if ((ss1.ssShared eq null) || (ss2.ssShared eq null)) return r // tweak ACPNs can have ssShared eq null
     if (ss1.ssShared._cacheID eq ss2.ssShared._cacheID) {
       val ss1f = scenarioStackFlat(ss1)
       val ss2f = scenarioStackFlat(ss2)
@@ -422,7 +441,7 @@ object DebuggerUI extends Log {
 
       cn = EvaluationContext.currentNode
       saved_ss = cn.scenarioStack()
-      cn.replace(ss.asBasicScenarioStack)
+      cn.replace(ss.asBasicScenarioStack.withCancellationScopeRaw(CancellationScope.newScope()))
       r = f
     } catch {
       case _: Throwable =>

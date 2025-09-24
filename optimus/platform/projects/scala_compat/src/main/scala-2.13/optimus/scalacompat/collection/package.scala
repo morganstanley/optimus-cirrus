@@ -11,11 +11,11 @@
  */
 package optimus.scalacompat
 
-import scala.collection.mutable
-import scala.{collection => sc}
-import scala.reflect.ClassTag
-
 package object collection extends MapBuildFromImplicits {
+  import scala.collection.mutable
+  import scala.{collection => sc}
+  import scala.reflect.ClassTag
+
   def isView(c: Iterable[_]): Boolean = c match {
     case _: sc.View[_] => true
     case _             => false
@@ -145,8 +145,4 @@ package object collection extends MapBuildFromImplicits {
     def deep: sc.IndexedSeq[Any] = new DeepArray(self)
   }
   type ForkJoin = java.util.concurrent.ForkJoinPool
-
-  implicit class ArrayToVarArgsOps[A](private val self: Array[A]) extends AnyVal {
-    def toVarArgsSeq: scala.collection.immutable.Seq[A] = scala.collection.immutable.ArraySeq.unsafeWrapArray(self)
-  }
 }

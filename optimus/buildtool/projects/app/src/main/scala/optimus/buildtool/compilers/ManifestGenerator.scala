@@ -15,7 +15,6 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.ElectronArtifact
-import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.PathingArtifact
@@ -33,19 +32,18 @@ import optimus.buildtool.utils.OsUtils
 import optimus.platform._
 
 import java.util.jar
-import scala.collection.immutable.Seq
 
 @entity class ManifestGenerator(dependencyCopier: DependencyCopier, cppFallback: Boolean) {
 
   @node def manifest(
       id: ScopeId,
       scopeConfig: ScopeConfiguration,
-      allRuntimeArtifacts: Seq[Artifact],
-      runtimeDependencies: ScopeDependencies,
-      agentArtifacts: Seq[Artifact]
+      internalRuntimeArtifacts: Seq[Artifact],
+      internalAgentArtifacts: Seq[Artifact],
+      runtimeDependencies: ScopeDependencies
   ): jar.Manifest = {
 
-    val internalClassFileArtifacts = allRuntimeArtifacts.collect { case c: ClassFileArtifact => c }
+    val internalClassFileArtifacts = internalRuntimeArtifacts.collect { case c: ClassFileArtifact => c }
     val externalClassFileArtifacts =
       runtimeDependencies.transitiveExternalDependencies.apar.map { a =>
         dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(a)
@@ -63,7 +61,7 @@ import scala.collection.immutable.Seq
     val externalJniPaths = runtimeDependencies.transitiveJniPaths.distinct
 
     val cppLibs: Seq[CppLibrary] =
-      CppUtils.libraries(allRuntimeArtifacts, runtimeDependencies.transitiveScopeDependencies)
+      CppUtils.libraries(internalRuntimeArtifacts, runtimeDependencies.transitiveScopeDependencies)
     val preloadLibs = cppLibs.filter(_.preload).groupBy(_.buildType)
     val preloadReleaseLibs = preloadLibs.getOrElse(BuildType.Release, Nil)
     val preloadDebugLibs = preloadLibs.getOrElse(BuildType.Debug, Nil)
@@ -130,18 +128,18 @@ import scala.collection.immutable.Seq
       }
       .getOrElse(None, classFileArtifacts)
 
-    val electronMetadata = allRuntimeArtifacts
+    val electronMetadata = internalRuntimeArtifacts
       .collect { case e: ElectronArtifact =>
         s"${e.scopeId};${e.pathString};${e.mode};${e.executables.mkString(",")}"
       }
       .mkString(" ")
 
-    val allAgentPaths = agentArtifacts.apar.map {
-      case internal: PathingArtifact => internal
-      case external: ExternalClassFileArtifact =>
-        dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(external)
-      case other => throw new MatchError(other)
-    }
+    val internalAgentPathingArtifacts = internalAgentArtifacts.collect { case p: PathingArtifact => p }
+    val externalAgentClassFileArtifacts =
+      runtimeDependencies.transitiveExternalDependencies.apar.collect {
+        case a if a.containsAgent => dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(a)
+      }
+    val allAgentPaths = internalAgentPathingArtifacts ++ externalAgentClassFileArtifacts
 
     Jars.updateManifest(
       Jars.createPathingManifest(filteredArtifacts.map(_.path), premainOption),

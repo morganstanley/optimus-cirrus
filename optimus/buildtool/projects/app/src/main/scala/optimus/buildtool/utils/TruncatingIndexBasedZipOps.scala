@@ -35,7 +35,6 @@ import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
-import scala.collection.immutable.Seq
 import scala.util.Using
 
 /**

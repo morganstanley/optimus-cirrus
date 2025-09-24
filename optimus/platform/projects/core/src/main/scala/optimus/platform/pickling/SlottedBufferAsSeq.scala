@@ -12,13 +12,14 @@
 package optimus.platform.pickling
 
 import optimus.core.InternerHashEquals
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 
 import java.io.ObjectOutput
 import scala.collection.AbstractIterator
 
 @SerialVersionUID(1L)
 abstract class SlottedBufferAsSeq
-    extends IndexedSeq[Any]
+    extends PickleSeq[Any]
     with ContainsUnresolvedReference
     with InternerHashEquals
     with Serializable {
@@ -64,7 +65,7 @@ abstract class SlottedBufferAsSeq
 }
 
 @SerialVersionUID(1L)
-object SlottedBufferAsEmptySeq extends Seq[Any] with ContainsUnresolvedReference with Serializable {
+object SlottedBufferAsEmptySeq extends PickleSeq[Any] with ContainsUnresolvedReference with Serializable {
   override def apply(i: Int): Any = throw new UnsupportedOperationException()
   override def length: Int = 0
   override def iterator: Iterator[Any] = new AbstractIterator[Any] {

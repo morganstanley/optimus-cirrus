@@ -14,7 +14,7 @@ package msjava.msnet.ssl;
 
 import static msjava.base.util.internal.SystemPropertyUtils.getBoolean;
 import static msjava.base.util.internal.SystemPropertyUtils.getProperty;
-
+import java.util.Objects;
 import msjava.base.slf4j.ContextLogger;
 import org.slf4j.Logger;
 
@@ -25,7 +25,7 @@ import org.slf4j.Logger;
  * <p>For general library overview and code examples refer to the {@link SSLEstablisher}
  * documentation.
  */
-public class SSLEngineConfig {
+public final class SSLEngineConfig {
   private static final Logger LOGGER = ContextLogger.safeLogger();
 
   public static final String TLS_PROTOCOL_VERSION = "TLSv1.2";
@@ -141,5 +141,39 @@ public class SSLEngineConfig {
   public SSLEngineConfig withTruststorePath(String truststorePath) {
     this.truststorePath = truststorePath;
     return this;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    SSLEngineConfig that = (SSLEngineConfig) o;
+
+    return enabledClientAuthSSL == that.enabledClientAuthSSL
+        && Objects.equals(keystoreType, that.keystoreType)
+        && Objects.equals(truststoreType, that.truststoreType)
+        && Objects.equals(keystorePassword, that.keystorePassword)
+        && Objects.equals(keyPassword, that.keyPassword)
+        && Objects.equals(truststorePassword, that.truststorePassword)
+        && Objects.equals(keystorePath, that.keystorePath)
+        && Objects.equals(clientKeystorePath, that.clientKeystorePath)
+        && Objects.equals(serverKeystorePath, that.serverKeystorePath)
+        && Objects.equals(truststorePath, that.truststorePath);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(
+        keystoreType,
+        truststoreType,
+        keystorePassword,
+        keyPassword,
+        truststorePassword,
+        keystorePath,
+        clientKeystorePath,
+        serverKeystorePath,
+        truststorePath,
+        enabledClientAuthSSL);
   }
 }

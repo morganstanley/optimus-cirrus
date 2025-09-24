@@ -15,8 +15,8 @@ import static optimus.graph.OGTrace.OfferValueSuffix;
 import static optimus.graph.OGTrace.ProcessOnChildCompletedSuffix;
 import static optimus.graph.OGTrace.observer;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
-import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScope;
-import static optimus.graph.cache.NCSupport.isNotUsableWRTCancellationScope;
+import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScopeAndEnv;
+import static optimus.graph.cache.NCSupport.isNotUsableWRTCancelScopeAndEnv;
 import java.util.ArrayList;
 import optimus.core.TPDMask;
 import optimus.graph.AlreadyCompletedPropertyNode;
@@ -98,7 +98,7 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
     // hit was some node we waited for to see if we can re-use it and we'll check if can!
     boolean waitingOnProxy = isDelayedProxy(hit);
     if (key == child
-        || isDirectlyReusableWRTCancelScope(key, hit)
+        || isDirectlyReusableWRTCancelScopeAndEnv(key, hit)
             && (waitingOnProxy || matchedXS(key, hit, eq))) {
       if (waitingOnProxy) {
         // Only CS is different and we don't need to store N keys (srcNodeTemplates) for N proxies
@@ -519,7 +519,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNodeNoReEnqueue<T> {
   static <T> boolean canUseValue(
       PropertyNode<T> value, PropertyNode<T> key, boolean toParent, TPDMask safeMask) {
     OGTrace.consumeTimeInMs(OGTrace.TESTABLE_FIXED_DELAY_XSFT, CacheTopic$.MODULE$);
-    if (isNotUsableWRTCancellationScope(key, value)) return false;
+    if (isNotUsableWRTCancelScopeAndEnv(key, value)) return false;
     // Original calculations of minimum scenario stack
     // would not change since the mask hasn't changed
     if (safeMask == key.propertyInfo().dependsOnTweakMask()) return true;
@@ -603,6 +603,9 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNodeNoReEnqueue<T> {
 
       this.hit = null;
       prev_ips = ips;
+      // ips can become null on re-tries
+      if (prev_ips == null) prev_ips = (InProgressState<T>) EMPTY;
+
       if (canTake) {
         ips = (InProgressState<T>) COMPLETED;
         if (!valueOwner) {
@@ -614,11 +617,8 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNodeNoReEnqueue<T> {
         }
       } else if (isCancelled()) {
         ips = (InProgressState<T>) COMPLETED; // Complete by aborting
-        if (prev_ips == null) prev_ips = ips;
       } else {
-        // Will have to retry
-        ips = null; // Clean up intermediate state [SEE_PARTIAL_CLEANUP]
-        if (prev_ips == null) prev_ips = (InProgressState<T>) EMPTY;
+        ips = null; // Will have to retry ... Clean up intermediate state [SEE_PARTIAL_CLEANUP]
       }
     }
 

@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import org.objectweb.asm.Label;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.FrameNode;
 import org.objectweb.asm.tree.JumpInsnNode;
@@ -27,7 +28,7 @@ import org.objectweb.asm.tree.LookupSwitchInsnNode;
 import org.objectweb.asm.tree.TableSwitchInsnNode;
 
 /** Represents a group of continuous (i.e., no jumps!) set of operations */
-class Block extends Op {
+class Block extends Op implements Opcodes {
   int blockID; // Assigned in the original order and can be reassigned on block reduce
 
   public Op lastOp; // Last op in the block which is often branch. Handle non-branch better!
@@ -45,6 +46,9 @@ class Block extends Op {
 
   public StackSlot[] stack;
   public int stackCount; // Number of items on the stack
+
+  /** Types of locals at the end of the block */
+  public Type[] outVars;
 
   public ArrayList<Phi> phiOps = new ArrayList<>();
   public ArrayList<Op> readsVars = new ArrayList<>();
@@ -100,7 +104,10 @@ class Block extends Op {
     setStackCount(block.stackCount - skipCount);
     for (int i = 0; i < stackCount; i++) {
       Op phiOp;
-      if (stack[i] == null) {
+      if (phiOps.size() > i) {
+        // stack has already been popped, but we may have phis
+        phiOp = phiOps.get(i);
+      } else if (stack[i] == null) {
         stack[i] = new StackSlot();
         phiOp = newPhi(i);
         stack[i].op = phiOp;
@@ -120,6 +127,40 @@ class Block extends Op {
 
   public void updatePhiTypes(DCFlowGraph state) {
     if (frame == null) return; // Single input should be per phi
+
+    // each predecessor will come to this block having assigned certain types to each local/stack
+    // this block's frame will have its own expectations for each local/stack
+    // we know that it previously compiled so each predecessor type must be a subclass of its
+    //   corresponding frame type
+    // when ASM is creating the new regenerated class, it will need to know about these class
+    //   relationships while it tries to generate the new frames
+    var locals = frame.local.size();
+    for (var pred : predecessors) {
+      // frame locals are a list of variables without regard to size
+      // vars reserve 2 slots for double/long
+      int varIndex = 0;
+      for (int i = 0; i < locals; i++) {
+        var localSlot = frame.local.get(i);
+        if (localSlot.equals(DOUBLE) || localSlot.equals(LONG)) {
+          varIndex += 2;
+          continue;
+        }
+        if (localSlot instanceof String) {
+          var outVar = pred.outVars[varIndex];
+          if (outVar != null) {
+            state.adapter.registerCommonType(outVar.getInternalName(), (String) localSlot);
+          } else {
+            if (pred.frame != null && pred.frame.local.size() > i) {
+              state.adapter.registerCommonType(
+                  (String) pred.frame.local.get(i), (String) localSlot);
+            } else {
+              LMessage.fatal(pred + " missing local variable " + i);
+            }
+          }
+        }
+        varIndex++;
+      }
+    }
 
     var frameStackSize = frame.stack.size();
     if (phiOps.size() != frameStackSize) LMessage.fatal("Invalid frame count");
@@ -153,7 +194,12 @@ class Block extends Op {
     return "Block" + blockID;
   }
 
+  /**
+   * Ops ready to be executed, Op.Param are not included and if Op depends only on Op.Param it
+   * becomes immediately available
+   */
   final PriorityQueue<Op> availOps = new PriorityQueue<>(Comparator.comparingInt(Op::index));
+
   final ArrayDeque<Op> delayedOps = new ArrayDeque<>();
 
   void pushStack(Op op, boolean warnOnUnexpectedStackSize) {

@@ -20,8 +20,6 @@ import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 @entity class ScopeProcessing(
     scope: CompilationScope,
     javaAndScalaSources: JavaAndScalaCompilationSources,

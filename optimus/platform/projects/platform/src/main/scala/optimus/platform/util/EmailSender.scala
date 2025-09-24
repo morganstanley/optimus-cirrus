@@ -122,6 +122,12 @@ class EmailSender private (
     val props: Properties = new Properties()
     props.put("mail.smtp.host", smtp.host)
     props.put("mail.smtp.port", smtp.port.toString)
+    if (smtp.enableStartTls) {
+      props.put("mail.smtp.auth", "false")
+      props.put("mail.smtp.starttls.enable", "true")
+      props.put("mail.smtp.ssl.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
+      props.put("mail.smtp.ssl.protocols", "TLSv1.2")
+    }
     val session: Session = Session.getInstance(props)
     val msg: Message = new MimeMessage(session)
     msg.setHeader("X-Unsent: 1", "")
@@ -193,6 +199,7 @@ object EmailSenderHelper {
 sealed trait EmailSenderSmtpServer {
   def host: String
   def port: Int = 25
+  def enableStartTls: Boolean = false
   final def hostPort: String = s"$host:$port"
 }
 object EmailSenderSmtpServer extends Enum[EmailSenderSmtpServer] {
@@ -205,5 +212,11 @@ object EmailSenderSmtpServer extends Enum[EmailSenderSmtpServer] {
   case object LocalTest extends EmailSenderSmtpServer {
     override def host = "localhost"
     override def port = 25000
+  }
+
+  case object Cod extends EmailSenderSmtpServer {
+    override def host = StaticConfig.string("codSmtpHost")
+    override def port = 2587
+    override def enableStartTls: Boolean = true
   }
 }

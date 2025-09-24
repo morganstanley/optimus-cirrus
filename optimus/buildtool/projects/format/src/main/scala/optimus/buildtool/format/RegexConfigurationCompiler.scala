@@ -22,8 +22,6 @@ import optimus.buildtool.config.RuleFilterConfiguration
 import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.Keys.KeySet
 
-import scala.collection.immutable.Seq
-
 object RegexConfigurationCompiler {
   private val Rules = "rules"
   private val SeverityKey = "severity-level"

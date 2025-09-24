@@ -18,8 +18,6 @@ import optimus.buildtool.scope.CompilationNode
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 @entity trait ScopedCompilationFactory {
   @node def globalMessages: Seq[MessagesArtifact]
   @node def scopeIds: Set[ScopeId]

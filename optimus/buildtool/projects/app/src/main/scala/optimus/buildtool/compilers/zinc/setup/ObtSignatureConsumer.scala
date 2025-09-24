@@ -29,7 +29,6 @@ import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.{Jars => JarUtils}
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -71,12 +70,7 @@ class ObtSignatureConsumer(
       // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput`, which
       // are the leaf nodes that call this code
       val signatures = {
-        // we incrementally rewrite these and it's much cheaper if they aren't compressed
-        JarUtils.stampJarWithConsistentHash(
-          signatureJar.tempPath,
-          compress = false,
-          Some(activeTask.trace),
-          incremental)
+        JarUtils.stampJarWithConsistentHash(signatureJar.tempPath, Some(activeTask.trace), incremental)
         signatureJar.moveTempToFinal()
         SignatureArtifact.unwatched(
           InternalArtifactId(scopeId, AT.JavaAndScalaSignatures, None),

@@ -19,7 +19,6 @@ import optimus.buildtool.utils.PathUtils.{fingerprintAsset => fa}
 
 import java.nio.file.Paths
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object CppToolchain {
   val NoToolchain: CppToolchain = CppToolchain(

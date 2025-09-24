@@ -59,14 +59,14 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
   def mustWaitDelay: Long = Settings.defaultBatcherMustWaitDelay
 
   /**
-   * By default this is max number of nodes to batch. By overriding getNodeWeight you effectively turning this value
+   * By default, this is max number of nodes to batch. By overriding getNodeWeight you effectively turning this value
    * into a max weight to run Also see getGroupBatchSize
    */
   var maxBatchSize: Int = Int.MaxValue
   val propertyInfo: NodeTaskInfo = NodeBatcherSchedulerPluginBase.getPropertyInfo(getClass)
 
   /**
-   * This function needs to be very very quick and non-blocking or be @node ... Note: Both functions are implemented
+   * This function needs to be very quick and non-blocking or be @node ... Note: Both functions are implemented
    * with $queued returning null. This allows to either override with @node or just a regular function (which would be
    * faster) Returns Weight for a given node, when the sum of weights reaches maxBatchSize the batch is scheduled for
    * execution
@@ -242,8 +242,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
     def tryToSchedule(eq: EvaluationQueue): Unit = {
       // It's much safer to rely on the forward chain.
       // Note: this is possible to write to a batch node that is careful to be safe from any thread.
-      // If this becomes needed we can customize and optionally turn off this call
-      // poisonCausality()
+      // If this becomes needed we can customize and optionally turn off this call poisonCausality()
 
       // Set null on state atomically to mark batch as done
       val cstate = state.getAndSet(null)
@@ -701,7 +700,7 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
       }
     }
 
-    // Enqueue outside of the lock
+    // Enqueue outside the lock
     if (newBatch ne null) {
       newBatch.attach(ss)
       if (newBatch.priority == -1) newBatch.tryToSchedule(eq)

@@ -21,7 +21,6 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
@@ -42,13 +41,12 @@ import scalaxb.compiler._
 import scalaxb.compiler.xsd.Driver
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.xml.Elem
 import scala.xml.Node
 
 @entity class ScalaxbGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.Scalaxb
+  override val generatorType: String = "scalaxb"
 
   override type Inputs = ScalaxbGenerator.Inputs
 
@@ -139,13 +137,13 @@ import scala.xml.Node
           )
         val a = GeneratedSourceArtifact.create(
           scopeId,
+          tpe,
           generatorName,
-          artifactType,
           outputJar,
           sourcePath,
           Seq(message)
         )
-        SourceGenerator.createJar(generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
+        SourceGenerator.createJar(tpe, generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
         a
       }
       Some(artifact)

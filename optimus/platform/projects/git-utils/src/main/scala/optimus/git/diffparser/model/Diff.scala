@@ -13,7 +13,6 @@ package optimus.git.diffparser.model
 
 import java.util.regex.Pattern
 
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 import scala.collection.mutable
 

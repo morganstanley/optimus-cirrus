@@ -14,6 +14,7 @@ package optimus.buildtool.scope.partial
 import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
@@ -23,60 +24,81 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.buildtool.scope.sources.CompilationSources
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
 import java.time.Instant
-import scala.collection.immutable.{IndexedSeq, Seq}
+import scala.collection.immutable.IndexedSeq
 
 @entity private[partial] trait PartialScopedCompilation {
+  type ArtifactTypeBound <: ArtifactType
   protected def scope: CompilationScope
-  protected def sources: CompilationSources
-
-  @node protected def fingerprint: FingerprintArtifact = sources.compilationFingerprint
 
   @node protected def upstreamArtifacts: IndexedSeq[Artifact]
 
-  // generatedSourceArtifacts can have errors too
-  @node protected def prerequisites: IndexedSeq[Artifact] = sources.generatedSourceArtifacts ++ upstreamArtifacts
-  @node private def upstreamErrors: Option[Seq[Artifact]] = Artifact.onlyErrors(prerequisites)
+  @node protected def prerequisites: IndexedSeq[Artifact] = upstreamArtifacts
+  @node final protected def upstreamErrors: Option[Seq[Artifact]] = Artifact.onlyErrors(prerequisites)
 
   @node protected def containsRelevantSources: Boolean
+  @node protected final def shouldCompile[A <: ArtifactType](tpe: A): Boolean =
+    ScopedCompilation.generate(tpe) && containsRelevantSources
+
+  @node protected def fingerprintArtifact: Option[FingerprintArtifact] = None
 
   @alwaysAutoAsyncArgs
-  protected def compile[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
+  protected final def compile[A <: ArtifactTypeBound](tpe: A, discriminator: Option[String])(
       f: => Option[A#A]
-  ): IndexedSeq[Artifact] = needsPlugin
-  @node protected def compile$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
+  ): IndexedSeq[Artifact] = needsPluginAlwaysAutoAsyncArgs
+  @node protected def compile$NF[A <: ArtifactTypeBound](tpe: A, discriminator: Option[String])(
       f: NodeFunction0[Option[A#A]]
   ): Seq[Artifact] = {
-    if (ScopedCompilation.generate(tpe) && containsRelevantSources) upstreamErrors.getOrElse {
-      scope.cached$NF(tpe, discriminator, fingerprint.hash)(f).apar.map {
-        // Cached artifacts don't know if they contain plugins or macros, so we need to update them here. This
-        // can be removed if the cached artifacts are changed to include that information.
-        case c: ClassFileArtifact =>
-          c.copy(
-            containsPlugin = scope.config.containsPlugin,
-            containsAgent = scope.config.containsAgent,
-            containsOrUsedByMacros = scope.config.containsMacros)
-        case x => x
-      } :+ fingerprint
+    if (shouldCompile(tpe)) upstreamErrors.getOrElse {
+      markClassFileArtifacts(doCompile(tpe, discriminator)(f)) ++ fingerprintArtifact
     }
-    else IndexedSeq(fingerprint)
+    else fingerprintArtifact.toIndexedSeq
   }
+
+  @node protected def doCompile[A <: ArtifactTypeBound](tpe: A, discriminator: Option[String])(
+      f: NodeFunction0[Option[A#A]]
+  ): Seq[Artifact] = f().toIndexedSeq
+
+  @node protected final def markClassFileArtifacts(artifacts: Iterable[Artifact]): IndexedSeq[Artifact] =
+    artifacts.apar.map {
+      // Cached artifacts don't know if they contain plugins or macros, so we need to update them here. This
+      // can be removed if the cached artifacts are changed to include that information.
+      case c: ClassFileArtifact =>
+        c.copy(
+          containsPlugin = scope.config.containsPlugin,
+          containsAgent = scope.config.containsAgent,
+          containsOrUsedByMacros = scope.config.containsMacros)
+      case x => x
+    }.toIndexedSeq
 
   override def toString: String = s"${getClass.getSimpleName}(${scope.id})"
 }
 
+@entity private[partial] trait CachedPartialScopedCompilation extends PartialScopedCompilation {
+  override type ArtifactTypeBound = CachedArtifactType
+
+  protected def sources: CompilationSources
+
+  @node override protected final def fingerprintArtifact: Option[FingerprintArtifact] = Some(fingerprint)
+  @node protected def fingerprint: FingerprintArtifact = sources.compilationFingerprint
+
+  @node override protected def doCompile[A <: ArtifactTypeBound](tpe: A, discriminator: Option[String])(
+      f: NodeFunction0[Option[A#A]]
+  ): Seq[Artifact] = scope.cached$NF(tpe, discriminator, fingerprint.hash)(f)
+}
+
 private[buildtool] final case class AnalysisWithLocator(analysis: Seq[Artifact], locator: Option[LocatorArtifact])
 
-@entity private[partial] trait PartialScopedClassCompilation extends PartialScopedCompilation {
+@entity private[partial] trait PartialScopedClassCompilation extends CachedPartialScopedCompilation {
   protected def sources: JavaAndScalaCompilationSources
 
-  // externalCompileDependencies can have errors too
+  // generatedSourceArtifacts and externalCompileDependencies can have errors too
   @node override protected def prerequisites: IndexedSeq[Artifact] =
-    sources.externalCompileDependencies ++ super.prerequisites
+    sources.generatedSourceArtifacts ++ sources.externalCompileDependencies ++ super.prerequisites
 
   @node protected def analysisWithLocator(
       analysis: Seq[Artifact],

@@ -114,7 +114,7 @@ public abstract class NodeCacheBase extends NodeCCache {
       if (found != null) { // Found potential match, and we just need to adjust for different CS
         if (policy.acceptAnyUsableCS) return found; // [0] Handling CS internally
 
-        PropertyNode<?> kvn = NCSupport.isUsableWRTCancellationScope(key, found);
+        PropertyNode<?> kvn = NCSupport.isUsableWRTCancelScopeAndEnv(key, found);
         if (kvn == found) return found; // [1] Complete match and can re-use directly
         // [2] Can't answer yet and we need a proxy
         if (kvn == null) insertNode = proxy = policy.updateProxy(this, key, found, proxy);
@@ -178,7 +178,7 @@ public abstract class NodeCacheBase extends NodeCCache {
         // isUsableWRTCS is arbitrarily slow in presence of exceptions, so keep this check first
         if (!policy.matchesScenario(value, key)) continue;
         // a.k.a. key or value or null
-        PropertyNode<?> kvn = NCSupport.isUsableWRTCancellationScope(key, value);
+        PropertyNode<?> kvn = NCSupport.isUsableWRTCancelScopeAndEnv(key, value);
         if (kvn == key) continue;
 
         if (kvn == value || policy.acceptAnyUsableCS) {

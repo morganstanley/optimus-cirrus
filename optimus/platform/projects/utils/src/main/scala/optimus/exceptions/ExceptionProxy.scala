@@ -163,9 +163,14 @@ class ExceptionContaining(contains: String) extends ExceptionProxy {
 object AdditionalExceptionProxy extends Throwable with ExceptionProxy {
   private val log = LoggerFactory.getLogger(this.getClass)
 
-  val additions: Set[ExceptionMatcher] =
-    RTListConfig.additionalRTExceptions
-      .map(_.split(';').map(ExceptionMatcher.Parser.parse).toSet)
+  val additions: Set[ExceptionMatcher] = {
+    parseRTException(RTListConfig.additionalRTExceptionsFromJavaOpt) ++
+      parseRTException(RTListConfig.additionalRTExceptions)
+  }
+
+  def parseRTException(additionalRTExceptions: Option[String]) =
+    additionalRTExceptions.map(_.split(';')
+        .map(ExceptionMatcher.Parser.parse).toSet)
       .getOrElse(Set.empty[ExceptionMatcher])
 
   final override def matches(t: Throwable): Boolean = {

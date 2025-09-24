@@ -15,7 +15,6 @@ import optimus.rest.RestApi
 import spray.json.JsonReader
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Seq
 
 trait RecursiveQuerier extends RestApi {
   private val generalPageSize: Int = 100

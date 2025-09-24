@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.runconf.plugins
 
-import scala.collection.immutable.Seq
-
 final case class StrictRuntime(
     // 'enabled' differentiate between states: set true, set false, unset. With standard boolean it would be
     // harder to merge inherited template/app/tests without loosing the context

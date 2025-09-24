@@ -14,12 +14,12 @@ import optimus.platform.EvaluationQueue
 import optimus.platform.ScenarioStack
 
 trait TweakKeyExtractor extends Serializable {
-  def key(node: NodeKey[_]): AnyRef
+  def key(node: NodeKey[_]): Any
 }
 
 trait SITweakValueProvider extends Serializable {
   def isKeyDependent: Boolean = true
-  def valueOf(node: PropertyNode[_]): AnyRef
+  def valueOf(node: PropertyNode[_]): Any
   def serializeAsValue: Option[Any] = None
 }
 
@@ -40,13 +40,15 @@ final class TweakValueProviderNode[T](
   def isKeyDependent: Boolean = valueProvider.isKeyDependent
 
   def copyWith(pn: PropertyNode[T], computeSS: ScenarioStack): Node[T] = {
-    pn.attach(computeSS) // attach the ss for previous value of pn
-    new TweakValueProviderNode[T](valueProvider, pn, modify)
+    val tvpNode = new TweakValueProviderNode[T](valueProvider, pn, modify)
+    if (modify) tvpNode.attach(computeSS) // attach the ss for previous value of pn
+    else tvpNode.attach(computeSS.siRoot)
+    tvpNode
   }
 
   override def run(ec: OGSchedulerContext): Unit = {
     if (modify) {
-      val srcNode = key.scenarioStack().getNode(key, ec) // retrieve the scenario stack and run the node
+      val srcNode = scenarioStack().getNode(key, ec) // retrieve the scenario stack and run the node
       ec.enqueue(srcNode)
       srcNode.continueWith(this, ec) // callback onChildCompleted
     } else {

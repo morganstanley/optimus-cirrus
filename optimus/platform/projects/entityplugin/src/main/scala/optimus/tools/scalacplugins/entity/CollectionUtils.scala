@@ -13,7 +13,6 @@ package optimus.tools.scalacplugins.entity
 
 import optimus.scalacompat.collection._
 import optimus.scalacompat.collection.BuildFrom
-import scala.collection.immutable.Seq
 
 private[scalacplugins] object CollectionUtils {
 

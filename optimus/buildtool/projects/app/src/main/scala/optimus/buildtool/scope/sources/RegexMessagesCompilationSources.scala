@@ -19,7 +19,6 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity
@@ -51,9 +50,9 @@ class RegexMessagesCompilationSources(
       scope.fingerprint(content, tpe)
     }
 
-    val hash = scope.hasher.hashFingerprint(sourceFingerprint ++ rulesFingerprint, RegexMessagesFingerprint)
-    // `generatedSourceArtifacts = Nil` since we're not dependent on any source generation
-    HashedSourcesImpl(allContent, generatedSourceArtifacts = Nil, hash)
+    val fingerprint = sourceFingerprint ++ rulesFingerprint
+    val hash = scope.hasher.hashFingerprint(fingerprint, RegexMessagesFingerprint)
+    HashedSourcesImpl(allContent, hash, fingerprint)
   }
 
 }

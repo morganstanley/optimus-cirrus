@@ -37,7 +37,6 @@ import optimus.scalacompat.collection._
 import spray.json._
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 object BspBuilder {
@@ -279,12 +278,9 @@ class BspBuilder(
     bspListener.ensureDiagnosticsReported(messages)
     service.cancelAll(bspListener, t)
 
-    val (translated, errorMessage) = BuildServerProtocolService.translateException("Build failed")(t)
-    if (messages.isEmpty) errorMessage match {
-      case Some(s) => bspListener.error(s)
-      case None    => bspListener.error("Compilation failed", translated)
-    }
+    log.error("Compilation failed", t)
+    bspListener.error("Compilation failed", t)
 
-    BuildResult(translated)
+    BuildResult(t)
   }
 }

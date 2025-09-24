@@ -56,6 +56,7 @@ public class NodeMethod extends TransformableMethod {
 
   // @node(exposeArgTypes = true)/@async(exposeArgTypes = true) needs to inherit this trait
   boolean trait;
+  boolean traceAlways; // @async(traceAlways = true) to generate the code for tracing
 
   String implFieldDesc; // null if not a simple ($impl) field, else no need to create nodeClass
   String implMethodDesc; // null if not a simple ($impl) method, else no need to create nodeClass
@@ -72,9 +73,12 @@ public class NodeMethod extends TransformableMethod {
     this.returnType = Type.getReturnType(method.desc);
   }
 
-  public void writeNodeSyncFunc(ClassVisitor cv) {
-    var cmd = isScenarioIndependent ? CMD_GETSI : CMD_GET;
-    writeInvokeNewNode(cv, cmd, method, returnType, method.access);
+  public void writeNodeSyncFunc(ClassVisitor cv, String loomMethodName) {
+    if (asyncOnly && !trait && !traceAlways) writeInvokeOriginal(cv, loomMethodName, method);
+    else {
+      var cmd = isScenarioIndependent ? CMD_GETSI : CMD_GET;
+      writeInvokeNewNode(cv, cmd, method, returnType, method.access);
+    }
   }
 
   public void writeQueuedFunc(ClassVisitor cv) {
@@ -85,6 +89,16 @@ public class NodeMethod extends TransformableMethod {
     // var newAccess = queuedPM ? queuedMethod.access : method.access;
     var newAccess = method.access;
     writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_FUTURE_TYPE, newAccess);
+  }
+
+  private void writeInvokeOriginal(ClassVisitor cv, String loomMethodName, MethodNode org) {
+    try (var mv = newMethod(cv, org.access, org.name, org.desc)) {
+      mv.loadThis(); /* this (entity) */
+      mv.loadArgs(); /* method(args) */
+      var opCode = isInterface ? INVOKEINTERFACE : INVOKEVIRTUAL;
+      mv.visitMethodInsn(opCode, cls.name, loomMethodName, org.desc, isInterface);
+      mv.returnValue();
+    }
   }
 
   private void writeInvokeNewNode(

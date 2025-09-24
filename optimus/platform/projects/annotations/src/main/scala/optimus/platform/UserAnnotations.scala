@@ -170,16 +170,12 @@ class meta(
     this(owner = owner, catalog = null, description = null, dqControls = null, upstreamDatasets = null)
   def this(owner: OwnershipMetadata, catalog: DalMetadata) =
     this(owner = owner, catalog = catalog, description = null, dqControls = null, upstreamDatasets = null)
-  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String) =
-    this(owner = owner, catalog = catalog, description = description, dqControls = null, upstreamDatasets = null)
-  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String, dqControls: Controls) =
-    this(owner = owner, catalog = catalog, description = description, dqControls = dqControls, upstreamDatasets = null)
-  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String, upstreamDatasets: UpstreamDatasets) =
+  def this(owner: OwnershipMetadata, catalog: DalMetadata, dqControls: Controls, upstreamDatasets: UpstreamDatasets) =
     this(
       owner = owner,
       catalog = catalog,
-      description = description,
-      dqControls = null,
+      description = null,
+      dqControls = dqControls,
       upstreamDatasets = upstreamDatasets)
 }
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it

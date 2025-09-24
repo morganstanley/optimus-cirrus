@@ -14,7 +14,6 @@ package optimus.entityplugin.config
 import com.typesafe.config.ConfigFactory
 
 import scala.annotation.nowarn
-import scala.collection.immutable.Seq
 
 object StaticConfig {
 

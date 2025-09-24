@@ -27,7 +27,7 @@ import scala.collection.immutable.IndexedSeq
     override protected val sources: SourceCompilationSources,
     scopeConfigSource: ScopeConfigurationSource,
     sourcePackager: JarPackager
-) extends PartialScopedCompilation {
+) extends CachedPartialScopedCompilation {
   import scope._
 
   // package sources if:

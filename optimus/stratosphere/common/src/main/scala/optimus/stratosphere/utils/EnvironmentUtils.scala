@@ -17,7 +17,13 @@ import optimus.utils.MemSize
 
 import java.lang.management.ManagementFactory
 import java.net.InetAddress
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.concurrent.duration._
+
+final case class DiskSpaceInfo(freeSpace: MemSize, totalSpace: MemSize) {
+  def usagePercentage: Int = ((totalSpace.bytes - freeSpace.bytes) * 100 / totalSpace.bytes).toInt
+}
 
 object EnvironmentUtils {
 
@@ -34,6 +40,13 @@ object EnvironmentUtils {
   def getFreePhysicalMemorySize: MemSize = MemSize.of(system.getFreeMemorySize)
 
   def getFreeSwapMemorySize: MemSize = MemSize.of(system.getFreeSwapSpaceSize)
+
+  def getDiskSpaceInfo(path: Path): DiskSpaceInfo = {
+    val store = Files.getFileStore(path)
+    val totalSpace = MemSize.of(store.getTotalSpace)
+    val freeSpace = MemSize.of(store.getUsableSpace)
+    DiskSpaceInfo(freeSpace, totalSpace)
+  }
 
   def availableProcessors(): Int = Runtime.getRuntime.availableProcessors()
 

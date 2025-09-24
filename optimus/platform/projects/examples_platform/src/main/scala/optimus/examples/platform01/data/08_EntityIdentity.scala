@@ -14,8 +14,9 @@ package optimus.examples.platform01.data
 import optimus.platform._
 import optimus.examples.platform.entities.SimpleEntity
 import optimus.examples.platform.entities.SimpleEvent
+import optimus.examples.testinfra.PrintlnInterceptor
 
-object EntityIdentity extends OptimusApp {
+object EntityIdentity extends OptimusApp with PrintlnInterceptor {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

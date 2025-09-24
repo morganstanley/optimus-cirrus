@@ -39,9 +39,9 @@ import optimus.scalacompat.collection._
 import optimus.utils.CollectionUtils._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import java.util.concurrent.ConcurrentHashMap
 
 private[buildtool] object ObtCrumbSource extends Crumb.Source {
   override val name = "OBT"
@@ -362,15 +362,15 @@ final class BreadcrumbTraceListener(
 sealed class StatisticsTraceListener(t0: Instant = patch.MilliInstant.now())
     extends DefaultObtTraceListener
     with StatsHolder {
-  private val traces = mutable.ArrayBuffer[StatisticsTrace]()
+  private val traces = ConcurrentHashMap.newKeySet[StatisticsTrace]()
   private var t1: Instant = _
 
   protected def newTrace(scopeId: ScopeId, category: CategoryTrace, time: Instant): StatisticsTrace =
     new StatisticsTrace(scopeId, category, time)
 
-  final override def startTask(scopeId: ScopeId, category: CategoryTrace, time: Instant): TaskTrace = synchronized {
+  final override def startTask(scopeId: ScopeId, category: CategoryTrace, time: Instant): TaskTrace = {
     val trace = newTrace(scopeId, category, time)
-    traces += trace
+    traces.add(trace)
     trace
   }
 
@@ -386,7 +386,7 @@ sealed class StatisticsTraceListener(t0: Instant = patch.MilliInstant.now())
     }
 
     val listenerStats = getStats.map { case (s, v) => s.key -> v }
-    val tracesSeq = traces.toIndexedSeq
+    val tracesSeq = traces.asScala.toSeq
     val allStats = listenerStats ++ sumStats(tracesSeq)
 
     val tracesByCategory = tracesSeq.groupBy(_.category.categoryName)

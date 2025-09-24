@@ -30,7 +30,6 @@ import optimus.buildtool.format.OrderingUtils._
 import optimus.platform._
 
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 
 sealed trait ObtFile {
@@ -105,6 +104,7 @@ object TopLevelConfig {
     WorkspaceConfig,
     ResolverConfig,
     DependenciesConfig,
+    FingerprintsDiffConfig,
     JvmDependenciesConfig,
     MavenDependenciesConfig,
     BuildDependenciesConfig,
@@ -132,6 +132,7 @@ object WorkspaceDefaults extends TopLevelConfig("workspace.obt")
 object WorkspaceConfig extends TopLevelConfig("conf.obt")
 object ResolverConfig extends TopLevelConfig("resolvers.obt")
 object DependenciesConfig extends TopLevelConfig("dependencies.obt") with DependencyConfig
+object FingerprintsDiffConfig extends TopLevelConfig("config/fingerprints-diff.obt")
 object JvmDependenciesConfig extends TopLevelConfig("dependencies/jvm-dependencies.obt") with DependencyConfig
 object MavenDependenciesConfig extends TopLevelConfig("dependencies/maven-dependencies.obt") with DependencyConfig
 object BuildDependenciesConfig extends TopLevelConfig("dependencies/build-dependencies.obt") with DependencyConfig
@@ -149,9 +150,11 @@ object RuleFiltersConfig extends TopLevelConfig("config/rules/filters.obt")
 
 final case class Module(
     id: ModuleId,
+    setId: ModuleSetId,
+    public: Boolean,
     path: RelativePath,
-    owner: String,
-    owningGroup: String,
+    owner: Option[String],
+    owningGroup: Option[String],
     line: Int
 ) extends ObtFile
     with OrderedElement[ModuleId]
@@ -193,11 +196,12 @@ final case class VariantSetConfig(
 final case class WorkspaceStructure(
     name: String,
     bundles: Set[Bundle],
-    modules: Map[ModuleId, Module],
     moduleSets: Map[ModuleSetId, ModuleSetDefinition],
     dependencySets: Map[DependencySetId, DependencySetConfig],
     variantSets: Map[VariantSetId, VariantSetConfig]
 ) {
+  val modules: Map[ModuleId, Module] = moduleSets.values.flatMap(ms => ms.modules).map(m => m.id -> m).toMap
+
   def allFiles: Seq[ObtFile] = TopLevelConfig.allFiles ++ bundles ++ moduleSets.values.map(_.file) ++ modules.values ++
     dependencySets.values ++ variantSets.values
 
@@ -213,7 +217,7 @@ final case class WorkspaceStructure(
 }
 
 object WorkspaceStructure {
-  val empty: WorkspaceStructure = WorkspaceStructure("", Set.empty, Map.empty, Map.empty, Map.empty, Map.empty)
+  val empty: WorkspaceStructure = WorkspaceStructure("", Set.empty, Map.empty, Map.empty, Map.empty)
 
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
@@ -222,17 +226,6 @@ object WorkspaceStructure {
     val id = MetaBundle(meta, name)
     Success(Bundle(id, eonId, modulesRoot, root, config.origin().lineNumber())).withProblems {
       config.checkExtraProperties(ModuleSetsConfig, Keys.bundleFileDefinition)
-    }
-  }
-
-  private def checkModulesMavenName(modules: Set[(Module, ObtFile)]): Seq[Error] = {
-    val incompatibleModules = modules.groupBy(_._1.id.scope("main").forMavenRelease.fullModule).filter(_._2.size > 1)
-
-    for {
-      (id, modules) <- incompatibleModules.to(Seq)
-      (m, file) <- modules
-    } yield {
-      Error(s"Duplicate (lower-case) module name: '$id'", file, m.line)
     }
   }
 
@@ -302,16 +295,11 @@ object WorkspaceStructure {
         bundles <- validatedBundles
         depSets <- dependencySets
         varSets <- variantSets
-        allModuleSets <- ModuleSetDefinition.load(loader, bundles, depSets.keySet, varSets.keySet)
-        allModules <- Success(
-          allModuleSets.flatMap(ms => ms.publicModules.map((_, ms.file))) ++
-            allModuleSets.flatMap(ms => ms.privateModules.map((_, ms.file)))
-        ).withProblems(mods => checkModulesMavenName(mods))
+        moduleSets <- ModuleSetDefinition.load(loader, bundles, depSets.keySet, varSets.keySet)
       } yield WorkspaceStructure(
         name,
         bundles.toSet,
-        allModules.map { case (module, _) => module.id -> module }.toMap,
-        allModuleSets.map { moduleSet => moduleSet.id -> moduleSet }.toMap,
+        moduleSets.map { moduleSet => moduleSet.id -> moduleSet }.toMap,
         depSets,
         varSets
       )

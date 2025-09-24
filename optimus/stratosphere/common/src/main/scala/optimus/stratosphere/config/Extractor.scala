@@ -20,7 +20,6 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
 import java.time.{Duration => JDuration}
-import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._

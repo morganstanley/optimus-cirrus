@@ -426,7 +426,7 @@ object GridProfilerUtils {
       } {
         val enq = pnti.enqueuingPropertyName
         val pname = pnti.fullName()
-        val spName = StackAnalysis.dromedize(pname)
+        val spName = StackAnalysis.prettyFrameName(pname)
         val debug = ArraySeq.newBuilder[String]
         pnti.name
         val (propertyNode, subNode) =
@@ -527,6 +527,17 @@ object GridProfilerUtils {
     if (
       getDefaultLevel >= HOTSPOTSLIGHT && !DiagnosticSettings.profilerDisableHotspotsCSV && DiagnosticSettings.explainPgoDecision
     ) {
+      val cfg = AutoPGOThresholds()
+      OGTrace.liveReader.getHotspots().forEach { pnti =>
+        if (pnti.getCacheable) {
+          CacheFilterTweakUsageDecision.add(
+            pnti,
+            "Other",
+            noHits = DisableCache.noHits(pnti, cfg),
+            noBenefit = DisableCache.noBenefit(pnti, cfg),
+            lowHitRatio = DisableCache.lowHitRatio(pnti, cfg))
+        }
+      }
       Some(CacheFilterTweakUsageDecision.csvFormat())
     } else None
 
@@ -540,14 +551,6 @@ object GridProfilerUtils {
       (statType, stats) <- csvRes.all
       stat <- stats
     } Breadcrumbs.info(ChainedID.root, PropertiesCrumb(_, ProfilerSource, P.profStatsType -> statType :: P.profStats -> stat :: appProperties))
-  }
-
-  def copyExistingOGTrace(target: Path): Boolean = {
-    val condition = getDefaultLevel == RECORDING
-    if (condition) {
-      OGTrace.copyTraceTo(target.toFile.getAbsolutePath)
-    }
-    condition
   }
 
   def hotspotsSummary: Option[JArrayList[PNodeTaskInfo]] = {

@@ -11,8 +11,6 @@
  */
 package optimus.platform.storable
 
-import optimus.scalacompat.collection.ArrayToVarArgsOps
-
 import java.util.{Arrays => JArrays}
 import scala.collection.AbstractIterator
 import scala.collection.immutable.SortedSet

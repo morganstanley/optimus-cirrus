@@ -126,6 +126,427 @@ trait AsyncFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R] extends Se
   def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R]
 }
 
+trait AsyncFunction10[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, +R] extends Serializable {
+  @impure
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10): R
+  @impure
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10): NodeFuture[R]
+}
+
+trait AsyncFunction11[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, +R] extends Serializable {
+  @impure
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11): R
+  @impure
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11)
+      : NodeFuture[R]
+}
+
+trait AsyncFunction12[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, +R] extends Serializable {
+  @impure
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11, v12: T12): R
+  @impure
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11, v12: T12)
+      : NodeFuture[R]
+}
+
+trait AsyncFunction13[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, +R] extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13): NodeFuture[R]
+}
+
+trait AsyncFunction14[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14): NodeFuture[R]
+}
+
+trait AsyncFunction15[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15): NodeFuture[R]
+}
+
+trait AsyncFunction16[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, -T16, +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16): NodeFuture[R]
+}
+
+trait AsyncFunction17[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, -T16, -T17, +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17): NodeFuture[R]
+}
+
+trait AsyncFunction18[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18): NodeFuture[R]
+}
+
+trait AsyncFunction19[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    -T19,
+    +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19): NodeFuture[R]
+}
+
+trait AsyncFunction20[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    -T19,
+    -T20,
+    +R]
+    extends Serializable {
+  @impure
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19,
+      v20: T20): R
+  @impure
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19,
+      v20: T20): NodeFuture[R]
+}
+
 trait NodeFunction0[+R] extends AsyncFunction0[R] {
   @nodeSync
   def apply(): R
@@ -210,7 +631,430 @@ trait NodeFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R]
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): R
   def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R]
+}
 
+trait NodeFunction10[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, +R]
+    extends AsyncFunction10[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, R] {
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10): R
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10): NodeFuture[R]
+}
+
+trait NodeFunction11[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, +R]
+    extends AsyncFunction11[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, R] {
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11): R
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11)
+      : NodeFuture[R]
+}
+
+trait NodeFunction12[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, +R]
+    extends AsyncFunction12[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, R] {
+  @nodeSync
+  def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11, v12: T12): R
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9, v10: T10, v11: T11, v12: T12)
+      : NodeFuture[R]
+}
+
+trait NodeFunction13[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, +R]
+    extends AsyncFunction13[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13): NodeFuture[R]
+}
+
+trait NodeFunction14[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, +R]
+    extends AsyncFunction14[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14): NodeFuture[R]
+}
+
+trait NodeFunction15[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, +R]
+    extends AsyncFunction15[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15): NodeFuture[R]
+}
+
+trait NodeFunction16[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, -T16, +R]
+    extends AsyncFunction16[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16): NodeFuture[R]
+}
+
+trait NodeFunction17[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, -T10, -T11, -T12, -T13, -T14, -T15, -T16, -T17, +R]
+    extends AsyncFunction17[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17): NodeFuture[R]
+}
+
+trait NodeFunction18[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    +R]
+    extends AsyncFunction18[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18): NodeFuture[R]
+}
+
+trait NodeFunction19[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    -T19,
+    +R]
+    extends AsyncFunction19[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19): NodeFuture[R]
+}
+
+trait NodeFunction20[
+    -T1,
+    -T2,
+    -T3,
+    -T4,
+    -T5,
+    -T6,
+    -T7,
+    -T8,
+    -T9,
+    -T10,
+    -T11,
+    -T12,
+    -T13,
+    -T14,
+    -T15,
+    -T16,
+    -T17,
+    -T18,
+    -T19,
+    -T20,
+    +R]
+    extends AsyncFunction20[
+      T1,
+      T2,
+      T3,
+      T4,
+      T5,
+      T6,
+      T7,
+      T8,
+      T9,
+      T10,
+      T11,
+      T12,
+      T13,
+      T14,
+      T15,
+      T16,
+      T17,
+      T18,
+      T19,
+      T20,
+      R] {
+  @nodeSync
+  def apply(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19,
+      v20: T20): R
+  def apply$queued(
+      v1: T1,
+      v2: T2,
+      v3: T3,
+      v4: T4,
+      v5: T5,
+      v6: T6,
+      v7: T7,
+      v8: T8,
+      v9: T9,
+      v10: T10,
+      v11: T11,
+      v12: T12,
+      v13: T13,
+      v14: T14,
+      v15: T15,
+      v16: T16,
+      v17: T17,
+      v18: T18,
+      v19: T19,
+      v20: T20): NodeFuture[R]
 }
 
 object asAsyncInnards {
@@ -236,7 +1080,7 @@ object asAsyncInnards {
 
   @nodeSyncLift
   @nodeLiftByName
-  def apply[T1, R](@nodeLift @withNodeClassID f: T1 => R): AsyncFunction1[T1, R] = optimus.core.needsPlugin
+  def apply[T1, R](@nodeLift @withNodeClassID f: T1 => R): AsyncFunction1[T1, R] = apply$withNode(toNodeFactory(f))
   def apply$withNode[T1, R](vn: T1 => Node[R]): AsyncFunction1[T1, R] = new AsyncFunction1Impl(vn)
 
   private[optimus /*platform*/ ] final class AsyncFunction1Impl[-T1, +R](val vn: T1 => Node[R])
@@ -382,7 +1226,8 @@ object asNodeInnards {
   @deprecating("This is not the API you are looking for!")
   @nodeSyncLift
   @nodeLiftByName
-  implicit def liftAndNotEnqueue[R](@nodeLift @nodeLiftByName r: => R): Node[R] = optimus.core.needsPlugin
+  implicit def liftAndNotEnqueue[R](@nodeLift @nodeLiftByName r: => R): Node[R] = liftAndNotEnqueue$withNode(
+    toNode(r _))
   implicit def liftAndNotEnqueue$withNode[R](r: Node[R]): Node[R] = r
 
   // used for both by-name and nilary cases to save typing

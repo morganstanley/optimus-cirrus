@@ -11,12 +11,13 @@
  */
 package optimus.platform
 
-import java.util.UUID
-
 import msjava.base.util.uuid.MSUuid
 import optimus.core.needsPlugin
+import optimus.core.needsPluginWithLocationTag
 import optimus.graph.Settings
 import optimus.platform.annotations.withLocationTag
+
+import java.util.UUID
 
 final case class LocationTag private (
     line: Int,
@@ -47,7 +48,7 @@ object LocationTag {
   }
 
   @withLocationTag
-  def getTag(): LocationTag = needsPlugin
+  def getTag(): LocationTag = needsPluginWithLocationTag
   def getTag$LT(tag: LocationTag): LocationTag = tag
 
   def uniqueForTest(): LocationTag =

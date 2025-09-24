@@ -57,6 +57,7 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   private void generateCleanableField() {
+    // TODO (OPTIMUS-76886): Use FieldInjector?
     var fv =
         visitField(ACC_PRIVATE, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE.getDescriptor(), null, null);
     fv.visitEnd();

@@ -14,8 +14,6 @@ package optimus.buildtool.config
 import optimus.buildtool.format.WarningsConfiguration
 import spray.json._
 
-import scala.collection.immutable.Seq
-
 final case class ScalacConfiguration(
     options: Seq[String],
     ignoredPlugins: Seq[ScopeId],

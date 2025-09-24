@@ -12,10 +12,9 @@
 package optimus.platform.storable;
 
 import java.util.Arrays;
-import com.google.common.collect.Interner;
-import com.google.common.collect.Interners;
 import optimus.CoreUtils;
 import optimus.config.NodeCacheConfigs$;
+import optimus.core.CoreHelpers;
 import optimus.graph.NodeTaskInfo;
 import optimus.graph.OGTrace;
 
@@ -23,8 +22,6 @@ public class EmbeddableCtrNodeSupport {
   public static final String suffix = "-constructor";
   private static NodeTaskInfo[] ctorInfo = new NodeTaskInfo[16];
   private static int ctorCount = 0;
-
-  private static final Interner<Object> interner = Interners.newWeakInterner();
 
   private static void applyConfig(NodeTaskInfo info) {
     var key = CoreUtils.stripSuffix(info.name(), suffix);
@@ -64,7 +61,7 @@ public class EmbeddableCtrNodeSupport {
     var pInfo = ctorInfo[id]; // ID has been allocated before and has to be present
     if (pInfo.getCacheable()) {
       var startTime = OGTrace.observer.lookupStart();
-      var r = interner.intern(t);
+      var r = CoreHelpers.nonStrictIntern(t);
       OGTrace.observer.lookupAdjustCacheStats(pInfo, r != t, startTime);
       //noinspection unchecked
       return (T) r;

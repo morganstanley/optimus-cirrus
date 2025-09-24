@@ -490,7 +490,7 @@ class AsyncGraphComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
         // A by-name parameter.  The argument is presumed to be evaluated inside the function, so any async
         // calls will be errors iff this function is not marked @closuresEnterGraph - irrespective of whether
         // it's being called as an argument to a function that was so-marked.
-        else if (paramFromType.isByNameParam) atPropClass(canAsync = false) {
+        else if (extendedIsByNameParam(paramFromType)) atPropClass(canAsync = false) {
           val last = entersGraph
           entersGraph = closuresEnterGraph || (isScalaTest && entersGraph)
           val ret = transform(arg)
@@ -630,7 +630,8 @@ class AsyncGraphComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
                 symbol.hasAnnotation(JunitBeforeAnnotation) ||
                 symbol.hasAnnotation(JunitBeforeClassAnnotation) ||
                 symbol.hasAnnotation(JunitAfterAnnotation) ||
-                symbol.hasAnnotation(JunitAfterClassAnnotation)
+                symbol.hasAnnotation(JunitAfterClassAnnotation) ||
+                symbol.hasAnnotation(JunitJupiterTestAnnotation)
             )
             def isAppEntry = PartialFunction.cond(tree) { case mimpl: Template =>
               mimpl.symbol.owner isSubClass DelayedInitClass

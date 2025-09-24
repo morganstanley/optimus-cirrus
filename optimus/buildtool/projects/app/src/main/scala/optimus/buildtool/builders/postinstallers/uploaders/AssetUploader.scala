@@ -37,7 +37,6 @@ import optimus.platform._
 import optimus.platform.util.Log
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.util.matching.Regex

@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -45,6 +46,8 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
 
   private static final Logger logger = LoggerFactory.getLogger(BatchOperationTemplate.class);
 
+  private static final AtomicLong DEBUG_INSTANCE_COUNTER = new AtomicLong();
+
   private static class BatchItemState {
     private ReplicationStrategy.ReplicatedOperation replicatedOperation;
     private int pendingServers = 0;
@@ -63,6 +66,8 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
     }
   }
 
+  protected final long debugId;
+  protected final String correlationName;
   protected final Duration readTimeout;
   protected final Duration operationTimeout;
   protected final ReplicationStrategy replicationStrategy;
@@ -76,6 +81,7 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
   private final AtomicInteger remainingItems = new AtomicInteger(0);
 
   public BatchOperationTemplate(
+      String correlationName,
       Duration readTimeout,
       Duration operationTimeout,
       ReplicationStrategy replicationStrategy,
@@ -84,6 +90,8 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
       CallbackRegistry callbackRegistry,
       MessageSender messageSender,
       List<E> allItems) {
+    this.debugId = DEBUG_INSTANCE_COUNTER.incrementAndGet();
+    this.correlationName = correlationName;
     this.readTimeout = readTimeout;
     this.operationTimeout = operationTimeout;
     this.replicationStrategy = replicationStrategy;
@@ -178,7 +186,9 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
         int remaining = remainingItems.addAndGet(-itemsWithoutServers.size());
         if (remaining == 0) {
           logger.debug(
-              "Immediately completing operation-level callback as all items were missing servers, keys={}",
+              "Immediately completing operation-level callback as all items were missing servers, debugId={}, correlationName={}, keys={}",
+              debugId,
+              correlationName,
               formatItemsKeys(allItems));
           callbackRegistry.complete(null, this, null, null);
         }
@@ -238,7 +248,9 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
       CallbackRegistry.CallbackContext ctx, List<E> items, OperationDetails opDetails) {
     try {
       logger.debug(
-          "Callback called for keys={}, reason={}, opDetails={}",
+          "Callback called for debugId={}, correlationName={}, keys={}, reason={}, opDetails={}",
+          debugId,
+          correlationName,
           formatItemsKeys(items),
           ctx.reason(),
           opDetails);
@@ -267,7 +279,11 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
 
   public void completeOperationIfNoOutstanding() {
     if (remainingItems.get() == 0) {
-      logger.debug("Completing operation-level callback for keys={}", formatItemsKeys(allItems));
+      logger.debug(
+          "Completing operation-level callback for debugId={}, correlationName={}, keys={}",
+          debugId,
+          correlationName,
+          formatItemsKeys(allItems));
       callbackRegistry.complete(null, this, null, null);
     }
   }
@@ -329,13 +345,15 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
     if (!additionalRequests.isEmpty()) {
       long requestId = idGenerator.next();
       logger.warn(
-          "After requestId={}, keys={} with opDetails={} failed with reason={}, additional requests (count={}) with newRequestId={} will be sent",
+          "After requestId={}, keys={} with opDetails={} failed with reason={}, additional requests (count={}) with newRequestId={} will be sent for debugId={}, correlationName={}",
           ctx.key(),
           formatItemsKeys(failedEntries),
           opDetails,
           ctx.reason(),
           additionalRequests.size(),
-          requestId);
+          requestId,
+          debugId,
+          correlationName);
       additionalRequests.forEach((s, list) -> sendMessage(requestId, s, list));
     }
 
@@ -435,12 +453,17 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
             opDetails);
       } else {
         logger.warn(
-            "Timed out operation indicated it has remaining items, but none were found, keys={}",
+            "Timed out operation indicated it has remaining items, but none were found, debugId={}, correlationName={}, keys={}",
+            debugId,
+            correlationName,
             formatItemsKeys(allItems));
       }
     } else {
       logger.warn(
-          "Operation timed out, but it has no remaining items, keys={}", formatItemsKeys(allItems));
+          "Operation timed out, but it has no remaining items, debugId={}, correlationName={}, keys={}",
+          debugId,
+          correlationName,
+          formatItemsKeys(allItems));
     }
   }
 
@@ -466,8 +489,10 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
           }
         });
     logger.error(
-        "Caught unexpected exception - will fail all remaining keys, keys="
-            + formatItemsKeys(itemsToFail),
+        "Caught unexpected exception - will fail all remaining keys, debugId={}, correlationName={}, keys={}",
+        debugId,
+        correlationName,
+        formatItemsKeys(itemsToFail),
         e);
     handleFail(itemsToFail, e, opDetails);
   }

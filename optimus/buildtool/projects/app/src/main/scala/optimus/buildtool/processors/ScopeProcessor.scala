@@ -45,6 +45,9 @@ import scala.collection.immutable.{IndexedSeq, Seq}
   def artifactType: ProcessorArtifactType
   def tpe: ProcessorType = ProcessorType(artifactType.name)
 
+  // Override this to false if the processor handles its own task recording
+  protected val recordTask: Boolean = true
+
   type Inputs <: ScopeProcessor.Inputs
 
   @node def dependencies(scope: CompilationScope): IndexedSeq[Artifact] =
@@ -94,7 +97,20 @@ import scala.collection.immutable.{IndexedSeq, Seq}
       pathingArtifact: PathingArtifact,
       dependencyArtifacts: Seq[Artifact],
       outputJar: JarAsset
-  ): Option[ProcessorArtifact] = ObtTrace.traceTask(scopeId, ProcessScope) {
+  ): Option[ProcessorArtifact] =
+    if (recordTask) ObtTrace.traceTask(scopeId, ProcessScope) {
+      _processInputs(scopeId, inputs, pathingArtifact, dependencyArtifacts, outputJar)
+    }
+    else
+      _processInputs(scopeId, inputs, pathingArtifact, dependencyArtifacts, outputJar)
+
+  @node def _processInputs(
+      scopeId: ScopeId,
+      inputs: NodeFunction0[Inputs],
+      pathingArtifact: PathingArtifact,
+      dependencyArtifacts: Seq[Artifact],
+      outputJar: JarAsset
+  ): Option[ProcessorArtifact] = {
     val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
       // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
       val tempJar = new ConsistentlyHashedJarOutputStream(JarAsset(tempOut), None, compressed = true)
@@ -156,6 +172,13 @@ import scala.collection.immutable.{IndexedSeq, Seq}
 }
 
 object ScopeProcessor {
+  import optimus.buildtool.cache.NodeCaching.reallyBigCache
+  // This is the node through which processing is initiated. It's very important that we don't lose these from
+  // cache (while they are still running at least) because that can result in reprocessing of the same scope
+  // due to a (potentially large) race between checking if the output artifacts are on disk and actually writing
+  // them there after processing completes.
+  processInputs.setCustomCache(reallyBigCache)
+
   val baseRelPath: RelativePath = RelativePath("processed")
 
   trait Inputs {
@@ -184,7 +207,32 @@ object ScopeProcessor {
         objectsContent,
         installLocation,
         configuration,
-        javaAndScalaSources,
+        Some(javaAndScalaSources),
+        scope.config.paths.workspaceSourceRoot
+      )
+    scope.hasher.hashFingerprint(fingerprint, ArtifactType.ProcessingFingerprint, Some(name))
+  }
+
+  @node def computeFingerprintHashWithoutSources(
+      name: String,
+      templateContent: Option[(FileAsset, HashedContent)],
+      templateHeaderContent: Option[(FileAsset, HashedContent)],
+      templateFooterContent: Option[(FileAsset, HashedContent)],
+      objectsContent: Option[(FileAsset, HashedContent)],
+      installLocation: RelativePath,
+      configuration: Map[String, String],
+      scope: CompilationScope): FingerprintArtifact = {
+
+    val fingerprint =
+      fingerprintComponents(
+        name,
+        templateContent,
+        templateHeaderContent,
+        templateFooterContent,
+        objectsContent,
+        installLocation,
+        configuration,
+        None,
         scope.config.paths.workspaceSourceRoot
       )
     scope.hasher.hashFingerprint(fingerprint, ArtifactType.ProcessingFingerprint, Some(name))
@@ -198,9 +246,9 @@ object ScopeProcessor {
       objectsContent: Option[(FileAsset, HashedContent)],
       installLocation: RelativePath,
       configuration: Map[String, String],
-      javaAndScalaSources: JavaAndScalaCompilationSources,
+      javaAndScalaSources: Option[JavaAndScalaCompilationSources],
       workspaceSourceRoot: Directory): Seq[String] = {
-    val compilationFingerprint = s"[Sources]${javaAndScalaSources.compilationFingerprint.hash}"
+    val compilationFingerprint = javaAndScalaSources.map(s => s"[Sources]${s.compilationFingerprint.hash}")
     val installLocationFingerprint = s"[InstallLocation:$name]${installLocation.pathFingerprint}"
     val configFingerprint = configuration.toSeq.sorted.map { case (k, v) => s"[Config:$name]$k=$v" }
 
@@ -213,7 +261,7 @@ object ScopeProcessor {
     val objectsFingerprint =
       fingerprintElement(s"Object:$name", objectsContent, workspaceSourceRoot)
 
-    Seq(compilationFingerprint, installLocationFingerprint) ++ configFingerprint ++ templateFingerprints ++
+    compilationFingerprint.to(Seq) ++ Seq(installLocationFingerprint) ++ configFingerprint ++ templateFingerprints ++
       templateHeaderFingerprints ++ templateFooterFingerprints ++ objectsFingerprint
   }
 

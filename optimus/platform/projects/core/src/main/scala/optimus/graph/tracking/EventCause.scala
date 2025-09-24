@@ -15,12 +15,16 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeoutException
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.graph.Awaitable
+import optimus.graph.DebugWaitChainItem
 import optimus.graph.DiagnosticSettings
 import optimus.graph.EventCauseInInvalidState
+import optimus.graph.NodeTaskInfo
 import optimus.graph.OGTrace
 import optimus.graph.Settings
 import optimus.utils.MacroUtils.SourceLocation
 
+import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
@@ -35,6 +39,7 @@ import scala.concurrent.duration.Duration
  * represent dependencies of the parent task.
  */
 private[optimus] object EventCause {
+  val causeInfo: NodeTaskInfo = NodeTaskInfo.userCustomDefined("UI_EVENT")
   val globalTagKey = "globalEventTag"
   val log: Logger = getLogger(getClass)
   private[tracking] val instrumentToken = Settings.instrumentEventCauseToken
@@ -97,6 +102,12 @@ private[optimus] object EventCause {
       // profiling data via backgroundComplete().
       background: Boolean = false
   ) extends EventCause {
+
+    // Child causes are "enqueued" by their parent cause.
+    override def getLauncher: Awaitable = null
+
+    def getParent: Awaitable = parent
+
     override def toString = s"ChildEventCause($cause)"
 
     // This is a val so that we dont have to recurse up the tree every time we want to grab the root on a leaf
@@ -127,6 +138,10 @@ private[optimus] object EventCause {
       res
     }
 
+    override protected def countDown(token: EventCause.Token): Unit = {
+      super.countDown(token)
+      if (isComplete) profile.markCompleted()
+    }
     override def onComplete(): Unit = parentToken.release()
 
     override def throwOrLogException(
@@ -137,15 +152,16 @@ private[optimus] object EventCause {
   }
 }
 
-private[optimus] trait WithEventCause {
-  def eventCause: Option[EventCause]
-}
-
 // A RootEventCause is an event cause that isn't a child.
 //
 // Note that due to a compiler bug in 2.13 this trait can't be in the EventCause companion object. If you put it there
 // you get a stack overflow in scala refchecks.
 trait RootEventCause extends EventCause {
+
+  // Root causes don't have an effective enqueuer
+  override def getLauncher: Awaitable = null
+
+  override def getParent: Awaitable = null
 
   // override final val here makes it impossible to extend Root with ChildEventCause so the two types are guaranteed to
   // be orthogonal
@@ -218,8 +234,28 @@ trait RootEventCause extends EventCause {
   }
 }
 
-private[optimus] trait EventCause {
+private[optimus] trait EventCause extends Awaitable {
   import EventCause._
+
+  override def elideChildFrame: Boolean = { false }
+
+  override def addToWaitChain(appendTo: util.ArrayList[DebugWaitChainItem], includeProxies: Boolean): Unit = {
+    // for async stack traces
+    appendTo.add(this)
+    val launcher = getParent
+    if (launcher ne null) launcher.addToWaitChain(appendTo, includeProxies)
+  }
+
+  def getParent: Awaitable
+
+  override def flameFrameName(extraMods: String): String = "[ui_event]"
+
+  override def getLauncherStackHash: Long = 0L
+  override def getProfileId: Int = {
+    causeInfo.profile
+  }
+  override def setLaunchData(awaitable: Awaitable, hash: Long, implFlags: Int): Unit = ()
+  override def underlyingAwaitable: Awaitable = this
 
   /** called once this event and all transitive children _excluding_ InBackground steps are complete */
   protected def onComplete(): Unit = ()

@@ -16,8 +16,6 @@ import optimus.buildtool.runconf.JavaPattern
 import optimus.buildtool.runconf.plugins.NativeLibraries
 import optimus.buildtool.runconf.plugins.ReorderSpec
 
-import scala.collection.immutable.Seq
-
 object NativeLibrariesResolver {
 
   def resolve(nativeLibraries: NativeLibraries, fromDeps: Seq[FilePath]): Seq[FilePath] = {

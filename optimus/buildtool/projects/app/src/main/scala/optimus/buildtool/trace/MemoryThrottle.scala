@@ -24,7 +24,6 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 object MemoryThrottle {
   private val log = getLogger(this)
@@ -154,13 +153,12 @@ class MemoryThrottle(minFreeMbDelay: Long, minFreeMbGC: Long, memDelayMillis: Lo
     result.value
   }
 
-  override def endBuild(success: Boolean): Boolean = {
+  override def finalizeBuild(success: Boolean): Unit = {
     val nd = numDelays.get()
     val ngc = numGCs.get()
     if (nd > 0 || ngc > 0)
       log.warn(s"$nd delay(s) due to memory pressure, $ngc forced garbage collection(s)")
     else
       log.debug(s"$nd delay(s) due to memory pressure, $ngc forced garbage collection(s)")
-    true
   }
 }

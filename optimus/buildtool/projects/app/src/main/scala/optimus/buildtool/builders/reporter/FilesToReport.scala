@@ -13,8 +13,6 @@ package optimus.buildtool.builders.reporter
 
 import optimus.buildtool.files.FileAsset
 
-import scala.collection.immutable.Seq
-
 final case class FilesToReport(toCompress: Seq[FileAsset] = Nil, notToCompress: Seq[FileAsset] = Nil) {
 
   def ++(other: FilesToReport) = FilesToReport(

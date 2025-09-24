@@ -16,6 +16,8 @@ import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.resolvers.RemoteDownloadTracker
 import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.utils.OptimusBuildToolProperties
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 import org.slf4j.LoggerFactory.getLogger
@@ -24,13 +26,12 @@ import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.collection.mutable
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 sealed abstract class CacheMode(
     val read: Boolean,
     private val write: Boolean,
-    private val forceWrite: Boolean = false
+    val forceWrite: Boolean = false
 ) {
   final def canWrite: Boolean = write || forceWrite
 }
@@ -81,7 +82,7 @@ object RemoteArtifactCacheTracker extends RemoteDownloadTracker {
       fingerprintHash: String
   )(
       computer: => Option[A#A]
-  ): Option[A#A] = throw new IllegalStateException
+  ): Option[A#A] = needsPluginAlwaysAutoAsyncArgs
   @node def getOrCompute$NF[A <: CachedArtifactType](
       id: ScopeId,
       tpe: A,
@@ -166,8 +167,7 @@ object ArtifactCacheBase {
 ) extends ArtifactCacheBase
 
 object SimpleArtifactCache {
-  private[cache] val IgnoreErroneousArtifacts =
-    sys.props.get("optimus.buildtool.ignoreErroneousArtifacts").contains("true") // default to false
+  private[cache] val IgnoreErroneousArtifacts = OptimusBuildToolProperties.getOrFalse("ignoreErroneousArtifacts")
 }
 
 @entity class RemoteReadThroughTriggeringArtifactCache[+A <: ArtifactStore](

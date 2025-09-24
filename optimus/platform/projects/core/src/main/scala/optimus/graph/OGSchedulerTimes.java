@@ -17,22 +17,18 @@ import java.util.HashMap;
 import java.util.Objects;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
 import optimus.core.CoreAPI;
-import optimus.graph.diagnostics.pgo.Profiler;
-import optimus.graph.diagnostics.gridprofiler.GridProfiler$;
 import optimus.graph.diagnostics.SchedulerProfileEntry;
+import optimus.graph.diagnostics.gridprofiler.GridProfiler$;
 import optimus.graph.diagnostics.gridprofiler.ProcessMetricsEntry$;
+import optimus.graph.diagnostics.pgo.Profiler;
 import optimus.utils.ClassLoaderStats;
 
 /** All general tracking of overall graph times is here - consider merging with profiler summary */
 public class OGSchedulerTimes {
   private static final boolean stallingCrumbEnabled =
       DiagnosticSettings.getBoolProperty("optimus.graph.stalling.crumb.enabled", true);
-  public static final int stallTimeCrumbThresholdSecs =
+  public static int stallTimeCrumbThresholdSecs =
       DiagnosticSettings.getIntProperty("optimus.graph.stalled.crumb.threshold", 30);
 
   /**
@@ -318,7 +314,7 @@ public class OGSchedulerTimes {
     }
   }
 
-  private static PluginType.Counter pluginStallTimes = new PluginType.Counter();
+  private static final PluginType.Counter pluginStallTimes = new PluginType.Counter();
 
   public static PluginType.Counter snapCumulativePluginStallTimes() {
     synchronized (timeLock) {
@@ -410,8 +406,8 @@ public class OGSchedulerTimes {
       inGraphWallReset = inGraphWallTotal;
       graphHolesReset = graphHolesTotal;
       graphStallReset = graphStallTotal;
-      if (lastGraphEnterTime
-          != 0) { // we're on-graph, make sure subsequent exitGraph produces sane inGraphWallTime
+      if (lastGraphEnterTime != 0) {
+        // we're on-graph, make sure subsequent exitGraph produces sane inGraphWallTime
         lastGraphEnterTime = OGTrace.nanoTime();
         lastGraphEnterClassLoadingTime = ClassLoaderStats.snap().findClassTime();
       }

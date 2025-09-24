@@ -97,6 +97,5 @@ object RestrictedEntityResolverException
   protected[optimus] /*[platform]*/ def serverTime = throwException
   protected[optimus] /*[platform]*/ def serverTimeWithWitnessTimeUpdated(source: String) = throwException
 
-  // it's always safe to return false
-  override def equivalentTo(other: EntityResolver): Boolean = false
+  override def equivalentTo(other: EntityResolver): Boolean = this eq other
 }

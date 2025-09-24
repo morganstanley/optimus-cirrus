@@ -12,7 +12,6 @@
 package optimus.platform.dsi.bitemporal.proto
 
 import java.time.Instant
-
 import com.google.protobuf.ByteString
 import msjava.slf4jutils.scalalog.getLogger
 import net.iharder.base64.Base64
@@ -25,6 +24,7 @@ import optimus.platform.dal.config.HostPort
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.dsi.bitemporal.proto.Peer.EntityTimeSliceReferenceProto
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.storable._
 
 import scala.jdk.CollectionConverters._
@@ -124,7 +124,7 @@ object SerializedKeySerializer extends BasicProtoSerialization with ProtoSeriali
   }
 
   override def deserialize(proto: SerializedKeyProto): SerializedKey = {
-    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[Seq[(String, Any)]]
+    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[PickleSeq[(String, Any)]]
     val serializedSizeOpt = Option(proto.getSerializedSize)
     SerializedKey(
       proto.getTypeName.intern(),

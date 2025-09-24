@@ -46,7 +46,6 @@ import optimus.buildtool.utils.Utils.OsVersionMismatchException
 import optimus.exceptions.RTException
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity trait AsyncCppCompiler {

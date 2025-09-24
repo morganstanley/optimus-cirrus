@@ -17,7 +17,6 @@ import optimus.buildtool.config.ParentId
 import optimus.buildtool.config.WorkspaceId
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 
 trait ScopedName {

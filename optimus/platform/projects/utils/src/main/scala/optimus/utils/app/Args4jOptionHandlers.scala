@@ -150,7 +150,7 @@ abstract class MapOptionHandler[KeyType, ValueType](
     arg
       .split(delimiter)
       .map(keyValuePair =>
-        keyValuePair.split(":") match {
+        keyValuePair.split(keyValueDelimiter) match {
           case Array(key: String, value: String) =>
             (convertKey(key), convertValue(value))
           case _ =>
@@ -161,6 +161,7 @@ abstract class MapOptionHandler[KeyType, ValueType](
   def convertKey(s: String): KeyType
   def convertValue(s: String): ValueType
   def delimiter: String = ","
+  def keyValueDelimiter: String = ":"
 }
 
 final class MemSizeOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[MemSize])
@@ -221,4 +222,12 @@ abstract class DelimitedEnumerationOptionHandler[T <: Enumeration](
     values: T)
     extends CommaDelimitedArgumentOptionHandler[T#Value](parser, option, setter) {
   def convert(s: String): T#Value = values.withName(s)
+}
+
+final class RangeOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Range]])
+    extends OneArgumentOptionHandler[Option[Range]](parser, option, setter) {
+  override def parse(arg: String): Option[Range] = Option(arg).map { range =>
+    val Array(begin, end) = arg.split("-")
+    Range(begin.toInt, end.toInt)
+  }
 }

@@ -11,12 +11,14 @@
  */
 package optimus.platform.storable
 
-import java.util.UUID
 import msjava.base.util.uuid.MSUuid
-import optimus.platform.EvaluationContext
-import optimus.platform.ScenarioStack
-import optimus.platform.TemporalContext
+import optimus.graph.GraphException
+import optimus.graph.Settings
+import optimus.platform._
+import optimus.platform.dal.EntityResolver
 import optimus.platform.pickling.PickledInputStream
+
+import java.util.UUID
 
 private[optimus] sealed trait EntityUniverse
 private[optimus] object AppliedUniverse extends EntityUniverse
@@ -122,6 +124,12 @@ private[optimus] object DefaultUniqueEF extends NonDALEntityFlavor with UniqueFl
  * TODO (OPTIMUS-7177): Remove this hybrid after decoing the persist block mutation
  */
 private[optimus] sealed abstract class HybridEntityFlavor extends EntityFlavor {
+  if (Settings.compatAllowCrossRuntimeCacheHits)
+    throw new GraphException(
+      "You cannot use hybrid entities with -Doptimus.compat.allowCrossRuntimeCacheHits=true. " +
+        "Hybrid entities are usually created by legacy DAL persist/persistGiven blocks. " +
+        "Switch to using newEvent blocks for persistence instead")
+
   override def dalEntityFlavor: DALEntityFlavor
 
   def dal$entityRef: EntityReference = dalEntityFlavor.dal$entityRef
@@ -162,8 +170,19 @@ private[optimus] final class DALEntityFlavor extends EntityFlavor {
     41 * e.dal$temporalContext.hashCode + e.dal$entityRef.hashCode
   }
 
-  def entityEquals(e1: Entity, e2: Entity): Boolean =
-    (e1.dal$temporalContext == e2.dal$temporalContext) && (e1.dal$entityRef == e2.dal$entityRef)
+  def entityEquals(e1: Entity, e2: Entity): Boolean = {
+    // we're only comparing env here, not actually using it, so don't track access
+    def resolver(e: Entity): EntityResolver =
+      e.entityFlavorInternal.originScenarioStack.ssShared.environmentWithoutTrackingAccess.entityResolver
+
+    (e1.dal$entityRef == e2.dal$entityRef) &&
+    // important to include temporal context because lazy pickled references resolve
+    (e1.dal$temporalContext == e2.dal$temporalContext) &&
+    // important to include the resolver, because the same entity loaded via a different resolver might not be
+    // equivalent due to different roles (or even different origin DAL!), which would mean the lazy pickled references
+    // might resolve differently
+    resolver(e1).equivalentTo(resolver(e2))
+  }
 
   def universe: EntityUniverse = DALUniverse
 

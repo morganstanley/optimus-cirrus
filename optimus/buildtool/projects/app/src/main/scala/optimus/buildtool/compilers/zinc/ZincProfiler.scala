@@ -24,7 +24,9 @@ import optimus.buildtool.trace.ObtStats.SlowTypecheckDurationMs
 import optimus.buildtool.trace.ObtStats.SlowTypechecks
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Scala
+import optimus.buildtool.trace.TaskTrace
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.stats.SourceCodeStats
 import optimus.platform._
@@ -39,15 +41,12 @@ import xsbti.compile.MiniSetup
 
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 object ZincProfiler {
   private val log = msjava.slf4jutils.scalalog.getLogger(this)
 
-  // default to true
-  lazy val WarnOnDiscardedAnalysis: Boolean =
-    sys.props.get("optimus.buildtool.warnOnDiscardedAnalysis").forall(_.toBoolean)
+  lazy val WarnOnDiscardedAnalysis: Boolean = OptimusBuildToolProperties.getOrTrue("warnOnDiscardedAnalysis")
 
   // these are copied from ZincInvalidationProfiler - it's unfortunate that we have to depend on these
   // but the only other alternative is to implement our own profiler
@@ -65,7 +64,8 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
   def hasNoSourceInvalidations(cycles: Seq[Zprof.CycleInvalidation], compileResult: Option[CompileResult]): Boolean =
     cycles.isEmpty && compileResult.isDefined // Cycles are often empty if the build failed
 
-  def isJavaOnlySignatureCompilation(invalidatedSources: Int): Boolean = traceType == Scala && invalidatedSources == 0
+  def isJavaOnlySignatureCompilation(invalidatedSources: Int, previousAnalysis: Option[AnalysisContents]): Boolean =
+    traceType == Scala && invalidatedSources == 0 && previousAnalysis.isEmpty
 
   def logAndTraceProfileStats(
       compileResult: Option[CompileResult],
@@ -77,8 +77,12 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
       cycles: Seq[Zprof.CycleInvalidation],
       messages: Seq[CompilationMessage]
   ): Unit = {
+    val filterSuffix = if (traceType == Scala) "scala" else "java"
     def filter(files: Iterable[String]): Iterable[String] =
-      if (traceType == Scala) files.filter(_.endsWith("scala")) else files.filter(_.endsWith("java"))
+      files.filter(_.endsWith(filterSuffix))
+
+    // prevent double counting java sources that we're including in order to generate signatures
+    val filteredSources = sources.filter { case (id, _) => id.suffix == filterSuffix }
 
     val tracer = activeTask.trace
     def name(i: Int) = profile.getStringTable(i)
@@ -97,62 +101,65 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
       )
     }
 
-    val (invalidatedSourcesByCycle, totalSources) = if (cycles.isEmpty) {
-      (Nil, 0)
-    } else {
-      val filteredSources = filter(sources.keySet.map(_.sourceFolderToFilePath.pathString))
-      val totalSize = filteredSources.size
+    def updateCodeStats(
+        taskTrace: TaskTrace,
+        statSources: SortedMap[SourceUnitId, HashedContent],
+        includeAllSources: Boolean
+    ): Seq[Iterable[String]] = {
+      taskTrace.setStat(ObtStats.Compilations, 1)
+      taskTrace.setStat(ObtStats.Cycles, cycles.size)
+      taskTrace.setStat(ObtStats.SourceFiles, statSources.size)
 
-      val invalidated = cycles.reverse.map { c =>
+      taskTrace.setStat(
+        ObtStats.LinesOfCode,
+        SourceCodeStats.getStats(statSources.values.view.map(_.utf8ContentAsString)).realCodeLineCount
+      )
+      val sourcesByPath = statSources.map { case (id, c) => id.localRootToFilePath.pathString -> c }
+      val compiledSources = for {
+        cycle <- cycles
+        sourceId <- cycle.getInitialSourcesList.asScala
+        sourcePath = profile.getStringTable(sourceId)
+        source <- sourcesByPath.get(sourcePath)
+      } yield source
+      taskTrace.setStat(
+        ObtStats.CompiledLinesOfCode,
+        SourceCodeStats.getStats(compiledSources.view.map(_.utf8ContentAsString)).realCodeLineCount
+      )
+
+      val invalidatedSourcesByCycle = cycles.reverse.map { c =>
         val allInvalidatedSources = c.getInvalidatedSourcesList.asScala.map(name(_))
-        filter(allInvalidatedSources)
+        if (includeAllSources) allInvalidatedSources else filter(allInvalidatedSources)
       }
-      (invalidated, totalSize)
+      taskTrace.addToStat(ObtStats.InvalidatedSourceFiles, invalidatedSourcesByCycle.map(_.size).sum)
+      invalidatedSourcesByCycle
     }
-
-    val invalidatedSources = invalidatedSourcesByCycle.map(_.size).sum
 
     val slowTypecheckDurations = republishSlowCompilationWarnings(messages)
 
-    val reason: Option[(ObtStats.CompilationReason, Option[String])] =
-      if (cycles.nonEmpty) {
-        tracer.setStat(ObtStats.Compilations, 1)
-        tracer.setStat(ObtStats.Cycles, cycles.size)
-        tracer.setStat(ObtStats.SourceFiles, totalSources)
-        tracer.addToStat(ObtStats.InvalidatedSourceFiles, invalidatedSources)
-        tracer.addToStat(SlowTypechecks, slowTypecheckDurations.size)
-        tracer.addToStat(SlowTypecheckDurationMs, (slowTypecheckDurations.sum * 1000).toInt)
+    val invalidatedSourcesByCycle = if (cycles.nonEmpty) {
+      activeTask.sigTrace.foreach(t => updateCodeStats(t, sources, includeAllSources = true))
+      updateCodeStats(tracer, filteredSources, includeAllSources = false)
+    } else Nil
 
-        tracer.setStat(
-          ObtStats.LinesOfCode,
-          SourceCodeStats.getStats(sources.values.view.map(_.utf8ContentAsString)).realCodeLineCount
-        )
-        val sourcesByPath = sources.map { case (id, c) => id.localRootToFilePath.pathString -> c }
-        val compiledSources = for {
-          cycle <- cycles
-          sourceId <- cycle.getInitialSourcesList.asScala
-          sourcePath = profile.getStringTable(sourceId)
-          source <- sourcesByPath.get(sourcePath)
-        } yield source
-        tracer.setStat(
-          ObtStats.CompiledLinesOfCode,
-          SourceCodeStats.getStats(compiledSources.view.map(_.utf8ContentAsString)).realCodeLineCount
-        )
+    val reason: Option[(ObtStats.CompilationReason, Option[String])] = if (cycles.nonEmpty) {
+      tracer.addToStat(SlowTypechecks, slowTypecheckDurations.size)
+      tracer.addToStat(SlowTypecheckDurationMs, (slowTypecheckDurations.sum * 1000).toInt)
 
-        runStats.map { rs =>
-          tracer.setStat(ObtStats.AddedSourceFiles, rs.added)
-          tracer.setStat(ObtStats.ModifiedSourceFiles, rs.modified)
-          tracer.setStat(ObtStats.RemovedSourceFiles, rs.removed)
-          tracer.addToStat(ObtStats.ExternalDependencyChanges, rs.changedExternalDependencies)
+      runStats.map { rs =>
+        tracer.setStat(ObtStats.AddedSourceFiles, rs.added)
+        tracer.setStat(ObtStats.ModifiedSourceFiles, rs.modified)
+        tracer.setStat(ObtStats.RemovedSourceFiles, rs.removed)
+        tracer.addToStat(ObtStats.ExternalDependencyChanges, rs.changedExternalDependencies)
 
-          val (reason, desc) = compilationReason(compileResult, previousAnalysis, profile, invalidatedSources, rs)
-          tracer.setStat(reason, 1)
-          (reason, desc)
-        }
-      } else {
-        tracer.setStat(ObtStats.ZincCacheHit, 1)
-        None
+        val invalidatedSources = invalidatedSourcesByCycle.map(_.size).sum
+        val (reason, desc) = compilationReason(compileResult, previousAnalysis, profile, invalidatedSources, rs)
+        tracer.setStat(reason, 1)
+        (reason, desc)
       }
+    } else {
+      tracer.setStat(ObtStats.ZincCacheHit, 1)
+      None
+    }
 
     // warnings/errors are captured as part of trace completion
     tracer.setStat(ObtStats.Info, messages.count(_.severity == CompilationMessage.Info))
@@ -161,7 +168,7 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
       val msg = s"${prefix}No source invalidations"
       log.info(msg)
       ObtTrace.info(msg)
-    } else if (isJavaOnlySignatureCompilation(invalidatedSources)) {
+    } else if (reason.map(_._1).contains(ObtStats.CompilationsDueToNonIncrementalJavaSignatures)) {
       val msg =
         s"${prefix}No ${traceType.name} invalidations (${ObtStats.CompilationsDueToNonIncrementalJavaSignatures.str})"
       log.info(msg)
@@ -182,7 +189,7 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
           val ddd =
             if (invalidatedSources.size > srcs.size) s"... ${invalidatedSources.size - srcs.size} more"
             else ""
-          s"Cycle ${index + 1}, ${invalidatedSources.size}/$totalSources ${traceType.name} invalidations$analysisStr: ${srcs.toSeq.sorted
+          s"Cycle ${index + 1}, ${invalidatedSources.size}/${filteredSources.size} ${traceType.name} invalidations$analysisStr: ${srcs.toSeq.sorted
               .mkString("", ", ", ddd)}"
         }
 
@@ -224,11 +231,10 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
     discardReason.getOrElse {
       val externalChanges = rs.run.getInitial.getExternalChangesList.asScala
       val reason = {
-        if (isJavaOnlySignatureCompilation(invalidatedSources))
-          // If we get an OBT cache miss on a scope with java sources, we always have
-          // to rerun signature compilation since our previous (scala) analysis doesn't
-          // contain details of java signatures. Fortunately, these compilations are generally
-          // pretty fast.
+        if (isJavaOnlySignatureCompilation(invalidatedSources, previousAnalysis))
+          // If we get an OBT cache miss on a scope with pipelining and only java sources, we always have
+          // to rerun signature compilation since we don't have get a scala analysis file.
+          // Fortunately, these compilations are generally pretty fast.
           ObtStats.CompilationsDueToNonIncrementalJavaSignatures
         else if (previousAnalysis.isEmpty)
           ObtStats.CompilationsDueToNoAnalysis

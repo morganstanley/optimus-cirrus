@@ -30,7 +30,7 @@ final class Repository(userName: String, bitbucketHostname: String, useUnpatched
   private val defaultMeta = "optimus"
 
   private val bbNames = ws.internal.urls.bitbucket.all.values
-    .map { h: HostnamePort => Pattern.quote(h.hostname) + s"(?:\\:${h.port})?" }
+    .map((h: HostnamePort) => Pattern.quote(h.hostname) + s"(?:\\:${h.port})?")
     .mkString("|")
 
   private val bitbucketRepo =
@@ -40,13 +40,12 @@ final class Repository(userName: String, bitbucketHostname: String, useUnpatched
   private val BitbucketUrl = s"^($bitbucketRepo)$$".r
   private val LocalRepo = s"^(|$windowsLocalRepo|$linuxLocalRepo)$$".r
 
-  private def metaFor(project: String, repo: String): String = {
-    ws.internal.urls.bitbucket.metaForPR(project, repo).getOrElse(defaultMeta)
-  }
+  private def metaFor(project: String, repo: String): String =
+    ws.internal.urls.bitbucket.metaForPr(project, repo).getOrElse(defaultMeta)
 
   private def repoUrl(meta: String, project: String, repo: String): String = {
     // lookup meta/project/repo -> bitbucketHostname in config map
-    val bbHost = ws.internal.urls.bitbucket.byMPR(meta, project, repo).map(_.hostname).getOrElse(bitbucketHostname)
+    val bbHost = ws.internal.urls.bitbucket.byMpr(meta, project, repo).map(_.hostname).getOrElse(bitbucketHostname)
     s"http://$usernamePrefix$bbHost/atlassian-stash/scm/${meta}_$project/$repo.git"
   }
 

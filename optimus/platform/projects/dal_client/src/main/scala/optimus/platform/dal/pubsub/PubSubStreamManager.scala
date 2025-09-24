@@ -14,7 +14,6 @@ package optimus.platform.dal.pubsub
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.atomic.AtomicReference
-
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.ChainedID
 import optimus.dsi.partitioning.Partition
@@ -22,6 +21,7 @@ import optimus.graph.DiagnosticSettings
 import optimus.platform.dal.DALPubSub
 import optimus.platform.dal.DALPubSub._
 import optimus.platform.RuntimeEnvironment
+import optimus.platform.dal.ClientSideDSI
 import optimus.platform.dsi.bitemporal._
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -33,6 +33,8 @@ trait PubSubStreamManager extends HandlePubSub {
   private[this] val streamMap = new ConcurrentHashMap[String, NotificationStreamImpl]()
   private[this] val closedStreams = new ConcurrentSkipListSet[String]
   protected val batchCtxMetadata = new AtomicReference[Option[PubSubContextMetadata]](None)
+
+  protected val readDSI: Option[ClientSideDSI] = None
 
   /**
    * As of now, this method only ensures that the streamId is in the streamMap, however, in the future we can decide to
@@ -75,7 +77,7 @@ trait PubSubStreamManager extends HandlePubSub {
       case PubSubClientRequest.CreateStream(addCmd, clientId, cb, partition, env) if streamOpt.isEmpty =>
         val response =
           PubSubClientResponse.StreamCreationRequested(
-            addPubSubNotificationStream(addCmd, clientId, cb, partition, env))
+            addPubSubNotificationStream(addCmd, clientId, cb, partition, env, readDSI))
         PreprocessRequestResult(executeRequest = true, response)
       case _: PubSubClientRequest.CreateStream =>
         throw new IllegalStateException(s"Duplicate Stream creation request received $streamId")
@@ -97,17 +99,19 @@ trait PubSubStreamManager extends HandlePubSub {
       addCmd: CreatePubSubStream,
       cb: NotificationStreamCallback,
       partition: Partition,
-      env: RuntimeEnvironment
-  ): NotificationStreamImpl = new NotificationStreamImpl(clientStreamId, addCmd, cb, partition, this, env)
+      env: RuntimeEnvironment,
+      readDSI: Option[ClientSideDSI]
+  ): NotificationStreamImpl = new NotificationStreamImpl(clientStreamId, addCmd, cb, partition, this, env, readDSI)
 
   private def addPubSubNotificationStream(
       addCmd: CreatePubSubStream,
       clientId: ClientStreamId,
       callback: DALPubSub.NotificationStreamCallback,
       partition: Partition,
-      env: RuntimeEnvironment
+      env: RuntimeEnvironment,
+      readDSI: Option[ClientSideDSI]
   ): NotificationStream = {
-    val newNotificationStream = createNewNotificationStream(clientId, addCmd, callback, partition, env)
+    val newNotificationStream = createNewNotificationStream(clientId, addCmd, callback, partition, env, readDSI)
     if (streamMap.putIfAbsent(addCmd.streamId, newNotificationStream) != null) {
       throw new IllegalStateException(s"Duplicate Stream creation request received ${addCmd.streamId}")
     }
@@ -142,6 +146,11 @@ trait PubSubStreamManager extends HandlePubSub {
           case None    => ignoreResultIfStreamAlreadyClosed(streamId, err)
         }
       case (streamId, err @ ErrorResult(_: ChangeSubscriptionMultiPartitionException, _)) =>
+        Option(streamMap.get(streamId)) match {
+          case Some(s) => s.handleErrorResult(err)
+          case None    => ignoreResultIfStreamAlreadyClosed(streamId, err)
+        }
+      case (streamId, err @ ErrorResult(_: PubSubEntitlementException, _)) =>
         Option(streamMap.get(streamId)) match {
           case Some(s) => s.handleErrorResult(err)
           case None    => ignoreResultIfStreamAlreadyClosed(streamId, err)

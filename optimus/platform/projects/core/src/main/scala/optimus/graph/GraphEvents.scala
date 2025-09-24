@@ -34,7 +34,8 @@ private[optimus] object GraphEvents {
     if (!EvaluationContext.isInitialised) "N/A"
     else
       try {
-        EvaluationContext.env.config.runtimeConfig.env
+        // don't track the access because this is only used for diagnostics
+        EvaluationContext.scenarioStack.ssShared.environmentWithoutTrackingAccess.config.runtimeConfig.env
       } catch {
         case _: Throwable => "N/A"
       }

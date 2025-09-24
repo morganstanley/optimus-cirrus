@@ -12,14 +12,13 @@
 package optimus.buildtool.compilers.zinc.setup
 
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.MessageArtifactType
+import optimus.buildtool.artifacts.CachedMessageArtifactType
 import optimus.buildtool.compilers.zinc.reporter.ProblemConverter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.PathUtils
 import xsbti.VirtualFileRef
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedSet
 
 object Messages {
@@ -40,7 +39,7 @@ object Messages {
         // No need to track the `prevMessagesArtifact` - if it's deleted that doesn't imply that we
         // need to rerun this compilation (`SyncScalaCompiler.Inputs.bestAnalysis` is wrapped in `Hide`
         // for the same reason)
-        val prevMessagesArtifact = MessageArtifactType.fromUnwatchedPath(p.path)
+        val prevMessagesArtifact = CachedMessageArtifactType.fromUnwatchedPath(p.path)
         val prevMessages = prevMessagesArtifact.messages
         val stalePaths = staleSources.map { file =>
           PathUtils.platformIndependentString(file.id)

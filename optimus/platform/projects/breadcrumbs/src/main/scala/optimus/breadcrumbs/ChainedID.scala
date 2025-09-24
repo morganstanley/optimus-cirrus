@@ -11,6 +11,8 @@
  */
 package optimus.breadcrumbs
 
+import msjava.base.util.uuid.MSUuid.UuidType
+
 import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{ArrayList => JavaArrayList}
@@ -49,7 +51,7 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
         Properties.stackTrace -> Exceptions.minimizeTrace(new IllegalStateException()))
     )
 
-    val doKill = PropertyUtils.get("breadcrumb.unreasonable.depth.kill", false)
+    val doKill = PropertyUtils.get("breadcrumb.unreasonable.depth.kill", default = false)
     if (doKill)
       InfoDump.kill(
         "ChainedID",
@@ -77,7 +79,10 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
   override def hashCode: Int = vertexId.hashCode
   override def toString: String = repr
   def prettyPrint: String = if (this.crumbLevel == ChainedID.level) repr else s"$repr (level: $crumbLevel)"
-  def base: String = repr.replaceFirst("#[\\w#:]+$", "")
+  def base: String = {
+    val i = repr.indexOf('#')
+    if (i >= 0) repr.substring(0, i) else repr
+  }
 
   private[optimus] def asList: JavaArrayList[String] = ChainedID.asList(this)
 
@@ -96,7 +101,9 @@ object ChainedID {
 
   final val prefix = PropertyUtils.get("breadcrumb.chainedid.prefix", "")
   private[breadcrumbs] val log: Logger = LoggerFactory.getLogger("ChainedID")
-  private lazy val level: Int = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT")).value
+  // No point in making this lazy if the root (not-lazy) will be called right away.
+  // However if root is to become lazy, then this should be lazy as well.
+  private val level: Int = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT")).value
   // Can't make this @deprecated, because of -Xfatal-warnings.  Can't make it deprecating, because that's defined in core.
   // (NB: there's no reason for that to be the case.)
   def empty: ChainedID = {
@@ -127,7 +134,7 @@ object ChainedID {
   }
 
   private[optimus] val root = {
-    val cid: ChainedID = new ChainedID(prefix + (new UUID).toString, 0, level)
+    val cid: ChainedID = new ChainedID(prefix + (new UUID(UuidType.Type4, false)).toString, 0, level)
     // Logged at error to get around logging filters that get setup in various ways.  This is not an actual
     // error of course but we need to do it this way
     log.error(s"root chainedId: $cid (this is not an actual error!)")

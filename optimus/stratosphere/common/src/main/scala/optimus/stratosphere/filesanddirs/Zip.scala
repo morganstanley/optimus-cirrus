@@ -21,7 +21,6 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
-import scala.collection.immutable.Seq
 import scala.io.Codec
 import scala.io.Source
 

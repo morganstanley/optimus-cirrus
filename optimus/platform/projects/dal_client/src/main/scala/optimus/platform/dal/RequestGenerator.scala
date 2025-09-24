@@ -52,7 +52,8 @@ class RequestGenerator(dsi: DSI) {
       validTime: Instant,
       upsert: Boolean,
       cmid: Option[MSUuid],
-      minAssignableTtOpt: Option[Instant]): Put = {
+      minAssignableTtOpt: Option[Instant],
+      ignoreRefResolve: Boolean): Put = {
 
     def getLockToken(entity: Entity): Option[Long] = entity.dal$storageInfo.lockToken match {
       case lt: Some[Long] => lt
@@ -76,7 +77,7 @@ class RequestGenerator(dsi: DSI) {
     } else {
       getLockToken(entity)
     }
-    Put(blob.someSlot, lockToken, vt, minAssignableTtOpt, monoTemporal)
+    Put(blob.someSlot, lockToken, vt, minAssignableTtOpt, monoTemporal, ignoreRefResolve)
   }
 
   def generateInvalidateAfterRequest(entity: Entity, validTime: Instant) = {

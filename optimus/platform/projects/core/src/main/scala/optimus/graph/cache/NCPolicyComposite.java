@@ -32,7 +32,12 @@ public abstract class NCPolicyComposite extends NCPolicy {
     return this.defaultPolicy;
   }
 
-  public abstract NCPolicy[] compositePolicies();
+  public final NCPolicy[] compositePolicies() {
+    var composite = toCompositeN();
+    return Arrays.stream(composite.policies).map(a -> a.policy).toArray(NCPolicy[]::new);
+  }
+
+  abstract CompositeN toCompositeN();
 
   @Override
   public NCPolicy pathIndependent() {
@@ -78,11 +83,6 @@ public abstract class NCPolicyComposite extends NCPolicy {
       this.policies = policies;
     }
 
-    @Override
-    public NCPolicy[] compositePolicies() {
-      return Arrays.stream(this.policies).map(a -> a.policy).toArray(NCPolicy[]::new);
-    }
-
     /**
      * Creates a new composite policy with the given policy added to the list If the same policy was
      * already listed the mask is updated in the new policy only
@@ -111,7 +111,25 @@ public abstract class NCPolicyComposite extends NCPolicy {
     /** Finalizes the policy with the pathIndependent policy if it wasn't set before */
     @Override
     public NCPolicy withPathIndependentIfNotSet(NCPolicy scopeIndependent) {
-      return defaultPolicy == null ? compress(scopeIndependent, policies) : this;
+      return defaultPolicy == null
+          ? compress(scopeIndependent, policies)
+          : compress(defaultPolicy, policies);
+    }
+
+    @Override
+    CompositeN toCompositeN() {
+      return this;
+    }
+
+    @Override
+    public NCPolicy downgradeToBasic() {
+      var newDefault = defaultPolicy.downgradeToBasic();
+      var newPolicies = new PolicyMask[policies.length];
+      for (int i = 0; i < policies.length; i++) {
+        var pm = policies[i];
+        newPolicies[i] = new NCPolicyComposite.PolicyMask(pm.policy.downgradeToBasic(), pm.mask);
+      }
+      return compress(newDefault, newPolicies);
     }
 
     private static NCPolicy compress(NCPolicy defaultPolicy, PolicyMask[] policies) {
@@ -169,8 +187,8 @@ public abstract class NCPolicyComposite extends NCPolicy {
     }
 
     @Override
-    public NCPolicy[] compositePolicies() {
-      return new NCPolicy[] {this.policy};
+    CompositeN toCompositeN() {
+      return new CompositeN(defaultPolicy, this.policy, this.mask);
     }
 
     @Override
@@ -222,8 +240,10 @@ public abstract class NCPolicyComposite extends NCPolicy {
     }
 
     @Override
-    public NCPolicy[] compositePolicies() {
-      return new NCPolicy[] {this.policy1, this.policy2};
+    CompositeN toCompositeN() {
+      return new CompositeN(
+          defaultPolicy,
+          new PolicyMask[] {new PolicyMask(policy1, mask1), new PolicyMask(policy2, mask2)});
     }
 
     @Override
@@ -278,8 +298,14 @@ public abstract class NCPolicyComposite extends NCPolicy {
     }
 
     @Override
-    public NCPolicy[] compositePolicies() {
-      return new NCPolicy[] {this.policy1, this.policy2, this.policy3};
+    CompositeN toCompositeN() {
+      return new CompositeN(
+          defaultPolicy,
+          new PolicyMask[] {
+            new PolicyMask(policy1, mask1),
+            new PolicyMask(policy2, mask2),
+            new PolicyMask(policy3, mask3)
+          });
     }
 
     @Override

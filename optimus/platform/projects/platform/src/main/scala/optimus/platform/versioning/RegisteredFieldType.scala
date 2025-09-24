@@ -10,8 +10,9 @@
  * limitations under the License.
  */
 package optimus.platform.versioning
-import optimus.platform.annotations.customPickled
 import optimus.platform.embeddable
+import optimus.platform.pickling.CustomPicklingSpec
+import optimus.platform.pickling.CustomPicklingImplementationException
 
 import scala.util.control.NonFatal
 
@@ -203,17 +204,18 @@ object RegisteredFieldType {
       FieldType.IterableOrString
     case RegisteredFieldType.Unknown(additionalInfo) =>
       try {
-        val cls = Class.forName(additionalInfo)
-        val annot = cls.getAnnotation(classOf[customPickled])
-        if (annot eq null) FieldType.UnknownFieldType(additionalInfo)
-        else FieldType.fromPickledType(annot.pickledType())
+        CustomPicklingSpec
+          .ofClass(Class.forName(additionalInfo))
+          .map { _.pickledType }
+          .getOrElse { FieldType.UnknownFieldType(additionalInfo) }
       } catch {
-        case NonFatal(_) => FieldType.UnknownFieldType(additionalInfo)
+        case NonFatal(ex) if !ex.isInstanceOf[CustomPicklingImplementationException] =>
+          FieldType.UnknownFieldType(additionalInfo)
       }
   }
 
   private[optimus] def downCast(rftt: RegisteredFieldTypeT): RegisteredFieldType = rftt match {
     case rft: RegisteredFieldType => rft
-    case o                        => throw new IllegalArgumentException(s"Cannot create RegisteredFieldType from ${o}")
+    case o                        => throw new IllegalArgumentException(s"Cannot create RegisteredFieldType from $o")
   }
 }

@@ -42,6 +42,7 @@ import scala.annotation.compileTimeOnly
 import scala.annotation.meta.field
 import scala.annotation.meta.getter
 import scala.annotation.nowarn
+import scala.collection.BuildFrom
 import scala.jdk.CollectionConverters._
 
 package object platform
@@ -97,7 +98,7 @@ package object platform
     val cn = EvaluationContext.currentNode
     val scenarioStack = cn.scenarioStack
     val tweaks = validTimeAndTransactionTimeNow
-    val nss = scenarioStack.createChild(Scenario(tweaks), this)
+    val nss = scenarioStack.createChild(Scenario(tweaks), this /* id for the debugger UI*/ )
     cn.replace(nss)
   }
 
@@ -105,7 +106,7 @@ package object platform
     val cn = EvaluationContext.currentNode
     val scenarioStack = cn.scenarioStack
     val tweaks = loadContextNow
-    val nss = scenarioStack.createChild(Scenario(tweaks), this)
+    val nss = scenarioStack.createChild(Scenario(tweaks), this /* id for the debugger UI*/ )
     cn.replace(nss)
   }
 
@@ -155,4 +156,11 @@ package object platform
   implicit final class DoubleSeqHelper(val t: TraversableOnce[Double]) extends AnyVal {
     def toOptimusDoubleSeq: OptimusDoubleSeq = OptimusDoubleSeq.from(t)
   }
+
+  // For `(ns: NodeSeq).apar.map(x => 1)`. Without this implicit, the compiler infers
+  // `BuildFrom.buildFromIterableOps[collection.AbstractSeq, xml.Node, A]`, which then fails bounds checks.
+  // This implicit used to be in DefaultSeq, but we had to remove the `scala-xml` dependency from there
+  // (`interop_client_localdist` is released on AFS, but scala-xml is only on artifactory)
+  implicit def NodeSeqBuildFrom[A]: BuildFrom[xml.NodeSeq, A, scala.collection.immutable.Seq[A]] =
+    BuildFrom.buildFromIterableOps[scala.collection.immutable.Seq, xml.Node, A]
 }

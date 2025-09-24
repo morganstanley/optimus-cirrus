@@ -14,7 +14,6 @@ package optimus.buildtool.config
 import optimus.buildtool.artifacts.Severity
 import optimus.buildtool.utils.Hashing
 
-import scala.collection.immutable.Seq
 import scala.util.matching.Regex
 
 private[buildtool] final case class RegexConfiguration(

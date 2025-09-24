@@ -22,7 +22,6 @@ import optimus.buildtool.generators.GeneratorType
 import spray.json._
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 
 object GeneratorConfigurationCompiler {

@@ -28,7 +28,6 @@ import sbt.internal.inc.zip.ZipCentralDir
 import java.io.OutputStream
 import java.lang.reflect.Field
 import java.nio.file.Path
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 /**

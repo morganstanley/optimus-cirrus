@@ -31,7 +31,6 @@ import optimus.platform.util.Log
 
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 /**
@@ -90,7 +89,7 @@ sealed class BundleFingerprints(
     bundleDir.relativize(dir).pathString
   }
 
-  private def relativize(f: FileAsset): String = {
+  protected def relativize(f: FileAsset): String = {
     val bundleDir = bundleFile.parent
     if (!bundleDir.parent.contains(f)) // allow f to be in the parent so we can have .exec/... paths
       throw new IllegalArgumentException(s"${f.pathString} is not within bundle directory ${bundleDir.pathString}")
@@ -279,6 +278,7 @@ class DisabledBundleFingerprintsCache(pathBuilder: InstallPathBuilder) extends B
           override protected def hashChanged(key: String, newHash: String): Boolean = true
           override private[builders] def updateFingerprintHash(name: String, fingerprintHash: String): Unit = ()
           override private[builders] def updateFingerprintHash(file: FileAsset, fingerprintHash: String): Unit = ()
+          override protected def relativize(f: FileAsset): String = f.pathString
         }
       }
     )

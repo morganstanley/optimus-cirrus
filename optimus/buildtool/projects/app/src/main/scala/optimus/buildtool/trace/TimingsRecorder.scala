@@ -26,11 +26,10 @@ import java.nio.file.StandardOpenOption
 import java.time.Instant
 import java.util.Timer
 import java.util.TimerTask
+import scala.collection.mutable
 import scala.io.Source
 
 object TimingsRecorder {
-
-  private[TimingsRecorder] final case class TaskGroup(start: Double, duration: Double)
 
   private val log = getLogger(getClass)
 
@@ -53,6 +52,7 @@ object TimingsRecorder {
   }
 
   private[TimingsRecorder] final case class TimingsTraceResult(
+      // Note: field names are used by the jsoniter macro so they must match those in timings.js
       i: Long,
       name: String,
       start: Double,
@@ -60,8 +60,6 @@ object TimingsRecorder {
       signature_time: Option[Double],
       unlocked_units: Seq[Long],
       unlocked_signature_units: Seq[Long])
-
-  private[TimingsRecorder] final case class ConcurrencyResult(t: Double, active: Long, waiting: Long, blocked: Long)
 
   private def toEpocMicro(i: Instant): Long =
     (i.getEpochSecond * 1000000L) + (i.getNano / 1000L)
@@ -123,6 +121,10 @@ object TimingsRecorder {
     }
   }
 
+  // JSON codecs
+  lazy implicit val codecForSamplerJs: JsonValueCodec[List[(Double, Double)]] = JsonCodecMaker.make
+  lazy implicit val codecForTimingsTrace: JsonValueCodec[List[TimingsTraceResult]] =
+    JsonCodecMaker.makeWithRequiredCollectionFields
 }
 
 class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
@@ -136,33 +138,30 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
   // cpu sampler
   private val sampler = new LowFiSampler()
 
-  override def startBuild(): Unit = {
+  override def startBuild(): Unit = synchronized {
     traces.clear()
     _timingsStart = Instant.now()
     sampler.start()
   }
 
   // actual jobs
-  protected[trace] val traces = List.newBuilder[TimingsRecorderTask]
+  protected[trace] val traces = mutable.Buffer.empty[TimingsRecorderTask]
 
   override def startTask(
       scopeId: ScopeId,
       category: CategoryTrace,
-      time: Instant = patch.MilliInstant.now()): DefaultTaskTrace = {
+      time: Instant = patch.MilliInstant.now()): DefaultTaskTrace = synchronized {
     category match {
       case _ => {
         val t = new TimingsRecorderTask(scopeId, category, time)
-        traces.synchronized {
-          traces += t
-        }
+        traces += t
         t
       }
     }
   }
 
-  private def completedTasks: List[TimingsRecorderTask] = traces.synchronized { traces.result() }.filter(_.isDone)
+  private def completedTasks: Seq[TimingsRecorderTask] = synchronized { traces.to(Seq) }.filter(_.isDone)
 
-  lazy implicit val samplerJsValueCodec: JsonValueCodec[List[(Double, Double)]] = JsonCodecMaker.make
   private def getSamplerJsData(timingsEnd: Instant): String = {
     def tween(start: Long, end: Long): Double = (end - start) * 1e-6
     val globalStart = toEpocMicro(timingsStart)
@@ -172,8 +171,6 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
 
     writeToString(snaps.map(s => (tween(globalStart, s.timeMicro), s.`%cpu`)))
   }
-
-  lazy implicit val timingTraceJsonValueCodec: JsonValueCodec[List[TimingsTraceResult]] = JsonCodecMaker.make
 
   private def getJsData(timingsEnd: Instant): (String, Long) = {
     def tween(start: Long, end: Long): Double = ((end - start) * 1e-5).round * 1e-1 // round to tenth of sec
@@ -253,7 +250,7 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
 
   def writeReport(): Unit = {}
 
-  override def endBuild(success: Boolean): Boolean = {
+  override def finalizeBuild(success: Boolean): Unit = {
     val resultPath = outputTo.resolveFile(s"obt-timings-${OptimusBuildToolBootstrap.logFilePrefix}.html").path
     log.info(s"Writing timings report to ${resultPath.toAbsolutePath.toString}")
     Files.writeString(
@@ -264,6 +261,5 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
       StandardOpenOption.TRUNCATE_EXISTING
     )
     _timingsStart = null
-    true // this recorder is always satisfied with builds
   }
 }

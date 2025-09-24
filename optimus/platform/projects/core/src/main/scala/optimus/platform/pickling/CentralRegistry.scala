@@ -22,12 +22,18 @@ import optimus.core.config.StaticConfig
  * CentralRegistry for values of type Pickler.
  */
 private[pickling] class PicklerRegistry extends RuntimeServicesLoader[PicklerFactory] with CentralRegistry[Pickler] {
-  protected val factories: List[Factory[Pickler]] = services
+  protected val factories: List[Factory[Pickler]] = {
+    // We no longer support CustomPickling through the factory approach. They must be defined with the
+    // @embeddable(customPickling=...) construct
+    Class
+      .forName("optimus.platform.pickling.DefaultPicklerFactory")
+      .getConstructor()
+      .newInstance()
+      .asInstanceOf[Factory[Pickler]] :: Nil
+  }
 
   protected val hintMsg: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
     "If not, rather than defining custom picklers, have you considered using transformers instead?"
-
-  def pickleableClasses: Set[String] = services.flatMap { _.classKeys }.toSet
 }
 
 /**
@@ -36,7 +42,15 @@ private[pickling] class PicklerRegistry extends RuntimeServicesLoader[PicklerFac
 private[pickling] class UnpicklerRegistry
     extends RuntimeServicesLoader[UnpicklerFactory]
     with CentralRegistry[Unpickler] {
-  protected val factories: List[Factory[Unpickler]] = services
+  protected val factories: List[Factory[Unpickler]] = {
+    // We no longer support CustomPickling through the factory approach. They must be defined with the
+    // @embeddable(customPickling=...) construct
+    Class
+      .forName("optimus.platform.pickling.DefaultUnpicklerFactory")
+      .getConstructor()
+      .newInstance()
+      .asInstanceOf[Factory[Unpickler]] :: Nil
+  }
 
   protected val hintMsg: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
     "If not, rather than defining custom unpicklers, have you considered using transformers instead?"
@@ -74,7 +88,6 @@ private[pickling] class OrderingRegistry extends RuntimeServicesLoader[OrderingF
 trait CentralRegistry[Value[_]] {
 
   protected def factories: List[Factory[Value]]
-  private lazy val nonDefaultFactories = factories.filterNot(_.isInstanceOf[DefaultFactoryTrait])
   protected def hintMsg: String
   protected def hint: String = {
     val docStr = {
@@ -98,8 +111,10 @@ trait CentralRegistry[Value[_]] {
     lazyInstanceFor(tpe).asInstanceOf[LazyWrapper[Value[T]]]
   }
 
-  final def lazyInstanceFor(tpe: Type): LazyWrapper[Value[_]] =
-    cache.computeIfAbsent(keyOf(tpe), t => new LazyWrapper[Value[_]](generate(t)))
+  final def lazyInstanceFor(tpe: Type): LazyWrapper[Value[_]] = lazyInstanceFor(tpe, _ => None)
+
+  final def lazyInstanceFor(tpe: Type, preResolve: Type => Option[Value[_]]): LazyWrapper[Value[_]] =
+    cache.computeIfAbsent(keyOf(tpe), t => new LazyWrapper[Value[_]](preResolve(tpe).getOrElse(generate(t))))
 
   private def keyOf(tpe: Type): Type = tpeDeepDealias(tpe)
 
@@ -124,17 +139,12 @@ trait CentralRegistry[Value[_]] {
 
   private def applyLowPriorityRules(tpe: Type): List[Value[_]] = {
     val superclasses = getSuperclassKeys(tpe)
-    val filteredFactories = selectFactories(superclasses)
-    filteredFactories.flatMap { factory =>
+    factories.flatMap { factory =>
       factory.createInstanceFromSuperclass(tpe, superclasses)
     }
   }
 
   private def getSuperclassKeys(tpe: Type): List[String] = baseClasses(tpe).map(extractName)
-
-  private val customPickling = extractName(typeOf[CustomPicklingRules])
-  private def selectFactories(superclasses: List[String]): List[Factory[Value]] =
-    if (superclasses.contains(customPickling)) nonDefaultFactories else factories
 }
 
 // The cache is a ConcurrentHashMap populated using `computeIfAbsent`, which requires computations to be
@@ -161,8 +171,3 @@ final class LazyWrapper[T](wrp: => T) {
 object LazyWrapper {
   implicit def unboxLazy[T](wrapper: LazyWrapper[T]): T = wrapper.eval
 }
-
-// Use this trait to mark types that have custom picklers and unpicklers that should not use any of the default rules.
-// When extending this trait, no low priority custom rules from default factories are applied.
-// This allows us to have custom picklers for embeddable traits.
-trait CustomPicklingRules

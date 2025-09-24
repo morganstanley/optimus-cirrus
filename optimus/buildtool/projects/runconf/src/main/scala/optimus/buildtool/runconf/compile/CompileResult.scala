@@ -14,8 +14,6 @@ package optimus.buildtool.runconf.compile
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.Template
 
-import scala.collection.immutable.Seq
-
 final case class CompileResult(problems: Seq[Problem], runConfs: Seq[RunConf], templates: Seq[Template]) {
   def withProblems(newProblems: Seq[Problem]): CompileResult = copy(problems = newProblems ++ problems)
   def hasErrors: Boolean = problems.exists(_.level == Level.Error)

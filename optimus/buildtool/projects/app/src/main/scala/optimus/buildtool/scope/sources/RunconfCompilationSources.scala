@@ -13,7 +13,6 @@ package optimus.buildtool.scope.sources
 
 import java.nio.file.Path
 import com.typesafe.config.Config
-import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
@@ -22,6 +21,7 @@ import optimus.buildtool.compilers.cpp.CppUtils
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.NativeUpstreamFallbackPaths
 import optimus.buildtool.files.NativeUpstreamScopes
 import optimus.buildtool.files.NativeUpstreams
@@ -40,7 +40,6 @@ import optimus.platform.util.Log
 import optimus.platform._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.util.matching.Regex
 
@@ -152,6 +151,8 @@ class RunConfSourceSubstitutions(val obtWorkspaceProperties: Config, val validat
 
 final case class UpstreamRunconfInputs(
     upstreamScopes: Seq[ScopeId],
+    upstreamAgentScopes: Seq[ScopeId],
+    externalAgents: Seq[JarAsset],
     nativeUpstreams: NativeUpstreams[Directory],
     nativeUpstreamReleasePreloads: NativeUpstreams[FileAsset],
     nativeUpstreamDebugPreloads: NativeUpstreams[FileAsset],
@@ -165,10 +166,9 @@ private[sources] final case class HashedRunconfSources(
     installVersion: String,
     allSourceSubstitutions: Seq[RunConfSourceSubstitution],
     allBlockedSubstitutions: Seq[RunConfSourceSubstitution],
-    fingerprint: FingerprintArtifact
-) extends HashedSources {
-  override def generatedSourceArtifacts: Seq[Artifact] = Nil
-}
+    fingerprint: FingerprintArtifact,
+    fingerprintContent: Seq[String]
+) extends HashedSources
 
 object RunconfCompilationSources {
   import optimus.buildtool.cache.NodeCaching.reallyBigCache
@@ -218,7 +218,11 @@ object RunconfCompilationSources {
     // as the content that we hash.
     val sourceFileContent = this.sourceFileContent
 
-    val upstreamScopes = scope.upstream.runtimeDependencies.transitiveScopeDependencies.map(_.id)
+    val upstreamScopeConfigs = scope.upstream.runtimeDependencies.transitiveScopeDependencies
+    val upstreamScopes = upstreamScopeConfigs.map(_.id)
+    val upstreamAgentScopes = upstreamScopeConfigs.filter(_.config.containsAgent).map(_.id)
+
+    val externalAgents = scope.upstream.runtimeDependencies.transitiveExternalDependencies.filter(_.containsAgent)
 
     val nativeUpstreamCompilationScopes =
       scope.upstream.runtimeDependencies.transitiveScopeDependencies.filter(_.config.cppConfigs.exists(!_.isEmpty))
@@ -316,13 +320,14 @@ object RunconfCompilationSources {
     val anythingThatMattersNotFromRunConfHashes = {
       // Note we don't need the scope hashes here, since we're just constructing the runconf script
       upstreamScopes.map(s => s"[Dependency]$s") ++
+        upstreamAgentScopes.map(s => s"[Agent]$s") ++
+        externalAgents.apar.map(s => s"[Agent]${s.fingerprint}") ++
         nativeUpstreams.fingerprint() ++
         upstreamReleasePreload.fingerprint("Preload(release)") ++
         upstreamDebugPreload.fingerprint("Preload(debug)") ++
         distinctLast(transitiveJniPaths).map(p => s"[JniPath]$p") ++
         distinctLast(transitiveModuleLoads)
           .map(p => s"[ModuleLoad]$p") ++
-        scope.upstream.agentsForOurRuntime.map(agent => s"[AgentPath]${agent.id}") ++
         Seq(s"[SubstitutionRules]${substitutions.hashableSubstitutionRules}") ++
         substitutionFingerprint ++
         blockedSubstitutionFingerprint ++
@@ -344,6 +349,8 @@ object RunconfCompilationSources {
     // of the inputsFingerprint above
     val upstreamInputs = UpstreamRunconfInputs(
       upstreamScopes = upstreamScopes.toVector,
+      upstreamAgentScopes = upstreamAgentScopes.toVector,
+      externalAgents = externalAgents.map(_.file),
       nativeUpstreams = nativeUpstreams,
       nativeUpstreamReleasePreloads = upstreamReleasePreload,
       nativeUpstreamDebugPreloads = upstreamDebugPreload,
@@ -356,7 +363,8 @@ object RunconfCompilationSources {
       installVersion = _installVersion,
       allSourceSubstitutions = allSourceSubstitutions,
       allBlockedSubstitutions = allBlockedSubstitutions,
-      fingerprint = fingerprintHash
+      fingerprint = fingerprintHash,
+      fingerprintContent = inputsFingerprint
     )
   }
 

@@ -52,7 +52,6 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.Using
 import scala.util.control.NonFatal
@@ -78,9 +77,6 @@ object Jars {
   val FIXED_EPOCH_MILLIS: Long = FIXED_TIME.toEpochMilli
   val FIXED_EPOCH_SECONDS: Int = FIXED_TIME.getEpochSecond.toInt
   private val FIXED_FILE_TIME = FileTime.from(FIXED_TIME)
-
-  val incrementalHashingEnabled: Boolean =
-    Option(System.getProperty("optimus.buildtool.jars.experimental.incrementalHashing")).exists(_.toBoolean)
 
   // Note that we don't use JarAssets here, since the classpath may be relative
   def createPathingManifest(classpath: Seq[Path], premainClass: Option[String]): jar.Manifest = {
@@ -232,7 +228,6 @@ object Jars {
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       manifest: Option[jar.Manifest] = None,
-      compress: Boolean,
       incremental: Boolean = false,
       extraFiles: Seq[ExtraInJar] = Nil
   ): Long = {
@@ -241,7 +236,6 @@ object Jars {
     mergeAndHashJarContentGivenManifest(
       sourceJars,
       targetJar,
-      compress,
       incremental,
       mergedManifest,
       extraFiles
@@ -258,17 +252,11 @@ object Jars {
   def mergeAndHashJarContentGivenManifest(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
-      compress: Boolean,
       incremental: Boolean = false,
       manifest: Option[jar.Manifest] = None,
       extraFiles: Seq[ExtraInJar] = Nil,
   ): Long = {
-    if (incrementalHashingEnabled) {
-      fastMergeJarContent(sourceJars, targetJar, manifest, incremental, extraFiles)
-    } else {
-      val outputJar = () => new ConsistentlyHashedJarOutputStream(targetJar, manifest, compress, incremental)
-      mergeJarGivenTokens(sourceJars, outputJar, Map.empty, extraFiles)
-    }
+    fastMergeJarContent(sourceJars, targetJar, manifest, incremental, extraFiles)
     Files.size(targetJar.path)
   }
 
@@ -369,6 +357,14 @@ object Jars {
     }
   }
 
+  private val additionalMetadataEntries =
+    Set(
+      Hashing.optimusPerEntryHashPath,
+      Hashing.optimusHashPath,
+      JarFile.MANIFEST_NAME,
+      JarUtils.optimusIncrementalPath
+    )
+
   private def fastMergeJarContent(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
@@ -376,14 +372,6 @@ object Jars {
       incremental: Boolean,
       extraFiles: Seq[ExtraInJar] = Nil
   ): Unit = {
-    val additionalMetadataEntries =
-      Set(
-        Hashing.optimusPerEntryHashPath,
-        Hashing.optimusHashPath,
-        JarFile.MANIFEST_NAME,
-        JarUtils.optimusIncrementalPath
-      )
-
     def tempJarOutputStream(file: JarAsset, manifest: Option[jar.Manifest])(
         fn: EnhancedJarOutputStream => Unit
     ): Unit = {
@@ -460,11 +448,11 @@ object Jars {
 
     /**
      * This method is responsible for cleaning and rehashing entries inside the original jar.
-     * The cleaning consists of separating all of the metadata files from central directory.
+     * The cleaning consists of separating all the metadata files from central directory.
      * We return them separately as they will be merged together into a single metadata file for all jars.
      *
      * Removed files do not need to be handled, as they should not exist in [[sbt.internal.inc.IndexBasedZipFsOps.CentralDir]] in the first place.
-     * [[sbt.internal.inc.IndexBasedZipFsOps.CentralDir]] is our source of truth and it is developer responsibility to ensure that this is the case.
+     * [[sbt.internal.inc.IndexBasedZipFsOps.CentralDir]] is our source of truth, and it is developer responsibility to ensure that this is the case.
      */
     def cleanAndRehashJars(): Seq[RehashedEntries] =
       sourceJars.map { jarAsset =>
@@ -599,7 +587,6 @@ object Jars {
 
   def stampJarWithConsistentHash(
       jarAsset: JarAsset,
-      compress: Boolean,
       trace: Option[TaskTrace],
       incremental: Boolean = false
   ): Unit = {
@@ -608,7 +595,7 @@ object Jars {
     // This has to be replaced with a method, that does not copy all entries, but rather modifies current jar
     AssetUtils.atomicallyWrite(jarAsset, replaceIfExists = true) { temp =>
       val writtenBytes =
-        mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), compress, incremental, manifest)
+        mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), incremental, manifest)
       trace.foreach(_.addToStat(ObtStats.WrittenClassJars, writtenBytes))
     }
   }

@@ -14,6 +14,7 @@ package optimus.platform.relational.dal.core
 import optimus.platform.dsi.bitemporal.QueryPlan
 import optimus.platform.dsi.expressions.Binary
 import optimus.platform.dsi.expressions.BinaryOperator
+import optimus.platform.dsi.expressions.CollectionOps
 import optimus.platform.dsi.expressions.Function
 import optimus.platform.dsi.expressions.In
 import optimus.platform.dsi.expressions.Property
@@ -46,11 +47,18 @@ class DALFormatter extends DALFormatterBase {
     val mc = func.callee.asInstanceOf[MethodCallee]
     val desc = mc.method
     val declType = desc.declaringType
-    val inst = getExpression(visitElement(func.instance))
-    val args = visitElementList(func.arguments).map(getExpression)
-    if (declType <:< DALProvider.EntityRefType)
+    if (declType <:< DALProvider.EntityRefType) {
+      val args = visitElementList(func.arguments).map(getExpression)
       ExpressionElement(Function(s"convert.${desc.name}", args))
-    else
+    } else if (declType <:< classOf[Iterable[_]] && desc.name == "contains") {
+      (func.instance, func.arguments) match {
+        case (c: ColumnElement, List(v: ConstValueElement)) =>
+          val inst = getExpression(visitElement(c))
+          val args = List(RichConstant(v.value, v.rowTypeInfo, getIndexInfo(c)))
+          ExpressionElement(Function(CollectionOps.Contains.Name, inst :: args))
+        case _ => super.handleFuncCall(func)
+      }
+    } else
       super.handleFuncCall(func)
   }
 

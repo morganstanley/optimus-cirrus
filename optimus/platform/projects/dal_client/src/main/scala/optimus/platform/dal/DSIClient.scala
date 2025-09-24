@@ -504,7 +504,10 @@ abstract class DSIClient(
     override protected def close(client: Option[DalBrokerClient], batch: BatchContext): Unit = outer.close(client)
   }
 
-  protected[optimus] class DsiClientPubSubStreamRetryManager(maxRetryAttempts: Int, retryBackoffTime: Long)
+  protected[optimus] class DsiClientPubSubStreamRetryManager(
+      maxRetryAttempts: Int,
+      retryBackoffTime: Long,
+      override val readDSI: Option[ClientSideDSI] = None)
       extends AbstractPubSubStreamRetryManager(maxRetryAttempts, retryBackoffTime, outer.sessionCtx) {
     override def closeSender(failed: Option[DalBrokerClient]): Unit = outer.close(failed)
     override def closeCurrentSender(): Unit = outer.close(shutdown = false)

@@ -18,7 +18,6 @@ import optimus.graph.OGSchedulerTimes
 import optimus.graph.OGTrace
 import optimus.graph.OGTraceReader
 import optimus.graph.Settings
-import optimus.graph.cache.NCPolicy.registeredScopedPathAndProfileBlockID
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.SchedulerProfileEntryForUI
@@ -116,7 +115,7 @@ object NodeProfiler extends ConfigSettings {
 
   def collectProfile(includeTweakableNotTweaked: Boolean, blockID: Int): ArrayBuffer[PNodeTaskInfo] = {
     if (DiagnosticSettings.outOfProcess)
-      ArrayBuffer(JMXConnection.graph.collectProfile(resetAfter = false, alsoClearCache = false): _*)
+      ArrayBuffer.from(JMXConnection.graph.collectProfile(resetAfter = false, alsoClearCache = false))
     else
       Profiler.getProfileData(alwaysIncludeTweaked = true, includeTweakableNotTweaked, blockID)
   }
@@ -376,6 +375,12 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     )
 
     val menuExperimental = new JMenu2("Experimental")
+    menuExperimental.addAdvMenu("Dump AutoPGO Stats") {
+      OGTraceMode.livePGO.dumpStats()
+    }
+
+    menuExperimental.add(GraphDebuggerUI.resetBetweenRecordings)
+
     configureEdgesObserverButtons(menuExperimental)
 
     Seq(menuView, menuHelp, menuExperimental)
@@ -595,7 +600,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     if (toCompare) {
       readPntisFromFile(toCompare, fc) { file =>
         val reader = TraceHelper.getReaderFromFile(file.getAbsolutePath)
-        val pntis = reader.getHotspots.asScala
+        val pntis = reader.getHotspots.asScalaUnsafeImmutable
         ArrayBuffer(pntis: _*)
       }
     } else {
@@ -628,7 +633,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
   }
 
-  def saveAllProfilingData(): Unit = {
+  private def saveAllProfilingData(): Unit = {
     JUIUtils.saveToFile(this, FileChooser.allProfileFileChooser) { file =>
       GridProfilerUtils.writeData(
         file.getName,
@@ -690,7 +695,8 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       new JCheckBox("Auto Suggest Disable XSFT for Nodes", pref.getBoolean("ExportConfig.autoDisableXSFT", false))
     val copyConfigLine =
       new JCheckBox("Copy Config Argument into Clipboard", pref.getBoolean("ExportConfig.copyArgToClipBoard", true))
-    val cfg: AutoPGOThresholds = AutoPGOThresholds()
+
+    private val cfg: AutoPGOThresholds = AutoPGOThresholds()
     val cacheConfigNeverHitThreshold = new JTextField(
       pref.get("ExportConfig.cacheConfigNeverHitThreshold", cfg.neverHitThreshold.toString)
     )

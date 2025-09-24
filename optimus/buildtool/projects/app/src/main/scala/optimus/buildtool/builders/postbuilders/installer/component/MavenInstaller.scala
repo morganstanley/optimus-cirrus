@@ -31,8 +31,6 @@ import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class MavenInstaller(installer: Installer) extends ComponentInstaller {
   import installer._
   override val descriptor = "maven jars"

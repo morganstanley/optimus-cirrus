@@ -22,8 +22,6 @@ import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
-import scala.collection.immutable.Seq
-
 // For apps, name will be the app name (eg. "HelloWorldUIApp")
 // For tests, name will be the test group from the .runconf (eg. "uiTest")
 final case class RunConfId(scope: ScopeId, name: String) {
@@ -54,17 +52,24 @@ sealed trait RunConf extends HasNativeLibraries {
 
   def tpe: RunConfType // this can be made more "type safe" with lots of magic but I trust that we can keep it straight
 
-  def runConfId: RunConfId = RunConfId(id, name)
+  final def runConfId: RunConfId = RunConfId(id, name)
+
+  // Unloadable -agentpath will immediately terminate the JVM; on windows, filter out arguments
+  // that look like linux shared libraries.
+  private def illegalWindowsArgument(arg: String): Boolean = {
+    arg.startsWith("-agentpath:") && arg.matches(".*\\.so(\\.\\d+)*(=\\S+)?")
+  }
 
   // For application scripts where the evaluation is delayed at runtime
-  def javaOptsForWindows: Seq[String] = javaOpts.map(convertToWindowsVariables)
-  def envForWindows: Map[String, String] = env.map(convertToWindowsVariables)
-  def javaOptsForLinux: Seq[String] = javaOpts.map(convertToLinuxVariables)
-  def envForLinux: Map[String, String] = env.map(convertToLinuxVariables)
+  final def javaOptsForWindows: Seq[String] =
+    javaOpts.map(convertToWindowsVariables).filterNot(illegalWindowsArgument)
+  final def envForWindows: Map[String, String] = env.map(convertToWindowsVariables)
+  final def javaOptsForLinux: Seq[String] = javaOpts.map(convertToLinuxVariables)
+  final def envForLinux: Map[String, String] = env.map(convertToLinuxVariables)
 
   // For runtime evaluation (e.g. JetFire, OptimusAppRunner, OptimusTestRunner)
-  def evalJavaOpts(envVars: Map[String, String]): Seq[String] = javaOpts.map(evaluateVar(_, envVars))
-  def evalEnv(envVars: Map[String, String]): Map[String, String] = env.map(evaluateKeyVar(_, envVars))
+  final def evalJavaOpts(envVars: Map[String, String]): Seq[String] = javaOpts.map(evaluateVar(_, envVars))
+  final def evalEnv(envVars: Map[String, String]): Map[String, String] = env.map(evaluateKeyVar(_, envVars))
 }
 
 sealed abstract class RunConfType(name: String) {

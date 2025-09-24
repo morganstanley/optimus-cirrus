@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.files
 
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.OptimusBuildToolAssertions
@@ -56,7 +55,6 @@ private[buildtool] final case class SourceFileId(
 private[buildtool] final case class GeneratedSourceUnitId(
     scopeId: ScopeId,
     generatorName: String,
-    tpe: GeneratedSourceArtifactType,
     jar: JarAsset,
     jarRootToSourceFilePath: RelativePath,
     override val sourceFolderToFilePath: RelativePath

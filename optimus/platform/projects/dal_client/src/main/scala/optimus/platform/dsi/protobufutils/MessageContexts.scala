@@ -21,6 +21,7 @@ import optimus.dsi.session.EstablishSessionResult
 import optimus.graph.CancellationScope
 import optimus.graph.GraphInInvalidState
 import optimus.graph.CompletableNode
+import optimus.graph.DiagnosticSettings
 import optimus.graph.Scheduler
 import optimus.platform.dal.DALCache
 import optimus.platform.NonForwardingPluginTagKey
@@ -56,6 +57,7 @@ import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Promise
+import scala.util.control.NonFatal
 
 trait BatchContext {
   def requestUuid: String
@@ -138,14 +140,33 @@ object BatchContext {
       val extraCallerDetail: Option[ExtraCallerDetail]
   )
 
-  // TODO (OPTIMUS-13333): Privatize (need to encapsulate logic from RequestSender)
-  final class ClientRequestContext(
+  trait ClientRequestContext {
+    def base: Int
+    def completable: Completable
+    def isCompleted: Boolean
+
+    def getEstablishSessionResult(): Option[EstablishSessionResult]
+    def setEstablishSessionResult(result: Option[EstablishSessionResult]): Unit
+
+    def addCommandResults(
+        requestUuid: String,
+        seqId: Int,
+        commandIndex: Int,
+        partResults: Seq[Result],
+        partResultProtos: Seq[MessageLite],
+        isPartial: Boolean): Unit
+
+    private[BatchContext] def completeWithException(ex: Throwable): Unit
+    private[BatchContext] def complete(client: DalBrokerClient): Int
+  }
+
+  private[optimus] class ClientRequestContextImpl(
       val completable: Completable,
       val base: Int,
       size: Int,
       helperOpt: Option[ClientRequestHelper],
-      appNameTag: Option[String],
-      var establishSessionResult: Option[EstablishSessionResult] = None) {
+      appNameTag: Option[String])
+      extends ClientRequestContext {
     // no override for hash and equals: we need identity here for efficiency
 
     private[this] val commandContexts: Seq[ListBuffer[Result]] =
@@ -163,7 +184,19 @@ object BatchContext {
     private[this] def commandContext(i: Int) = commandContexts(i - base)
     private[this] def commandContextProto(i: Int) = commandContextProtos(i - base)
 
-    def isComplete = incompleteCommandIds.size == 0 // don't replace this with .isEmpty until Scala fixes perf issue
+    def isCompleted: Boolean = {
+      incompleteCommandIds.size == 0 // don't replace this with .isEmpty until Scala fixes perf issue
+    }
+
+    private var establishSessionResult: Option[EstablishSessionResult] = None
+
+    def getEstablishSessionResult(): Option[EstablishSessionResult] = {
+      establishSessionResult
+    }
+
+    def setEstablishSessionResult(result: Option[EstablishSessionResult]): Unit = {
+      establishSessionResult = result
+    }
 
     private[BatchContext] def completeWithException(ex: Throwable) = {
       completable.completeWithException(ex)
@@ -175,6 +208,17 @@ object BatchContext {
       allResults.size
     }
 
+    protected def addPartResultsToCommandContext(
+        commandIndex: Int,
+        partResults: Seq[Result],
+        partResultProtos: Seq[MessageLite],
+        isPartial: Boolean): Unit = {
+      commandContext(commandIndex) ++= partResults
+      // only record proto if DALCache is enabled
+      if (DALCache.Global.dalCacheEnabled)
+        commandContextProto(commandIndex) ++= partResultProtos
+    }
+
     def addCommandResults(
         requestUuid: String,
         seqId: Int,
@@ -182,10 +226,7 @@ object BatchContext {
         partResults: Seq[Result],
         partResultProtos: Seq[MessageLite],
         isPartial: Boolean): Unit = {
-      commandContext(commandIndex) ++= partResults
-
-      // only record proto if DALCache is enabled
-      if (DALCache.Global.dalCacheEnabled) commandContextProto(commandIndex) ++= partResultProtos
+      addPartResultsToCommandContext(commandIndex, partResults, partResultProtos, isPartial)
 
       if (!isPartial) {
         val removed = incompleteCommandIds.remove(commandIndex - base)
@@ -259,6 +300,45 @@ object BatchContext {
   def unapply(batchContext: BatchContext) =
     Some((batchContext.requestUuid, batchContext.chainedId, batchContext.started))
 
+  trait ClientRequestContextFactory {
+    def create(
+        completable: Completable,
+        base: Int,
+        size: Int,
+        helperOpt: Option[ClientRequestHelper],
+        appNameTag: Option[String]): ClientRequestContext
+  }
+
+  object ClientRequestContextFactory {
+    object Default extends ClientRequestContextFactory {
+      def create(
+          completable: Completable,
+          base: Int,
+          size: Int,
+          helperOpt: Option[ClientRequestHelper],
+          appNameTag: Option[String]): ClientRequestContext = {
+        new ClientRequestContextImpl(completable, base, size, helperOpt, appNameTag)
+      }
+    }
+  }
+
+  private val clientRequestContextFactoryProperty = "optimus.platform.dsi.ClientRequestContextFactory"
+  private val clientContextFactory: ClientRequestContextFactory = {
+    val factoryClassStr = DiagnosticSettings.getStringProperty(clientRequestContextFactoryProperty, "")
+    if (factoryClassStr.isEmpty) {
+      ClientRequestContextFactory.Default
+    } else {
+      try {
+        val factoryClass = Class.forName(factoryClassStr)
+        factoryClass.getDeclaredConstructor().newInstance().asInstanceOf[ClientRequestContextFactory]
+      } catch {
+        case NonFatal(ex) =>
+          log.warn(s"Cannot create instance for class $factoryClassStr", ex)
+          ClientRequestContextFactory.Default
+      }
+    }
+  }
+
   object BatchContextImpl {
     def apply(
         requestUuid: String,
@@ -312,7 +392,7 @@ object BatchContext {
           else
             None
 
-        val crc = new ClientRequestContext(cr.completable, base, count, helper, cr.appNameTag)
+        val crc = clientContextFactory.create(cr.completable, base, count, helper, cr.appNameTag)
         currentCmdIndex += count
         map.put(crc.base, crc)
       }
@@ -351,7 +431,7 @@ object BatchContext {
         enableOutOfOrderCompletion: Boolean): Boolean = synchronized {
       if (partial) {
         if (enableOutOfOrderCompletion) {
-          val newlyCompletedRequests = clientRequestContexts.filter(_.isComplete)
+          val newlyCompletedRequests = clientRequestContexts.filter(_.isCompleted)
 
           newlyCompletedRequests.foreach { crc =>
             completeClientRequest(client, crc)

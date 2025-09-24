@@ -20,7 +20,6 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 import optimus.scalacompat.collection._
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity class CppCompilationSources(
@@ -33,7 +32,7 @@ import scala.collection.immutable.SortedMap
 
   @node protected def hashedSources: HashedSourcesImpl = {
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.CppFingerprint, Some(osVersion))
-    HashedSourcesImpl(Seq("Source" -> sourceContent), Nil, fingerprintHash)
+    HashedSourcesImpl(Seq("Source" -> sourceContent), fingerprintHash, fingerprint)
   }
 
   @node private def sourceContent: SortedMap[SourceUnitId, HashedContent] = {

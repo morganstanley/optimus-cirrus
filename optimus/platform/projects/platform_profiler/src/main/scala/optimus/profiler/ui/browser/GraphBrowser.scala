@@ -40,6 +40,7 @@ import optimus.profiler.utils.GraphDumper
 import java.awt.BorderLayout
 import java.awt.BorderLayout._
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.event.ActionEvent
 import java.util.{ArrayList => JArrayList}
 import java.util.{Collection => JCollection}
@@ -167,9 +168,13 @@ class GraphBrowser(_allTasks: JCollection[PNodeTask], val showNodesFrom: Int, _i
     panel
   }
 
+  override def getMinimumSize: Dimension = new Dimension(100, 100)
+
   init()
 
   private def init(): Unit = {
+    groupingPane.setMinimumSize(getMinimumSize)
+
     groupingPane.dataTable.getSelectionModel.addListSelectionListener(e =>
       if (!e.getValueIsAdjusting) {
         val selections = groupingPane.getNodeTaskSelections

@@ -18,8 +18,7 @@ import optimus.dsi.base.ObliterateAction
 import optimus.dsi.base.RefHolder
 import optimus.dsi.base.SlottedVersionedReference
 import optimus.graph.DiagnosticSettings
-import optimus.platform.TimeInterval
-import optimus.platform.ValidTimeInterval
+import optimus.platform._
 import optimus.platform.bitemporal.BitemporalSpace
 import optimus.platform.bitemporal.Rectangle
 import optimus.platform.bitemporal.Segment
@@ -173,8 +172,7 @@ final case class PutEntityGrouping(
     maxVersionCount: Int,
     className: String,
     types: Seq[SerializedEntity.TypeRef],
-    linkedTypes: Option[LinkedTypes],
-    monoTemporal: Boolean)
+    linkedTypes: Option[LinkedTypes])
     extends EntityGroupingTxnAction {
 
   def createEntityGrouping(tt: Instant): EntityGrouping =
@@ -186,8 +184,7 @@ final case class PutEntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      linkedTypes,
-      monoTemporal)
+      linkedTypes)
 }
 
 final case class UpdateEntityGrouping(
@@ -200,9 +197,27 @@ final case class UpdateEntityGrouping(
     typesUpdated: Boolean,
     cmid: Option[CmReference],
     linkedTypes: Option[LinkedTypes],
-    linkedTypesUpdated: Boolean,
-    monoTemporal: Boolean)
+    linkedTypesUpdated: Boolean)
     extends EntityGroupingTxnAction {}
+
+/*
+ * ClassInfo
+ */
+sealed trait ClassInfoEntryTxnAction extends TxnAction {
+  def classInfoEntry: ClassInfoEntry
+  def className: String = classInfoEntry.className
+  def types: Seq[SerializedEntity.TypeRef] = classInfoEntry.types
+  def linkedTypes: Option[LinkedTypes] = classInfoEntry.linkedTypes
+  def monoTemporal: Boolean = classInfoEntry.monoTemporal
+}
+
+final case class PutClassInfoEntry(classInfoEntry: ClassInfoEntry) extends ClassInfoEntryTxnAction
+
+final case class UpdateClassInfoEntry(
+    classInfoEntry: ClassInfoEntry,
+    linkedTypesUpdated: Boolean,
+    typesUpdated: Boolean)
+    extends ClassInfoEntryTxnAction
 
 /*
  * Entity Unique Index Groupings
@@ -514,13 +529,12 @@ final case class PutIndexEntry(
 
   override def equals(o: Any): Boolean = o match {
     case entry: PutIndexEntry =>
-      entry.id == id && entry.versionedRef == versionedRef && entry.typeName == typeName &&
-      entry.properties == properties && entry.vtInterval == vtInterval && Arrays
-        .equals(entry.hash, hash) && entry.refFilter == refFilter
+      entry.id == id && entry.versionedRef == versionedRef && entry.typeName == typeName && entry.vtInterval == vtInterval && Arrays
+        .equals(entry.hash, hash) && entry.refFilter == refFilter && entry.properties == properties
     case _ => false
   }
 
-  override def hashCode: Int = vtInterval.from.getNano
+  override def hashCode: Int = if (id != null) id.hashCode() else vtInterval.from.getNano
 
   def createIndexEntry(tt: Instant): IndexEntry =
     IndexEntry(id, versionedRef, entityRef, typeName, properties, vtInterval, TimeInterval(tt), hash, refFilter)
@@ -808,6 +822,7 @@ object HighLevelAction {
       case a: bitemporal.AbstractRawCommand         => Placeholder()
       case i: bitemporal.InvalidateAllCurrent       => Placeholder()
       case i: bitemporal.InvalidateAllCurrentByRefs => Placeholder()
+      case m: bitemporal.PrepareMonoTemporal        => Placeholder()
       case o: bitemporal.Obliterate                 => Placeholder()
       case a: bitemporal.AccMetadataCommand         => AccAction.make(a)
     }

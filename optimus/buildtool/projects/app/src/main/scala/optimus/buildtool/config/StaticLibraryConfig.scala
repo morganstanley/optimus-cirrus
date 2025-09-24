@@ -17,8 +17,8 @@ package optimus.buildtool.config
 private[buildtool] object StaticLibraryConfig {
 
   val scalaJarNamesForZinc =
-    "scala-compiler.jar" ::
-      "scala-library.jar" ::
-      "scala-reflect.jar" :: Nil
+    "scala-compiler" ::
+      "scala-library" ::
+      "scala-reflect" :: Nil
 
 }

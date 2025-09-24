@@ -64,7 +64,6 @@ import optimus.platform._
 import org.apache.commons.io.IOUtils
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -124,7 +123,7 @@ object AsyncJmhCompiler {
     val result = Try {
       val (sources, resources, jmhMessages) = {
         log.info(s"[$scopeId:jmh] Starting generation")
-        val gen = generateSources(inputs)
+        val gen = generateSources(scopeId, inputs)
         log.info(s"[$scopeId:jmh] Completing generation")
         (gen.sources, gen.resources, gen.messages)
       }
@@ -191,7 +190,7 @@ object AsyncJmhCompiler {
   @entersGraph def downloadMavenLib(mavenLib: ExternalClassFileArtifact): String =
     dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(mavenLib).pathString
 
-  private def generateSources(inputs: AsyncJmhCompiler.Inputs): SourceGenerationResult = {
+  private def generateSources(scopeId: ScopeId, inputs: AsyncJmhCompiler.Inputs): SourceGenerationResult = {
     import CompilationMessage._
 
     val jmhGenClasspath = (inputs.jmhJars ++ inputs.localArtifacts ++ inputs.otherArtifacts).collect {
@@ -269,8 +268,8 @@ object AsyncJmhCompiler {
           val errorText = IOUtils.toString(errFile.path.toUri, "UTF-8")
           val errors = message(s"JMH generator exited with return code $code", Error) ::
             errorText.split("\n").filterNot(_.trim.isEmpty).map(message(_, Error)).toList
-          log.error(s"out: ${IOUtils.toString(outFile.path.toUri, "UTF-8")}")
-          log.error(s"err: $errorText")
+          log.error(s"[$scopeId:jmhSourceGenerator] out: ${IOUtils.toString(outFile.path.toUri, "UTF-8")}")
+          log.error(s"[$scopeId:jmhSourceGenerator] err: $errorText")
           SourceGenerationResult(Map.empty, Map.empty, errors ++ messages)
 
       }
@@ -360,7 +359,7 @@ object AsyncJmhCompilerImpl {
 
             // we don't incrementally rewrite these jars at the moment, so might as well compress to save disk space
             if (!msgArtifacts.hasErrors)
-              Jars.stampJarWithConsistentHash(JarAsset(tempOut), compress = true, Some(taskTrace))
+              Jars.stampJarWithConsistentHash(JarAsset(tempOut), Some(taskTrace))
 
             msgArtifacts
           }

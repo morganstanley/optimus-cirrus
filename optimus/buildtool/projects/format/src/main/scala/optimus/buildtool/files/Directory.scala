@@ -24,12 +24,12 @@ import optimus.buildtool.config.NamingConventions.TempDir
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OptimusBuildToolAssertions
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.PathUtils.ErrorIgnoringFileVisitor
 import optimus.platform.impure
 
 import java.util.UUID
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.Try
 import scala.collection.compat._
@@ -432,7 +432,7 @@ object Directory {
   private object tempHook extends Thread("temporary-directory deleter") {
     Runtime.getRuntime.addShutdownHook(this)
     val toDelete: mutable.Builder[Directory, List[Directory]] = List.newBuilder[Directory]
-    override def run(): Unit = if (!sys.props.get("optimus.buildtool.deleteTemporaryDirectories").contains("false")) {
+    override def run(): Unit = if (OptimusBuildToolProperties.getOrTrue("deleteTemporaryDirectories")) {
       toDelete.result().foreach(d => Try(AssetUtils.recursivelyDelete(d))) // best effort
     }
   }

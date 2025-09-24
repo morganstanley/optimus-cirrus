@@ -58,6 +58,8 @@ private[optimus] object CrumbsBackfillSource extends Crumb.Source { override val
 private[optimus] object DalPerformanceTestBreadcrumbsSource extends Crumb.Source { override val name = "DALPT" }
 private[optimus] object DalUowKafkaCrumbSource extends Crumb.Source { override val name = "UOWKFKA" }
 private[optimus] object DalKafkaMonitorCrumbSource extends Crumb.Source { override val name = "DALKAFKAMON" }
+private[optimus] object ChannelForwarderCrumbSource extends Crumb.Source { override val name = "CHNFWD" }
+private[optimus] object ChannelProxyCrumbSource extends Crumb.Source { override val name = "CHNPROXY" }
 
 private[optimus] object DalEvents {
   object Client {

@@ -18,4 +18,6 @@ object RuntimeEnvironmentKnownNames {
   final val EnvDev = "dev"
   final val EnvQa = "qa"
   final val EnvAws = "aws"
+  final val EnvPraqa = "praqa"
+  final val Envuat = "uat"
 }

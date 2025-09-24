@@ -32,6 +32,9 @@ public @interface compiler {
 
   boolean queueSizeSensitive() default false;
 
+  /** Test usage only! */
+  boolean retainModifiedByteCode() default false;
+
   /**
    * TODO (OPTIMUS-66991): a few more ideas of other options we could add: assumeNoAliasing,
    * inlineLoops, hoistNodeCallsFromLoops, and more!

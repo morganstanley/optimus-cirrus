@@ -76,12 +76,12 @@ private[buildtool] object TraceRecorder {
 
   implicit val CategoryJsonValueCodec: JsonValueCodec[CategoryTrace] = new JsonValueCodec[CategoryTrace] {
     override def decodeValue(in: JsonReader, default: CategoryTrace): CategoryTrace = in.readString(null) match {
-      case x if x == Queue.name      => Queue
-      case x if x == Signatures.name => Signatures
-      case x if x == Outline.name    => Outline
-      case x if x == Scala.name      => Scala
-      case x if x == Java.name       => Java
-      case x                         => throw new MatchError(s"$x doesn't match any defined category traces")
+      case x if x == Queue(Scala).name => Queue(Scala)
+      case x if x == Signatures.name   => Signatures
+      case x if x == Outline.name      => Outline
+      case x if x == Scala.name        => Scala
+      case x if x == Java.name         => Java
+      case x                           => throw new MatchError(s"$x doesn't match any defined category traces")
     }
 
     override def encodeValue(x: CategoryTrace, out: JsonWriter): Unit = out.writeVal(x.name)
@@ -111,8 +111,9 @@ class TraceRecorder(traceFilePrefixOpt: Option[Directory] = None) extends Defaul
     traces.iterator.filter(_.durationMicros >= 0).toList
   }
 
+  override def finalizeBuild(success: Boolean): Unit = traceFilePrefixOpt.foreach(writeToFiles)
+
   override def endBuild(success: Boolean): Boolean = {
-    traceFilePrefixOpt.foreach(writeToFiles)
     reset()
     true
   }

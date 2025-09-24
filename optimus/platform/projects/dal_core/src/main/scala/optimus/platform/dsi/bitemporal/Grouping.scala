@@ -215,6 +215,17 @@ object EntityGrouping {
   implicit def ordering[T <: EntityGrouping]: Ordering[T] = new Ordering[T] {
     override def compare(x: T, y: T): Int = RawReference.ordering.compare(x.id, y.id)
   }
+  def mergeLinkedTypes(
+      existingLinkedTypes: Option[LinkedTypes],
+      newLinkedTypes: Option[LinkedTypes]
+  ): Option[LinkedTypes] = {
+    (existingLinkedTypes, newLinkedTypes) match {
+      // when original linkedTypes is None, we will still put None
+      case (None, _)            => None
+      case (Some(l1), Some(l2)) => Some(l1.merge(l2))
+      case (Some(_), None)      => existingLinkedTypes
+    }
+  }
 }
 
 /**
@@ -238,8 +249,7 @@ final case class EntityGrouping(
     val maxTimeSliceCount: Int,
     val maxVersionCount: Int,
     val lockToken: Long,
-    val linkedTypes: Option[LinkedTypes],
-    val monoTemporal: Boolean)
+    val linkedTypes: Option[LinkedTypes])
     extends HasDSIId[EntityReference]
     with OptimisticallyVersioned {
 
@@ -258,17 +268,7 @@ final case class EntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      linkedTypes,
-      monoTemporal)
-
-  private def mergeLinkedTypes(newLinkedTypes: Option[LinkedTypes]): Option[LinkedTypes] = {
-    (linkedTypes, newLinkedTypes) match {
-      // when original linkedTypes is None, we will still put None
-      case (None, _)            => None
-      case (Some(l1), Some(l2)) => Some(l1.merge(l2))
-      case (Some(_), None)      => linkedTypes
-    }
-  }
+      linkedTypes)
 
   // transitional code to promote old grouping schema to new (including types). remove after schema migration complete.
   def next(
@@ -276,8 +276,7 @@ final case class EntityGrouping(
       maxVersionCount: Int,
       newTypes: Seq[String],
       newLinkedTypes: Option[LinkedTypes],
-      tt: Instant,
-      monoTemporal: Boolean) =
+      tt: Instant) =
     new EntityGrouping(
       permanentRef,
       cmid,
@@ -286,8 +285,7 @@ final case class EntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      mergeLinkedTypes(newLinkedTypes),
-      monoTemporal
+      EntityGrouping.mergeLinkedTypes(linkedTypes, newLinkedTypes)
     )
 
   override def equals(o: Any): Boolean = o match {
@@ -300,7 +298,7 @@ final case class EntityGrouping(
   final def permanentRef = id
 
   override def toString() =
-    s"Grp(ref=${id}, cmid=${cmid}, cn=${className}, lt=${lockToken}, tsCnt=${maxTimeSliceCount}, vnCnt=${maxVersionCount}, mt=${monoTemporal})"
+    s"Grp(ref=${id}, cmid=${cmid}, cn=${className}, lt=${lockToken}, tsCnt=${maxTimeSliceCount}, vnCnt=${maxVersionCount})"
 }
 
 final case class KeyGrouping(
@@ -313,6 +311,15 @@ final case class KeyGrouping(
   def next(newSpace: BitemporalSpace[EntityReference], tt: Instant) =
     KeyGrouping(key, id, newSpace, DateTimeSerialization.fromInstant(tt), classIdOpt)
   def keyRef = id
+}
+
+final case class ClassInfoEntry(
+    className: SerializedEntity.TypeRef,
+    types: Seq[SerializedEntity.TypeRef],
+    linkedTypes: Option[LinkedTypes],
+    monoTemporal: Boolean
+) extends HasDSIId[SerializedEntity.TypeRef] {
+  override def id: SerializedEntity.TypeRef = className
 }
 
 /**

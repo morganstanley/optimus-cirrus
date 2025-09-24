@@ -165,7 +165,7 @@ trait NodeFuture[+T] {
    * Note: it looks like get... but this will start changing
    * Why a new function? Because we will modify this without breaking the existing code!
    */
-  //noinspection AccessorLikeMethodIsUnit
+  // noinspection AccessorLikeMethodIsUnit
   def toValue$V(): Unit = get$ // void
   def toValue$Z: Boolean = get$.asInstanceOf[Boolean]
   def toValue$C: Char = get$.asInstanceOf[Char]
@@ -177,6 +177,9 @@ trait NodeFuture[+T] {
   def toValue$D: Double = get$.asInstanceOf[Double]
   def toValue$ : T = get$ // object
 }
+
+// Marks classes that can be formatted by NodeName
+trait FormattableNode;
 
 /*
  * Node is:
@@ -555,13 +558,16 @@ package profiled {
   abstract class NodeSync[T] extends CompletableRawNode[T] {
     override def run(ec: OGSchedulerContext): Unit = completeWithResult(func, ec)
   }
-  abstract class NodeSyncWithExecInfo[T] extends NodeSync[T] with RawNodeExecutionInfo[T]
-  abstract class NodeSyncAlwaysUnique[T] extends NodeSync[T] with RawNodeAlwaysUniqueExecutionInfo[T]
+  abstract class NodeSyncWithExecInfo[T] extends NodeSync[T] with RawNodeExecutionInfo[T] with FormattableNode
+  abstract class NodeSyncAlwaysUnique[T]
+      extends NodeSync[T]
+      with RawNodeAlwaysUniqueExecutionInfo[T]
+      with FormattableNode
   abstract class NodeSyncStoredClosure[T] extends NodeSync[T] {
     override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
   }
 
-  abstract class NodeFSM[T] extends CompletableRawNode[T] {
+  abstract class NodeFSM[T] extends CompletableRawNode[T] with FormattableNode {
     override def isFSM = true
     @transient final private var __k: NodeStateMachine = _
     final override def setContinuation(kx: NodeStateMachine): Unit = {
@@ -595,7 +601,7 @@ package profiled {
     override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
   }
 
-  abstract class NodeDelegate[A] extends CompletableRawNode[A] {
+  abstract class NodeDelegate[A] extends CompletableRawNode[A] with FormattableNode {
     override def isFSM = true // It's FSM as far as outside world is concerned
 
     override def run(ec: OGSchedulerContext): Unit = {

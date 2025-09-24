@@ -18,6 +18,7 @@ import optimus.core.MonitoringBreadcrumbs.sendTweaksConflictingWithScenarioUnord
 import optimus.core.log
 import optimus.dist.HasDmcBinaryIdentity
 import optimus.graph._
+import optimus.platform.Scenario.RecordingFilter
 import optimus.platform.annotations.deprecating
 import optimus.platform.annotations.expectingTweaks
 import optimus.platform.annotations.nodeLiftByName
@@ -26,6 +27,7 @@ import optimus.platform.annotations.parallelizable
 import optimus.platform.util.html.HtmlBuilder
 import optimus.platform.util.html.NoStyle
 
+import java.lang.ref.WeakReference
 import scala.util.hashing.MurmurHash3
 
 /**
@@ -170,10 +172,15 @@ final class Scenario private[optimus] (
     other match {
       case that: Scenario =>
         if (this eq that) true
-        else if (unorderedTweaks)
-          _topLevelTweaks.toSet == that._topLevelTweaks.toSet && that.nestedScenarios == nestedScenarios
-        else
-          CoreHelpers.arraysAreEqual(_topLevelTweaks, that._topLevelTweaks) && that.nestedScenarios == nestedScenarios
+        else if (unorderedTweaks) {
+          // matches previous behaviour, which is not symmetric if the two Scenario differ in unorderedness
+          // no cached equalities for unordered tweaks --- this is a relatively uncommon code path anyway
+          // but we do check hash code first to avoid building sets
+          (hashCode == that.hashCode) &&
+          (this._topLevelTweaks.toSet == that._topLevelTweaks.toSet) &&
+          (that.nestedScenarios == nestedScenarios)
+        } else
+          _topTweaksAreEqual(that) && that.nestedScenarios == nestedScenarios
       case _ => false
     }
   }
@@ -260,6 +267,69 @@ final class Scenario private[optimus] (
   override def toString: String = prettyString()
 
   override def dmcBinaryIdentity: java.io.Serializable = DmcScenarioRepresentation(this)
+
+  /**
+   * Create a copy of this Scenario with new flags and filtered tweaks. Reuse the same tweak array if possible to
+   * improve scenario .equals() performance.
+   */
+  private[optimus] def filterConserve(f: Tweak => Boolean, flags: Int): Scenario = {
+    val recordingFilter: RecordingFilter[Tweak] = f(_)
+    val filtered = _topLevelTweaks.filter(recordingFilter)
+    val newTweaks = if (recordingFilter.changed) filtered else _topLevelTweaks
+    new Scenario(newTweaks, Nil, flags)
+  }
+  private[optimus] def filterConserve(f: Tweak => Boolean): Scenario = filterConserve(f, flags)
+
+  // Improve equality calculations between Scenario instances using a 1 element LRU cache
+  // lastTopLevelTweaksEqualPartner is a weak reference to an Array[Tweak] for which _topLevelTweak is equal.
+  // This currently only works for ordered scenarios, which is most scenarios.
+  @transient private var _lastEqualPartner: WeakReference[Array[Tweak]] = _
+  private def getLastEqualPartner = {
+    val recent = _lastEqualPartner
+    if (recent == null) null
+    else recent.get()
+  }
+  private def _topTweaksAreEqual(that: Scenario): Boolean = {
+    // non-cached code path
+    if (!Settings.cacheScenarioEqualities) CoreHelpers.arraysAreEqual(this._topLevelTweaks, that._topLevelTweaks)
+    else {
+      val thisLEP = this.getLastEqualPartner
+      val thisArr = this._topLevelTweaks
+      val thatLEP = that.getLastEqualPartner
+      val thatArr = that._topLevelTweaks
+
+      // Below, we check if either the arrays are the same, we have a LEP that matches their array,
+      // the have a LEP that matches our array, or we both have LEPs that match the same (third) array
+      val fastPath = (thisArr eq thatArr) ||
+        ((thisLEP ne null) && { (thisLEP eq thatArr) || (thisLEP eq thatLEP) }) ||
+        ((thatLEP ne null) && { (thatLEP eq thisArr) || (thisLEP eq thatLEP) })
+
+      // If the fast path didn't work, we do the full array equality
+      val result = fastPath || CoreHelpers.arraysAreEqual(thisArr, thatArr)
+
+      if (result) {
+        // If the two scenarios are equal we update the LEP of both of them as needed
+        //
+        // What about the memory semantics?
+        //
+        // We don't care about making sure that either side are safely published because nulls for the referent
+        // are fine (they happen as part of GC anyway), and we don't care about memory visibility because this is an
+        // optimization so it's fine if it is racy.
+        //
+        // The main danger here would be reordering. Is it possible that we end up writing this._lEP before our equality
+        // succeeded (optimistically), thereby allowing another thread to write that._LEP and fullfill our optimistic
+        // read?
+        //
+        // No! https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.4.8
+        // The Java memory model has a (surprisingly strong) causality requirement that forbids specifically
+        // "out-of-thin-air" results and this code is correctly synchronized.
+        if (thisLEP ne thatArr) this._lastEqualPartner = new WeakReference(thatArr)
+        if (thatLEP ne thisArr) that._lastEqualPartner = new WeakReference(thisArr)
+      }
+
+      result
+    }
+  }
 }
 
 private object DmcScenarioRepresentation {
@@ -416,5 +486,18 @@ object Scenario {
       }
     }
     new Scenario(topLevelTweaks.toArray, Nil, flagsToUse)
+  }
+
+  private abstract class RecordingFilter[T] extends Function[T, Boolean] {
+    private var hit = false
+    final def changed: Boolean = hit
+    def test(x: T): Boolean
+    override def apply(x: T): Boolean = {
+      if (test(x)) true
+      else {
+        hit = true
+        false
+      }
+    }
   }
 }

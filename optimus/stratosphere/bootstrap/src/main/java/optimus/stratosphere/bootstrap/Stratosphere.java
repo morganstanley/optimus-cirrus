@@ -138,15 +138,6 @@ public class Stratosphere {
   private static int runCommand(String command, String[] args) throws Exception {
     Path workspace = WorkspaceRoot.find();
     final Config config = StratosphereConfig.loadFromCurrentDir();
-
-    if (workspace != null) {
-      int migrationStatus =
-          MigrationManager.runIfNeeded(
-              workspace, command, config, /* showTrayNotification = */ true);
-      if (migrationStatus == FAILURE) {
-        return migrationStatus;
-      }
-    }
     return shouldRunSnapshotInfra(workspace, config, command)
         ? runSnapshotInfra(args, config)
         : runNewInfra(args, config);

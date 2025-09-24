@@ -17,7 +17,6 @@ import optimus.platform.throttle.ThrottleState
 import optimus.platform.util.Log
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 class CompilerThrottle(maxZincCompileBytes: Int, val maxNumZincs: Int) extends Log {
@@ -35,7 +34,7 @@ class CompilerThrottle(maxZincCompileBytes: Int, val maxNumZincs: Int) extends L
   // do this rather than having a separate number-based throttle so that a large compile can limit the
   // remaining number of compilations, even if they're very small.
   private val zincMinWeight =
-    if (maxNumZincs > 0) zincByteLimit / maxNumZincs else 0
+    if (maxNumZincs > 0) zincByteLimit / maxNumZincs else 1
 
   private val zincSizeThrottle =
     if (maxZincCompileBytes == 0 && maxNumZincs == 0) None

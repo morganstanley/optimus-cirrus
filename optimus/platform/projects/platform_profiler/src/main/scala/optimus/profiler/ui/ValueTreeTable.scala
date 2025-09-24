@@ -36,7 +36,9 @@ import optimus.platform.NodeHash
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
+import optimus.platform.storable.Entity
 import optimus.profiler.DebuggerUI
+import optimus.profiler.MarkObject
 import optimus.profiler.ui.NPTableRenderer.ValueWithTooltip
 import optimus.profiler.ui.ValueTreeTable.RowState
 import optimus.profiler.ui.common.JPopupMenu2
@@ -110,6 +112,11 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
 
   private def extractValues(v: Any, fields: m.HashMap[RowID, Any]): Unit = {
     v match {
+      case e: Entity =>
+        // two entities are only the same if they have the same storage info
+        fields.put(RowID("storageInfo"), e.dal$storageInfo)
+        // For entities, we always want to see their fields, even if they eg extend Iterable
+        ValueTreeTable.fieldExpander(v, fields)
       case arr: Array[_] =>
         for (idx <- arr.indices) {
           val rowIndex = RowID(idx)
@@ -407,7 +414,13 @@ object ValueTreeTable {
         if (value == null) ""
         else if (customValueToString.contains(value.getClass)) customValueToString(value)(value)
         else CoreHelpers.safeToString(value)
-      ValueWithTooltip(text, row.tooltipText)
+
+      value match {
+        case nodeTask: NodeTask if MarkObject.inMarkedObjects(nodeTask) =>
+          val labelledText = MarkObject.formatMarkedObject(nodeTask, text)
+          ValueWithTooltip(labelledText, row.tooltipText)
+        case _ => ValueWithTooltip(text, row.tooltipText)
+      }
     }
   }
 

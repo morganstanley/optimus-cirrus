@@ -18,6 +18,7 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.Artifacts
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.MessagePosition
+import optimus.buildtool.config.HasScopeId
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -28,17 +29,21 @@ import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.utils.AssetUtils.atomicallyMove
 import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.exceptions.RTExceptionTrait
+import optimus.graph.CircularReferenceException
 import optimus.graph.FlowControlException
+import optimus.graph.NodeTask
+import optimus.graph.PropertyNode
 import optimus.platform._
 import optimus.scalacompat.collection._
 import optimus.stratosphere.bootstrap.WorkspaceRoot
 import optimus.utils.ErrorIgnoringFileVisitor
+import optimus.workflow.utils.BuildCommonUtils
 import xsbti.VirtualFile
 
 import java.io._
 import java.lang.management.ManagementFactory
+import java.net.InetAddress
 import java.net.URI
-import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file._
 import java.nio.file.attribute.BasicFileAttributes
@@ -47,10 +52,12 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.util.Collections
 import java.util.{Set => JSet}
 import java.{util => ju}
+import java.util.concurrent.CompletionException
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 /**
@@ -63,12 +70,6 @@ import scala.util.control.NonFatal
   val SuccessLog: Logger = getLogger(s"${getClass.getName}.success")
   val WarningLog: Logger = getLogger(s"${getClass.getName}.warning")
   val FailureLog: Logger = getLogger(s"${getClass.getName}.failure")
-
-  @scenarioIndependent @node def outputPathForName(outDir: Directory, tpe: String, name: String): JarAsset = {
-    val tpeDir = outDir.resolveDir(tpe)
-    createDirectories(tpeDir)
-    tpeDir.resolveJar(s"$name.jar")
-  }
 
   def logPrefix(scopeId: ScopeId, traceType: MessageTrace, extra: Option[String] = None): String = {
     val extraStr = extra.map(e => s"-$e").getOrElse("")
@@ -269,6 +270,8 @@ import scala.util.control.NonFatal
   def processId: Option[String] = processDetails.map(_.pid)
   def hostName: Option[String] = processDetails.map(_.host)
 
+  def localHostName: String = InetAddress.getLocalHost.getHostName
+
   // Only safe to use for directories which won't be deleted while OBT is running
   // @node-cached because Files.createDirectories is slow
   @scenarioIndependent @node def createDirectories(dir: Directory): Unit =
@@ -349,12 +352,9 @@ import scala.util.control.NonFatal
     }
   }
 
-  def writeStringsToFile(p: Path, strs: Iterable[String]): Unit = {
-    // truncate and overwrite an existing file, or create the file if it doesn't initially exist
-    val out = new PrintStream(new BufferedOutputStream(Files.newOutputStream(p)), false, StandardCharsets.UTF_8.name())
-    try strs.foreach(out.println)
-    finally out.close()
-  }
+  def writeStringsToFile(p: Path, strs: Iterable[String]): Unit = BuildCommonUtils.writeStringsToFile(p, strs)
+
+  def readStringsFromFile(p: Path): Seq[String] = BuildCommonUtils.readStringsFromFile(p)
 
   /**
    * Like Seq#distinct except that it preserves only the last occurrence of each entry rather than only the first.
@@ -612,6 +612,41 @@ import scala.util.control.NonFatal
   @impure def writePropertiesToFile(file: FileAsset, properties: Map[String, String]): Unit = {
     val content = properties.map { case (k, v) => s"$k=$v" }.toList.sorted
     Files.write(file.path, content.mkString("\n").getBytes(UTF_8))
+  }
+
+  object MethodHasScopeId {
+    def unapply(nt: NodeTask): Option[ScopeId] =
+      Try(nt.asInstanceOf[{ def id: ScopeId }].id).toOption
+  }
+
+  object EntityHasScopeId {
+    def unapply(nt: NodeTask): Option[ScopeId] =
+      Try(nt.asInstanceOf[PropertyNode[_]].entity.asInstanceOf[HasScopeId].id).toOption
+  }
+
+  @tailrec def unwrap(t: Throwable): Throwable = t match {
+    case ce: CompletionException if ce.getCause != null => unwrap(ce.getCause)
+    case _                                              => t
+  }
+
+  def translateException(t: Throwable): (Throwable, Option[String]) = {
+    val unwrapped = unwrap(t)
+    val exceptionMessage = unwrapped match {
+      case cre: CircularReferenceException =>
+        val ids = cre.cycle.asScala
+          .collect {
+            case MethodHasScopeId(id) => id
+            case EntityHasScopeId(id) => id
+          }
+          .toIndexedSeq
+          .reverse
+        if (ids.nonEmpty) {
+          val deduped = ids.head +: ids.sliding(2).collect { case Seq(a, b) if a != b => b }.toIndexedSeq
+          Some(s"Circular dependency:\n\t${deduped.mkString(" ->\n\t")}")
+        } else None
+      case _ => None
+    }
+    (unwrapped, exceptionMessage)
   }
 }
 

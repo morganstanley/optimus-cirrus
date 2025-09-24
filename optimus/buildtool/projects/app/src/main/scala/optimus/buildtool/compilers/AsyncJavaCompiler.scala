@@ -19,7 +19,6 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.graph.CancellationScope
 import optimus.platform._
 
-import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 @entity private[buildtool] class AsyncJavaCompiler(compilerFactory: SyncCompilerFactory)
@@ -51,7 +50,7 @@ import scala.util.control.NonFatal
     cancelScope.addListener(listener)
 
     val trace = ObtTrace.startTask(scopeId, Java)
-    val task = Task(trace, ArtifactType.JavaMessages, Java)
+    val task = Task(trace, ArtifactType.JavaMessages, Java, None)
     try {
       // actually run the compiler
       val output = compiler.compile(inputs, None, task)

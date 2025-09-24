@@ -24,7 +24,6 @@ import optimus.buildtool.format.SuccessSeq
 import optimus.buildtool.format.TopLevelConfig
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 object PythonDependenciesLoader {
 
   private[buildtool] val Dependencies = "dependencies"

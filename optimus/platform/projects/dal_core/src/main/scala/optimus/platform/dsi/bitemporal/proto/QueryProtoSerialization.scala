@@ -11,6 +11,7 @@
  */
 package optimus.platform.dsi.bitemporal.proto
 
+import optimus.dsi.base.SlottedVersionedReference
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.storable.Entity
@@ -19,6 +20,8 @@ import scala.jdk.CollectionConverters._
 
 private[optimus /*platform*/ ] trait QueryProtoSerialization extends BasicProtoSerialization {
   implicit val referenceQuerySerializer: ReferenceQuerySerializer.type = ReferenceQuerySerializer
+  implicit val versionedReferenceQuerySerializer: VersionedReferenceQuerySerializer.type =
+    VersionedReferenceQuerySerializer
   implicit val eventReferenceQuerySerializer: EventReferenceQuerySerializer.type = EventReferenceQuerySerializer
   implicit val serializedKeyQuerySerializer: SerializedKeyQuerySerializer.type = SerializedKeyQuerySerializer
   implicit val eventSerializedKeyQuerySerializer: EventSerializedKeyQuerySerializer.type =
@@ -29,6 +32,29 @@ private[optimus /*platform*/ ] trait QueryProtoSerialization extends BasicProtoS
   implicit val entityCmReferenceQuerySerializer: EntityCmReferenceQuerySerializer.type =
     EntityCmReferenceQuerySerializer
   implicit val eventCmReferenceQuerySerializer: EventCmReferenceQuerySerializer.type = EventCmReferenceQuerySerializer
+}
+
+object VersionedReferenceQuerySerializer
+    extends QueryProtoSerialization
+    with ProtoSerializer[VersionedReferenceQuery, VersionedReferenceQueryProto] {
+  override def serialize(query: VersionedReferenceQuery): VersionedReferenceQueryProto = {
+    val builder = VersionedReferenceQueryProto.newBuilder()
+    builder.setEntitledOnly(query.entitledOnly)
+    builder.setVref(toProto(query.versionedRef))
+    builder.setValidTimeRange(toProto(query.validTimeInterval))
+    builder.setTxRange(toProto(query.txTimeInterval))
+    builder.setClassName(query.cn)
+    builder.build()
+  }
+
+  override def deserialize(proto: VersionedReferenceQueryProto): VersionedReferenceQuery = {
+    val vref = fromProto(proto.getVref)
+    val tt = fromProto(proto.getTxRange)
+    val vt = fromProto(proto.getValidTimeRange)
+    val classNameOpt = proto.getClassName
+    val entitledOnly = proto.getEntitledOnly
+    VersionedReferenceQuery(vref, vt, tt, classNameOpt, entitledOnly)
+  }
 }
 
 object ReferenceQuerySerializer

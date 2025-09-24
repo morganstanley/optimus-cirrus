@@ -18,7 +18,6 @@ import optimus.buildtool.processors.ProcessorType
 
 import scala.jdk.CollectionConverters._
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object ProcessorConfigurationCompiler {
 

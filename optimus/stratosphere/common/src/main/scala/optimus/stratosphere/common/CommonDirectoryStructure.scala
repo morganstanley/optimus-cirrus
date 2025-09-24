@@ -21,31 +21,46 @@ import optimus.stratosphere.utils.EnvironmentUtils
 
 import java.nio.file.Path
 import java.nio.file.Paths
-import scala.collection.immutable.Seq
+
+final case class TrainWorkspaceInfo(meta: String, proj: String, repo: String) {
+  val pathPrefix = s"$meta/$proj/$repo"
+  val dotShadow = s"$pathPrefix/.shadow"
+  val dotWorkspace = s"$pathPrefix/.workspace"
+}
 
 class CommonDirectoryStructure(
     val stratosphereHomeDir: Path,
     val stratosphereRemoteInstall: Option[Path],
     val stratosphereWorkspaceName: String,
-    proidPaths: Seq[String]) {
+    proidPaths: Seq[String],
+    val trainLayout: Option[TrainWorkspaceInfo] = None
+) {
 
   def this(workspace: StratoWorkspaceCommon) = {
     this(
       workspace.stratosphereHome,
       workspace.stratosphereInstallDir,
       workspace.stratosphereWorkspace,
-      workspace.internal.paths.proidHomes
+      workspace.internal.paths.proidHomes,
+      if (workspace.internal.train.enabled) workspace.internal.train.info else None
     )
   }
 
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>
-  val stratosphereWorkspaceDir: Path = stratosphereHomeDir.resolve(stratosphereWorkspaceName)
+  val stratosphereWorkspaceDir: Path = trainLayout match {
+    case Some(train) =>
+      stratosphereHomeDir.resolve(stratosphereWorkspaceName).resolve(train.pathPrefix)
+    case None =>
+      stratosphereHomeDir.resolve(stratosphereWorkspaceName)
+  }
 
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/build_obt
-  val buildDirectory: Path = stratosphereWorkspaceDir.resolve("build_obt")
+  val buildDirectory: Path = stratosphereWorkspaceDir.resolve("build_obt") // TODO (OPTIMUS-75599): fix this
 
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/<install or remote-install>
-  val installDir: Path = stratosphereRemoteInstall.getOrElse(stratosphereWorkspaceDir.resolve("install"))
+  val installDir: Path = stratosphereRemoteInstall
+    .orElse(trainLayout.map((_) => stratosphereHomeDir.resolve(stratosphereWorkspaceName)))
+    .getOrElse(stratosphereWorkspaceDir.resolve("install"))
 
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src
   val sourcesDirectory: Path = stratosphereWorkspaceDir.resolve("src")
@@ -64,6 +79,9 @@ class CommonDirectoryStructure(
 
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src/profiles/sparse-profiles
   val sparseProfilesDir: Path = profilesDir.resolve("sparse-profiles")
+
+  // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src/.generated
+  val generatedDir: Path = sourcesDirectory.resolve(".generated")
 
   def sparseProfile(name: String): Path = {
     if (name == SparseProfile.customProfileName) {
@@ -155,9 +173,14 @@ class CommonDirectoryStructure(
   }
 
   object windows {
-    val startMenuRootDir: Path = OsSpecific.userHome().resolve("Start Menu/Programs/Workspaces")
+    val startMenuRootDir: Path = OsSpecific.userHome().resolve("Start Menu/Programs")
+    val startMenuWorkspaceDir: Path = startMenuRootDir.resolve("Workspaces").resolve(stratosphereWorkspaceName)
+    val startMenuToolsDir: Path = startMenuRootDir.resolve("Tools")
+  }
 
-    val startMenuWorkspaceDir: Path = startMenuRootDir.resolve(stratosphereWorkspaceName)
+  object train {
+    val dotShadow = stratosphereHomeDir.resolve(stratosphereWorkspaceName).resolve(WorkspaceRoot.DOT_SHADOW)
+    val dotWorkspaceJson = stratosphereHomeDir.resolve(stratosphereWorkspaceName).resolve(WorkspaceRoot.DOT_WORKSPACE)
   }
 
 }

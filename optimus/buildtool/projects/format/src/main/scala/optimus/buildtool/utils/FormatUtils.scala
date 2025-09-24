@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.utils
 
-import scala.collection.immutable.Seq
-
 object FormatUtils {
 
   /**

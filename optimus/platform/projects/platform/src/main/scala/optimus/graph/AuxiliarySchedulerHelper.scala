@@ -28,7 +28,7 @@ import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.EvaluationContext
 import optimus.platform.ScenarioStack
 import optimus.platform.annotations.deprecating
-import optimus.core.needsPlugin
+import optimus.platform.PluginHelpers.toNode
 import optimus.platform.annotations.nodeLiftByName
 import optimus.platform.util.Log
 
@@ -80,7 +80,7 @@ trait AuxiliarySchedulerTrait { self =>
    * Schedule f on the auxiliary thread, and forget about it. If it throws, there will be a log message, but the process
    * is permitted to exit without completing f.
    */
-  def launchAndForgetSI(@nodeLift @nodeLiftByName f: => Unit): Unit = needsPlugin
+  def launchAndForgetSI(@nodeLift @nodeLiftByName f: => Unit): Unit = launchAndForgetSI$withNode(toNode(f _))
   def launchAndForgetSI$withNode(f: Node[Unit]): Unit = launchAndMaybeForgetSI$withNode(f, true)
 
   /**
@@ -88,7 +88,8 @@ trait AuxiliarySchedulerTrait { self =>
    * will wait __indefinitely__ for all such tasks to complete before exiting.
    */
   @nodeSyncLift
-  def launchAndCompleteBeforeExitingSI(@nodeLift @nodeLiftByName f: => Unit): Unit = needsPlugin
+  def launchAndCompleteBeforeExitingSI(@nodeLift @nodeLiftByName f: => Unit): Unit =
+    launchAndCompleteBeforeExitingSI$withNode(toNode(f _))
   def launchAndCompleteBeforeExitingSI$withNode(f: Node[Unit]): Unit = launchAndMaybeForgetSI$withNode(f, false)
 
   private val inflight = mutable.Set.empty[Node[Unit]]

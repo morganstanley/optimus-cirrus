@@ -16,8 +16,6 @@ import optimus.buildtool.builders.postbuilders.installer.component.testplans._
 import optimus.buildtool.config.MetaBundle
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 trait PactContractTestplanInstaller { self: TestplanInstaller =>
 
   object PactContractTestplanTemplate {

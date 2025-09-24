@@ -21,8 +21,6 @@ import optimus.buildtool.scope.sources.RunconfCompilationSources.globalAppScript
 import optimus.buildtool.scope.sources.RunconfCompilationSources.localAppScriptsFolderName
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 object Templates {
   val disabledTemplateSpec: String = "disabled"
   val defaultTemplateSpec: String = "default"

@@ -11,7 +11,6 @@
  */
 package optimus.debug;
 
-import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
 import static optimus.debug.InstrumentationConfig.patchForCachingMethod;
 import static optimus.debug.InstrumentationConfig.patchForLzyCompute;
@@ -64,13 +63,8 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
       var index = interfaces.length;
       for (var newInterface : classPatch.interfacePatches) finalInterfaces[index++] = newInterface;
     }
-    var useSuperName =
-        classPatch.replaceObjectAsBase != null
-                && (access & ACC_INTERFACE) == 0
-                && OBJECT_TYPE.getInternalName().equals(superName)
-            ? classPatch.replaceObjectAsBase
-            : superName;
-    super.visit(version, access, name, signature, useSuperName, finalInterfaces);
+
+    super.visit(version, access, name, signature, superName, finalInterfaces);
   }
 
   private static boolean maybeSimpleGetter(int access, String name, String desc) {
@@ -96,7 +90,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
   /** Generates the forward call that matches all the arguments */
   private void writeNativeWrapper(CommonAdapter mv, int access, String name, String desc) {
     mv.visitCode();
-    mv.writeCallForward(className, EntityAgent.nativePrefix(name), access, desc);
+    mv.writeCallForward(className, EntityAgent.nativePrefix(name), access, desc, true, false);
     mv.visitMaxs(0, 0);
     mv.visitEnd();
   }
@@ -121,7 +115,13 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
         var fwd = methodPatch.prefix;
         var callType = methodPatch.forwardToCallIsStatic ? ACC_STATIC : 0;
         var fwdDesc = nmv.getFwdDescriptor(fwd.descriptor, callType, className);
-        nmv.writeCallForward(fwd.cls, fwd.method, callType, fwdDesc);
+        nmv.writeCallForward(
+            fwd.cls,
+            fwd.method,
+            callType,
+            fwdDesc,
+            methodPatch.prefixWithArgs,
+            methodPatch.forwardToOwnerIsInterface);
       }
 
       if (methodPatch.keepOriginalMethodAs != null)
@@ -129,16 +129,6 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
             access | ACC_PUBLIC, methodPatch.keepOriginalMethodAs, desc, signature, exceptions);
       else return null; // Don't call super.visitMethod() as we don't want the original method
     }
-
-    if (classPatch.replaceObjectAsBase != null)
-      mv =
-          new SuperConstructorCallReplacement(
-              mv,
-              access,
-              name,
-              desc,
-              OBJECT_TYPE.getInternalName(),
-              classPatch.replaceObjectAsBase);
 
     if (classPatch.allMethodsPatch != null && classPatch.allMethodsPatch.shouldInject(desc, access))
       mv =
@@ -183,17 +173,6 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     } else {
       return mv; // Return original or the combined chain!
     }
-  }
-
-  private void writeGetterMethod(GetterMethod getter) {
-    var desc = getter.mRef.descriptor == null ? "()" + OBJECT_DESC : getter.mRef.descriptor;
-    MethodVisitor mv = cv.visitMethod(ACC_PUBLIC, getter.mRef.method, desc, null, null);
-    mv.visitCode();
-    mv.visitVarInsn(ALOAD, 0);
-    mv.visitFieldInsn(GETFIELD, className, getter.field.name, getter.field.type);
-    mv.visitInsn(ARETURN);
-    mv.visitMaxs(0, 0); // The real values will be populated automatically
-    mv.visitEnd();
   }
 
   private void writeEqualsForCachingOverride() {
@@ -252,14 +231,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     // implementing functions that should have been overridden using their forwarder methods
     methodForwardsToCall.forEach(this::implementWithForwardCall);
 
-    if (classPatch.getterMethod != null) writeGetterMethod(classPatch.getterMethod);
-
     if (classPatch.poisonCacheEquality) writeEqualsForCachingOverride();
-
-    for (var fpatch : classPatch.fieldRefs) {
-      var type = fpatch.type;
-      cv.visitField(0, fpatch.name, type, null, null);
-    }
     super.visitEnd();
   }
 }

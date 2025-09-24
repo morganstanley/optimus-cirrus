@@ -90,13 +90,27 @@ public class DiagnosticSettings {
   public static boolean traceAvailable; // DO NOT USE IT ANYWHERE YOU WERE THINKING TO USE IT!!!
   /**
    * __profileId, getProfileId, cctor are injected in CompletableNode derived classes to better
-   * attribute profile data
+   * attribute profile data <br>
+   * Note: Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
    */
-  public static final boolean
-      injectNodeMethods; // Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
+  public static final boolean injectNodeMethods;
 
   /** Detect and report any non-RT behaviour */
   public static final boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
+
+  /** Instrument byte code for comparing doubles See InstrumentedByteCodes */
+  public static boolean enableNaNWarnings = getBoolProperty("optimus.warn.nan.cmp", false);
+
+  /** If enabled vt_verifier configuration will be applied */
+  public static final boolean enableVTVerifier = getBoolProperty("optimus.vt_verifier", false);
+
+  /**
+   * Highly unlikely you'll ever want this flag, it's for desperate debugging of using eq / ne
+   * instructions. See InstrumentedByteCodes
+   */
+  public static final boolean enableEqTracing = getBoolProperty("optimus.trace.eq", false);
+
+  public static boolean enableCastTracing = getBoolProperty("optimus.trace.cast", false);
 
   public static final boolean enableRTVNodeRerunner =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner", false);
@@ -140,11 +154,14 @@ public class DiagnosticSettings {
   public static final boolean lCompilerEnqueueEarlier =
       getBoolProperty("optimus.loom.compiler.enqueueEarlier", false);
 
+  public static final boolean lCompilerSkipFoldingBlocks =
+      getBoolProperty("optimus.loom.compiler.skipFoldingBlocks", true);
+
   public static final boolean lCompilerQueueSizeSensitive =
       getBoolProperty("optimus.loom.compiler.queueSizeSensitive", false);
 
   public static final boolean lCompilerAssumeGlobalMutation =
-      getBoolProperty("optimus.loom.compiler.assumeGlobalMutation", false);
+      getBoolProperty("optimus.loom.compiler.assumeGlobalMutation", true);
 
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
   public static final boolean enableXSReporting;
@@ -219,6 +236,13 @@ public class DiagnosticSettings {
   public static boolean proxyInWaitChain =
       getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
 
+  /** Show UI events in debugger async stack traces. */
+  public static final boolean eventCauseAsEnqueuers;
+
+  /** Display sync stacks in the debugger in "collapsed" form expandable by double-clicking. */
+  public static boolean collapseSyncStacksInDebugger =
+      getBoolProperty("optimus.diagnostic.collapseSyncStacks", true);
+
   /**
    * if true we capture the cancelled node in the ScopeWasCancelledException, which is expensive
    * (because we can't reuse the same exception for every cancelled node in that scope) but really
@@ -241,7 +265,7 @@ public class DiagnosticSettings {
   public static final boolean samplingProfilerStatic; // do static initialization
   public static final boolean samplingProfilerZkConfigurable; // configurable via zk
   public static final boolean
-      samplingProfilerAuto; // auto-start (even if it may be turned off later by zk)
+      samplingProfilerStartsOn; // auto-start (even if it may be turned off later by zk)
 
   public static boolean samplingAsserts = getBoolProperty("optimus.sampling.asserts", false);
 
@@ -261,7 +285,14 @@ public class DiagnosticSettings {
 
   public static int infoDumpEmergencyKillSec =
       getIntProperty("optimus.diagnostic.dump.emergency.kill.sec", 0);
-  public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
+
+  // Full heap dump - i.e. not just "live"
+  public static boolean fullHeapDumpOnKill =
+      getBoolProperty("optimus.diagnostic.dump.heap.full", false);
+  // Generate heap dump on kill
+  public static boolean heapDumpOnKill =
+      getBoolProperty("optimus.diagnostic.dump.heap", fullHeapDumpOnKill);
+
   public static boolean fakeOutOfMemoryErrorOnKill =
       getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
   public static boolean infoDumpOnShutdown =
@@ -350,10 +381,10 @@ public class DiagnosticSettings {
   public static final boolean enableHotCodeReplaceLogging =
       getBoolProperty("optimus.graph.enableHotCodeReplaceLogging", false);
 
-  public static final boolean duplicateNativeAllocations =
-      getBoolProperty("optimus.graph.native.duplicate", false);
+  public static final double duplicateNativeAllocationsPct =
+      getDoubleProperty("optimus.graph.native.duplicate.pct", 0.0);
   public static final boolean captureNativeAllocations =
-      duplicateNativeAllocations || getBoolProperty("optimus.graph.native.capture", false);
+      getBoolProperty("optimus.graph.native.capture", duplicateNativeAllocationsPct > 0.0);
 
   public static final boolean detectMemoryBugs =
       getBoolProperty("optimus.graph.native.memcheck", false);
@@ -368,6 +399,16 @@ public class DiagnosticSettings {
   // these should be set when ensuring the specific SWIG objects are loaded
   public static String disposableInterfaceToRewrite = null;
   public static String disposablePackageToRewrite = null;
+
+  public static final boolean useVirtualThreads =
+      getBoolProperty("optimus.graph.useVirtualThreads", LoomDefaults.enabled);
+
+  // If enabled does a number of checks, some are not that cheap though
+  public static final boolean schedulerAsserts =
+      getBoolProperty("optimus.scheduler.asserts", false);
+
+  public static boolean schedulerRecoveryInWait =
+      getBoolProperty("optimus.scheduler.recoveryInWait", true);
 
   @SuppressWarnings("unused") // Invoked by reflection
   public static List<String> forwardedProperties() {
@@ -553,9 +594,12 @@ public class DiagnosticSettings {
     boolean traceNodesOnStartup =
         System.getProperty("sun.java.command").contains("traceNodes")
             || "traceNodes".equalsIgnoreCase(System.getProperty("optimus.scheduler.profile"));
+
     internal_traceTweaksOnStartNoDefault = getBoolProperty(TRACE_TWEAKS, false);
     traceTweaksEnabled =
         !onGrid && (internal_traceTweaksOnStartNoDefault || debugAssist || traceNodesOnStartup);
+
+    eventCauseAsEnqueuers = getBoolProperty("optimus.profile.eventCauseEnqueuers", debugAssist);
 
     profileShowThreadSummary = getBoolProperty("optimus.profile.showThreadSummary", false);
 
@@ -646,28 +690,50 @@ public class DiagnosticSettings {
       } catch (ClassNotFoundException e) {
         configurable = false;
       }
+      /*
+       *                            Start    {enabled:true}   {enabled:false}   {} or missing
+       *   optimus.sampling=true     ON       Stay ON          Shut OFF          Stay ON
+       *                   =force    ON       Stay ON          Stay ON           Stay ON
+       *
+       *                  =config    OFF      Turn ON          Stay OFF          Stay OFF
+       *                   =eager    ON       Stay ON          Turn OFF          Turn OFF
+       *
+       *                   =false    OFF      Stay OFF         Stay OFF          Stay OFF
+       */
       samplingProfilerArg = envOrProp("optimus.sampling");
-      if (autoAsyncProfiler
-          || samplingProfilerArg == null
-          || samplingProfilerArg.equals("false")
-          || (!configurable && samplingProfilerArg.equals("config")))
-        samplingProfilerZkConfigurable =
-            samplingProfilerAuto = samplingProfilerStatic = samplingProfilerDefaultOn = false;
+      if (autoAsyncProfiler // AP is started separately from SP
+          || samplingProfilerArg == null // No SP argument at all
+          || samplingProfilerArg.equals("false") // SP explicitly disabled
+          || (!configurable && samplingProfilerArg.equals("config"))) // Can't be configured
+      samplingProfilerZkConfigurable =
+            samplingProfilerStartsOn = samplingProfilerStatic = samplingProfilerDefaultOn = false;
       else if (samplingProfilerArg.equals("manual")) {
+        // SP will be turned on/off manually.
         samplingProfilerStatic = true;
-        samplingProfilerAuto = samplingProfilerZkConfigurable = samplingProfilerDefaultOn = false;
+        samplingProfilerZkConfigurable =
+            samplingProfilerStartsOn = samplingProfilerDefaultOn = false;
       } else {
-        samplingProfilerStatic = samplingProfilerAuto = true;
+        samplingProfilerStatic = true;
         if (samplingProfilerArg.equals("force")) {
-          samplingProfilerDefaultOn = true;
+          // SP is forced to stay on, independent of ZK configuration
+          samplingProfilerStartsOn = samplingProfilerDefaultOn = true;
           samplingProfilerZkConfigurable = false;
         } else {
           samplingProfilerZkConfigurable = true;
-          if (samplingProfilerArg.equals("config")) {
+          if (samplingProfilerArg.startsWith("config")) {
+            // Starts off but can be turned on by ZK.
+            samplingProfilerStartsOn = false;
             samplingProfilerDefaultOn = false;
-          } else if (samplingProfilerArg.equals("true")) {
-            samplingProfilerDefaultOn = true;
-          } else throw new IllegalArgumentException("sampling.profiler=false|true|force|config");
+          } else if (samplingProfilerArg.startsWith("eager")) {
+            // Starts on, but will be turned off unless explicitly enabled in ZK.
+            samplingProfilerStartsOn = true;
+            samplingProfilerDefaultOn = false;
+          } else if (samplingProfilerArg.startsWith("true")) {
+            // Starts on, stays on unless explicilty disabled in ZK
+            samplingProfilerStartsOn = samplingProfilerDefaultOn = true;
+          } else
+            throw new IllegalArgumentException(
+                "sampling.profiler=" + samplingProfilerArg + " ∉ (false|true|force|eager|config)");
         }
       }
     }

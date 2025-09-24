@@ -827,7 +827,7 @@ private class IterableResultCache(nf: NodeFunction0[Iterable[Any]], refCount: In
   private var ref = 0
 
   @nodeSync
-  def apply(): Iterable[Any] = needsPlugin
+  def apply(): Iterable[Any] = apply$withNode()
   def apply$queued(): Node[Iterable[Any]] = apply$newNode().enqueueAttached
   def apply$withNode(): Iterable[Any] = apply$newNode().get
   def apply$newNode(): Node[Iterable[Any]] = {

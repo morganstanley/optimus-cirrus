@@ -12,12 +12,11 @@
 package optimus.tools.scalacplugins.entity
 package rewrite
 
-import java.nio.charset.Charset
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 
+import java.nio.charset.Charset
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.reflect.internal.Flags
 import scala.reflect.internal.ModifierFlags
 import scala.reflect.internal.util.Position
 import scala.reflect.internal.util.SourceFile
@@ -66,7 +65,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
           .getOrElse(return
           )
         val state = new RewriteState(ParseTree(unit.source))
-        def go(bool: Boolean, trans: RewriteTypingTransformer) =
+        def go(bool: Boolean, trans: => RewriteTypingTransformer) =
           if (bool) trans.transform(unit.body)
         go(config.rewriteCollectionSeq, new CollectionSeqTransformer(unit, state)) // Seq -> collection.Seq
         go(config.rewriteMapValues, new MapValuesRewriter(unit, state))
@@ -99,6 +98,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         go(config.rewriteCaseClassToFinal, new CaseClassTransformer(unit, state))
         go(config.intToFloat, new IntToFloat(unit, state))
         go(config.unsorted, new Unsorted(unit, state))
+        go(config.xmlLoader, new XmlLoader(unit, state))
         if (state.newImports.nonEmpty) new AddImports(unit, state).run(unit.body)
         patchSets += Patches(state.patches.toArray, unit.source, underlyingFile, encoding)
       }
@@ -128,6 +128,11 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   object OptimusCompatCollectionImport extends NewImport {
     protected lazy val sym = rootMirror.getPackageIfDefined("optimus.scalacompat.collection")
     val impString = "import optimus.scalacompat.collection._"
+  }
+
+  object XmlLoaderImport extends NewImport {
+    protected val sym = NoSymbol
+    val impString = "import optimus.platform.util.xml.XmlLoader"
   }
 
   class ParseTree private (val tree: Tree, val index: collection.Map[Position, Tree])
@@ -197,8 +202,8 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
           case Annotated(ann, _) =>
             // for `expr: @ann`, the typer creates a `Typed(expr, tp)` tree. don't traverse `expr` twice
             Some(ann)
-          case o if (expr.pos.end < o.pos.start) => Some(o)
-          case _                                 => None
+          case o if expr.pos.isDefined && (expr.pos.end < o.pos.start) => Some(o)
+          case _                                                       => None
         }
         origToVisit.foreach(transform)
         transform(expr)
@@ -941,8 +946,8 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   }
 
   private class AutoApplication(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
-    import rootMirror.{requiredClass => cls}
     import definitions.{getMemberMethod => meth}
+    import rootMirror.{requiredClass => cls}
     lazy val nilaryIn213: Set[Symbol] = Set(
       definitions.Any_##,
       definitions.Any_toString,
@@ -1223,5 +1228,28 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       case _ =>
         super.transform(tree)
     }
+  }
+
+  private class XmlLoader(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    lazy val XMLModule = rootMirror.getModuleIfDefined("scala.xml.XML")
+
+    override def transform(tree: Tree): Tree =
+      if (!XMLModule.exists) tree
+      else
+        tree match {
+          case Select(xml, _) if !tree.pos.isOffset && xml.symbol == XMLModule =>
+            val selCode = codeOf(xml.pos)
+            if (xml.pos.isOffset) {
+              state.patches += Patch(xml.pos, "XmlLoader.")
+              state.newImports += XmlLoaderImport
+            } else if (selCode == "XML" || selCode == "xml.XML" || selCode == "scala.xml.XML") {
+              state.patches += Patch(xml.pos, "XmlLoader")
+              state.newImports += XmlLoaderImport
+            } else
+              state.patches += Patch(xml.pos.focusEnd, "/*TODO_XML*/")
+            super.transform(tree)
+          case _ =>
+            super.transform(tree)
+        }
   }
 }

@@ -91,21 +91,25 @@ object ProfilingEventStatistics extends Log {
   }
 
   private def sendSingleBreadcrumb(profiledEvent: ProfiledEventCause): Unit = {
-    Breadcrumbs.info(
-      ChainedID.root,
-      PropertiesCrumb(
-        _,
-        ProfilerSource,
-        Properties.profiledEvent -> profiledEvent,
-        Properties.appDir -> Option(System.getenv("APP_DIR"))
-          .getOrElse(sys.props.getOrElse("user.dir", "unknown")),
-        Properties.user -> sys.props.getOrElse("user.name", "unknown"),
-        Properties.appId -> Option(System.getProperty("APP_NAME"))
-          .getOrElse(System.getenv().asScala.getOrElse("APP_NAME", "unknown"))
+    if (Settings.profilingStatsDumpToFile) {
+      ProfilingEventStatsFileUtil.dumpSingleEventData(profiledEvent)
+    } else {
+      Breadcrumbs.info(
+        ChainedID.root,
+        PropertiesCrumb(
+          _,
+          ProfilerSource,
+          Properties.profiledEvent -> profiledEvent,
+          Properties.appDir -> Option(System.getenv("APP_DIR"))
+            .getOrElse(sys.props.getOrElse("user.dir", "unknown")),
+          Properties.user -> sys.props.getOrElse("user.name", "unknown"),
+          Properties.appId -> Option(System.getProperty("APP_NAME"))
+            .getOrElse(System.getenv().asScala.getOrElse("APP_NAME", "unknown"))
+        )
       )
-    )
-    log.debug(
-      s"${profiledEvent.eventName} completed in ${profiledEvent.totalDurationMs} ms, actionSelfTime: ${profiledEvent.actionSelfTimeMs} ms with meta ${profiledEvent.profilingData} (${ChainedID.root})")
+      log.debug(
+        s"${profiledEvent.eventName} completed in ${profiledEvent.totalDurationMs} ms, actionSelfTime: ${profiledEvent.actionSelfTimeMs} ms with meta ${profiledEvent.profilingData} (${ChainedID.root})")
+    }
   }
 
   /**
@@ -271,7 +275,7 @@ object ProfilingEventStatistics extends Log {
         "metaData" -> metaData.toJson
       )
       if (Settings.profilingStatsDumpToFile) {
-        ProfilingEventStatsFileUtil.dumpBreadcrumbsData(profiledEventStats, data, uiWorkerStats, metaData)
+        ProfilingEventStatsFileUtil.dumpStatsBreadcrumbsData(profiledEventStats, data, uiWorkerStats, metaData)
       } else {
         Breadcrumbs.info(
           ChainedID.root,

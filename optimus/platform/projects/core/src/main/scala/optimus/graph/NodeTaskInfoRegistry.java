@@ -44,12 +44,16 @@ public class NodeTaskInfoRegistry {
       ToIntFunction<LPropertyDescriptor> allocateId = k -> nextId();
       var id = descriptorIDs.computeIfAbsent(propDescriptor, allocateId);
       if (id >= descriptors.length) descriptors = Arrays.copyOf(descriptors, id * 2);
+      propDescriptor.profileID = id;
       descriptors[id] = propDescriptor;
       return id;
     }
   }
 
-  /** Return -1 if the descriptor is not yet know */
+  /**
+   * Return -1 if the descriptor is not yet known same as profile on NodeTaskInfo, propertyId in
+   * NodeMetaFactory
+   */
   public static int getId(String className, String methodName) {
     synchronized (descriptorIDs) {
       return descriptorIDs.getOrDefault(new LPropertyDescriptor(className, methodName), -1);

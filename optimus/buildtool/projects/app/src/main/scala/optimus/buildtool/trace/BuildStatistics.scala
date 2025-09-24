@@ -16,8 +16,6 @@ import java.time.Instant
 
 import optimus.buildtool.config.ScopeId
 
-import scala.collection.immutable.Seq
-
 final case class BuildStatistics(
     start: Instant,
     end: Instant,

@@ -22,8 +22,6 @@ import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
-import scala.collection.immutable.Seq
-
 final case class Template(
     id: ParentId,
     scopeType: Option[String],
@@ -117,6 +115,7 @@ final case class Template(
        |  id = $id
        |  scopeType = $scopeType
        |  name = $name
+       |  isTest = $isTest
        |  env = $env
        |  javaOpts = $javaOpts
        |  mainClassArgs = $mainClassArgs

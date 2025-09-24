@@ -23,7 +23,6 @@ import xsbti.Reporter
 
 import java.io.File
 import java.util.Optional
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 class ZincReporter(val logger: ZincLogger, bspServer: Boolean) {

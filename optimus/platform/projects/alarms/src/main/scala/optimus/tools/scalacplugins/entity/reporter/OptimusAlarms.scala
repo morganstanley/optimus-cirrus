@@ -15,6 +15,7 @@ import optimus.tools.scalacplugins.entity.OptimusPhaseInfo
 import optimus.tools.scalacplugins.entity.OptimusPhases
 import optimus.tools.scalacplugins.entity.StagingPhase
 
+//noinspection TypeAnnotation
 object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // api check
   val DEPRECATING_USAGE =
@@ -155,8 +156,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODE_WITH_WRONG_ANNO = error1(21207, OptimusPhases.REF_CHECKS, "Invalid use of @node in conjunction with @%s")
   val TWEAKNODE_IN_NON_ENTITY =
     error0(21208, OptimusPhases.ADJUST_AST, "Invalid attempt to mark @node(tweak=true) on non-entity @node")
-  val NODE_WITH_NAMED_PARAM =
-    error0(21209, OptimusPhases.ADJUST_AST, "@node must have named parameter, @node(tweak = true/false)")
 
   val EVENT_WITH_ENTITY = error0(21300, OptimusPhases.ADJUST_AST, "Invalid simultaneous use of @event and @entity")
   val INLINE_WITH_ENTITY = error0(21301, OptimusPhases.ADJUST_AST, "@inline not supported on @entity object.")
@@ -271,7 +270,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     "Unsupported variadic constructor parameter '%s' on @entity. Consider using a Seq instead."
   )
   val EMBEDDABLE_ONLY_WITH_CASE_CLASS =
-    error0(21900, OptimusPhases.ADJUST_AST, "@embeddable is only supported on case classes, case objects and traits")
+    error0(
+      21900,
+      OptimusPhases.ADJUST_AST,
+      "@embeddable is only supported on case classes, case objects, " +
+        "traits, abstract classes and scala Enumerations")
   val EMBEDDABLE_ONLY_WITH_CASE_OBJECT = error0(
     21901,
     OptimusPhases.ADJUST_AST,
@@ -289,12 +292,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(21906, OptimusPhases.ADJUST_AST, "Invalid use of scenarioIndependent on tweakable node")
   val EMBEDDABLE_AND_ENTITY =
     error0(21907, OptimusPhases.ADJUST_AST, "@embeddable/@stable cannot be applied on @entity object")
-  val EMBEDDABLE_PRIVATE_CTOR_DEFAULTS =
-    error1(
-      21908,
-      OptimusPhases.ADJUST_AST,
-      "Default arguments are unsupported on @embeddable/@stable private constructors"
-    )
   val ONLY_ALLOW_NODE_FOR_EMBEDDABLE_CTOR =
     error1(21910, OptimusPhases.ADJUST_AST, "Only @embeddable/@stable constructors are allowed to be @node")
   val ALL_EMBEDDABLE_CTOR_MUST_BE_NODE_IF_ONE_IS_NODE =
@@ -304,23 +301,18 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
   // @embeddable are warnings ATM, but should become errors after we fix the code
   val NO_CUSTOM_METHOD_IN_EMBEDDABLE_CASE_CLASS =
-    // TODO (OPTIMUS-30981): make this a warning1 later
-    info1(21920, OptimusPhases.EMBEDDABLE, "@embeddable case classes should not declare custom %s methods")
+    warning1(21920, OptimusPhases.EMBEDDABLE, "@embeddable case classes should not declare custom %s methods")
   val NO_CUSTOM_METHOD_IN_STABLE_CASE_CLASS =
     error1(21921, OptimusPhases.EMBEDDABLE, "@stable case classes cannot declare custom %s methods")
 
   val NO_METHOD_IN_EMBEDDABLE_CASE_CLASS =
-    // TODO (OPTIMUS-30981): make this a warning1 later
-    info1(21922, OptimusPhases.EMBEDDABLE, "@embeddable case classes without %s methods")
-  val NO_METHOD_IN_STABLE_CASE_CLASS =
-    error1(21923, OptimusPhases.EMBEDDABLE, "@stable case classes without %s methods")
-
-  val NOT_STABLE_AND_EMBBEDDABLE =
-    error0(
-      21924,
+    warning1(
+      21922,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case classes cannot be marked @stable (but we always treat them as stable)"
-    )
+      "@embeddable case class is extending a class that overrides the %s method")
+  val NO_METHOD_IN_STABLE_CASE_CLASS =
+    error1(21923, OptimusPhases.EMBEDDABLE, "@stable case classes cannot extend a class that overrides the %s method")
+
   val STABLE_CASE_CLASS_NOT_FINAL =
     error0(
       21925,
@@ -383,6 +375,15 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     OptimusPhases.REF_CHECKS,
     "HasDefaultUnpickleableValue type param should be of the same @embeddable sealed trait type for which companion has been defined."
   )
+
+  val EMBEDDABLE_WITH_UNSTABLE_EQUALS =
+    error2(
+      21622,
+      OptimusPhases.EMBEDDABLE,
+      "def equals implementation is inherited from class %s which could break optimus assumptions about @embeddable. " +
+        "Either The base type should be marked @embeddable, or it should not implement equals or %s should override " +
+        "def equals again. "
+    )
 
   // attachment phase errors
   val CLASSIFIER_TRANSFORM_ERROR = error1(20500, OptimusPhases.CLASSIFIER, "Unable to transform tree: %s\n")
@@ -845,6 +846,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     )
 }
 
+//noinspection TypeAnnotation
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
 
   val INTERNAL_COMPILE_INFO = info1(10000, OptimusPhases.APICHECK, "Compilation information: %s")

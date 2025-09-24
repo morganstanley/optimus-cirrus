@@ -60,4 +60,5 @@ case object BeventTimesliceContainerName extends ContainerName { val name = "bev
 case object BeventKeyContainerName extends ContainerName { val name = "beventkeys" }
 case object BEventPayloadContainerName extends ContainerName { val name = "beventpayload" }
 case object EntitiesContainerName extends ContainerName { val name = "entities" }
+case object ClassInfoContainerName extends ContainerName { val name = "classinfo" }
 final case class UnknownContainerName(name: String) extends ContainerName

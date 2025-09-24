@@ -12,6 +12,11 @@
 package optimus.utils
 
 final case class MemSize private (bytes: Long, unit: MemUnit) extends Ordered[MemSize] {
+
+  def +(other: MemSize): MemSize = MemSize(bytes + other.bytes, unit)
+
+  def -(other: MemSize): MemSize = MemSize(bytes - other.bytes, unit)
+
   def in(memUnit: MemUnit): MemSize = copy(unit = memUnit)
 
   def value: Long = bytes / unit.bytes
@@ -49,8 +54,8 @@ object MemSize {
 final case class MemUnit(bytes: Long, name: String)
 
 object MemUnit {
-  val Bytes = MemUnit(1, "B")
-  val KB = MemUnit(1024, "KB")
-  val MB = MemUnit(1024 * 1024, "MB")
-  val GB = MemUnit(1024 * 1024 * 1024, "GB")
+  val Bytes: MemUnit = MemUnit(1, "B")
+  val KB: MemUnit = MemUnit(1024, "KB")
+  val MB: MemUnit = MemUnit(1024 * 1024, "MB")
+  val GB: MemUnit = MemUnit(1024 * 1024 * 1024, "GB")
 }

@@ -33,7 +33,6 @@ import optimus.platform._
 import optimus.platform.util.Log
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -54,6 +53,9 @@ import scala.util.Try
 
   override def artifactType: ProcessorArtifactType = ArtifactType.DeploymentScript
 
+  // Task tracing is handled by the BackgroundProcess in DeploymentScriptWriter
+  override val recordTask: Boolean = false
+
   override type Inputs = DeploymentScriptProcessor.Inputs
   @node override protected def _inputs(
       name: String,
@@ -71,7 +73,8 @@ import scala.util.Try
     val templateFooterContent = None
     val objectsContent = objectsFile.flatMap(content(_, scope))
 
-    val fingerprint = ScopeProcessor.computeFingerprintHash(
+    // Java/Scala sources and dependencies are irrelevant for deployment script
+    val fingerprint = ScopeProcessor.computeFingerprintHashWithoutSources(
       name,
       templateContent,
       templateHeaderContent,
@@ -79,7 +82,6 @@ import scala.util.Try
       objectsContent,
       installLocation,
       configuration,
-      javaAndScalaSources,
       scope)
 
     val workspaceSrcRoot = scope.config.paths.workspaceSourceRoot
@@ -95,6 +97,7 @@ import scala.util.Try
       fingerprint = fingerprint
     )
   }
+
   @node override protected def generateContent(
       inputs: NodeFunction0[DeploymentScriptProcessor.this.Inputs],
       pathingArtifact: PathingArtifact,
@@ -190,8 +193,8 @@ object DeploymentScriptProcessor extends Log {
       logDir: Directory,
       writer: DeploymentScriptWriter = DeploymentScriptWriter
   ): Try[DeploymentResponse] = {
-    val logFile = logDir.resolveFile(
-      s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$scopeId.deploymentScriptProcessor.log")
+    val logFile =
+      logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$scopeId.deploymentScriptProcessor.log")
 
     log.info(s"Generating deployment scripts using $scopeId:$processorName")
     writer.generateDeploymentScripts(templateFile, parameterFile, installLocation, scopeId, logFile)

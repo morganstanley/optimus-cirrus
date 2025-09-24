@@ -31,7 +31,6 @@ import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
 /**

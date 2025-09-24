@@ -21,7 +21,7 @@ import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.platform._
 
-class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: IncrementalMode)
+@entity class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: IncrementalMode)
     extends ArtifactStoreBase
     with SearchableArtifactStore {
 
@@ -104,5 +104,5 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
 
 object FilesystemCache {
   def apply(pathBuilder: CompilePathBuilder, incrementalMode: IncrementalMode): SimpleArtifactCache[FileSystemStore] =
-    SimpleArtifactCache(new FileSystemStore(pathBuilder, incrementalMode))
+    SimpleArtifactCache(FileSystemStore(pathBuilder, incrementalMode))
 }

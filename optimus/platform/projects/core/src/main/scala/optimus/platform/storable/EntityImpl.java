@@ -69,13 +69,6 @@ public abstract class EntityImpl implements Entity, NodeFuture<EntityImpl> {
   private transient int $hashCode;
   private transient Object _localCache;
 
-  public EntityImpl(PickledInputStream is, StorageInfo info, EntityReference eref) {
-    var flavor = EntityFlavor$.MODULE$.apply(is, info, eref);
-    initEntityFlavor(flavor);
-    // if (gs.debugging && !$info.valsAreInstrumented) EntityAgent.injectValPreCalls(this)
-    if (Settings.auditing) AuditTrace.visit(this);
-  }
-
   public EntityImpl() {
     initEntityFlavor(DefaultAppliedEF$.MODULE$);
     if (Settings.auditing) AuditTrace.visit(this);

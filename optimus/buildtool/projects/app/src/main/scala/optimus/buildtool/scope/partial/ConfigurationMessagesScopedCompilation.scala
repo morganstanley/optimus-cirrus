@@ -13,59 +13,49 @@ package optimus.buildtool.scope.partial
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
-import optimus.buildtool.artifacts.CompilerMessagesArtifact
+import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.compilers.ConfigurationValidator
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.resolvers.CoursierArtifactResolver
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.ScopeDependencies
-import optimus.buildtool.scope.sources.ConfigurationMessagesCompilationSources
 import optimus.buildtool.trace.ConfigurationValidation
 import optimus.platform._
 
 import scala.collection.compat._
-import scala.collection.immutable.{IndexedSeq, Seq}
+import scala.collection.immutable.IndexedSeq
 
 @entity
 class ConfigurationMessagesScopedCompilation(
     val scope: CompilationScope,
-    val sources: ConfigurationMessagesCompilationSources,
     forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
     allDependencies: Seq[ScopeDependencies])
     extends PartialScopedCompilation {
-
+  override type ArtifactTypeBound = ArtifactType.ValidationMessages.type
   @node private def scopeId = scope.id
-  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = Vector()
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq.empty
   @node override protected def containsRelevantSources: Boolean = forbiddenDependencies.nonEmpty
 
   @node
   def messages: IndexedSeq[Artifact] =
     compile(ArtifactType.ValidationMessages, None) {
       val artifactId = InternalArtifactId(scope.id, ArtifactType.ValidationMessages, None)
-      val jsonFile = scope.pathBuilder
-        .outputPathFor(scopeId, fingerprint.hash, ArtifactType.ValidationMessages, None)
-        .asJson
       val configurationValidator = ConfigurationValidator(scopeId, forbiddenDependencies)
       // Only do the forbidden dependencies check if the forbidden dependencies defined are valid (no duplicate definitions)
-      val messages = configurationValidator.duplicateDefinitionsCheck match {
-        case Some(messages) => messages
-        case None =>
-          allDependencies.apar.flatMap { sd =>
-            val externalDirectDeps = sd.dualExternalDependencyIds.map(CoursierArtifactResolver.definitionToInfo)
-            val externalTransitiveDeps = sd.resolution.map(_.result.dependencies.to(Seq)).getOrElse(Nil)
-            configurationValidator.validate(
-              internalDirectDeps = sd.internalDependencyIds,
-              externalDirectDeps = externalDirectDeps,
-              internalTransitiveDeps = sd.transitiveInternalDependencyIdsAll,
-              externalTransitiveDeps = externalTransitiveDeps,
-              sd.tpe
-            )
-          }
+      val messages = configurationValidator.duplicateDefinitionsCheck.getOrElse {
+        allDependencies.apar.flatMap { sd =>
+          val externalDirectDeps = sd.dualExternalDependencyIds.map(CoursierArtifactResolver.definitionToInfo)
+          val externalTransitiveDeps = sd.resolution.map(_.result.dependencies.to(Seq)).getOrElse(Nil)
+          configurationValidator.validate(
+            internalDirectDeps = sd.internalDependencyIds,
+            externalDirectDeps = externalDirectDeps,
+            internalTransitiveDeps = sd.transitiveInternalDependencyIdsAll,
+            externalTransitiveDeps = externalTransitiveDeps,
+            sd.tpe
+          )
+        }
       }
-      val a =
-        CompilerMessagesArtifact.create(artifactId, jsonFile, messages, ConfigurationValidation, incremental = false)
-      a.storeJson()
-      Some(a)
+      Some(InMemoryMessagesArtifact(artifactId, messages, ConfigurationValidation))
     }
 }

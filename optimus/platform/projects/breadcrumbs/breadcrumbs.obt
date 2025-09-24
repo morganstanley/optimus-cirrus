@@ -20,14 +20,10 @@ main {
     ]
     libs = [
       fsf.zookeeper,
-      msjava.base,
-      msjava.zkapi,
-      ossjava.archaius-core,
+      msjava.rr-base,
+      msjava.rr-zkapi,
       ossjava.args4j,
-      ossjava.curator,
       ossjava.guava,
-      ossjava.httpcomponents-client,
-      ossjava.httpcomponents-core,
       ossjava.iharder-base64,
       ossjava.jackson2.module-scala,
       ossjava.jsr305-annotations,
@@ -35,15 +31,13 @@ main {
       ossjava.metrics-core,
       ossjava.slf4j,
       ossjava.snakeyaml,
-      ossjava.zkclient,
-      ossscala.apache-kafka,
-      ossscala.scala.tools,
+      ossscala.apache-kafka.clients,
       ossscala.spray-json
     ]
   }
   runtime.libs = [
-    msjava.logbackutils,
-    msjava.slf4jutils
+    msjava.rr-logbackutils,
+    msjava.rr-slf4jutils
   ]
 
   copyFiles = [
@@ -78,8 +72,8 @@ apps {
       optimus.platform.breadcrumbs.main
     ]
     libs = [
-      msjava.logbackutils,
-      msjava.slf4jutils,
+      msjava.rr-logbackutils,
+      msjava.rr-slf4jutils,
       ossjava.metrics-core
     ]
   }

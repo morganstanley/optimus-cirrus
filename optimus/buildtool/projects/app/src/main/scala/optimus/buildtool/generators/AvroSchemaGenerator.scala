@@ -13,7 +13,6 @@ package optimus.buildtool.generators
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
@@ -35,11 +34,10 @@ import optimus.buildtool.utils.Utils
 import org.apache.avro.compiler.specific.SpecificCompiler
 import org.apache.avro.Schema.Parser
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 @entity class AvroSchemaGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
-  override val artifactType: GeneratedSourceArtifactType = ArtifactType.Avro
+  override val generatorType: String = "avro"
 
   override type Inputs = AvroSchemaGenerator.Inputs
 
@@ -101,13 +99,14 @@ import scala.collection.immutable.SortedMap
         log.info(s"[$scopeId:$generatorName] avro-schema generation successful")
         val artifact = GeneratedSourceArtifact.create(
           scopeId,
+          tpe,
           generatorName,
-          artifactType,
           outputJar,
           AvroSchemaGenerator.SourcePath,
           Seq.empty
         )
         SourceGenerator.createJar(
+          tpe,
           generatorName,
           AvroSchemaGenerator.SourcePath,
           artifact.messages,

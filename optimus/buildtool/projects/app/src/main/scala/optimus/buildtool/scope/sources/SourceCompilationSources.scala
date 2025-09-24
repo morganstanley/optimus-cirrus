@@ -11,7 +11,9 @@
  */
 package optimus.buildtool.scope.sources
 
+import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.SourceFolder
@@ -27,8 +29,14 @@ import optimus.scalacompat.collection._
 import optimus.utils.DuplicateKeyException
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
+
+private[sources] final case class SourceHashedSources(
+    content: Seq[(String, SortedMap[SourceUnitId, HashedContent])],
+    generatedSourceArtifacts: Seq[Artifact],
+    fingerprint: FingerprintArtifact,
+    fingerprintContent: Seq[String]
+) extends HashedSources
 
 @entity class SourceCompilationSources(
     scope: CompilationScope,
@@ -38,9 +46,10 @@ import scala.collection.immutable.SortedMap
 
   override def id: ScopeId = scope.id
 
-  @node def fingerprint: Seq[String] = hashedSources.fingerprint.fingerprint
+  @node def fingerprint: Seq[String] = hashedSources.fingerprintContent
+  @node def generatedSourceArtifacts: IndexedSeq[Artifact] = hashedSources.generatedSourceArtifacts.toVector
 
-  @node protected def hashedSources: HashedSources = {
+  @node protected def hashedSources: SourceHashedSources = {
     // the source files could be changing while the build is running (e.g. developer is still editing files in the IDE),
     // so we are careful here to ensure that the source file content that we pass in to the compiler is the same
     // as the content that we hash. hashedSources is part of the reallyBigCache to ensure they don't get evicted mid-build.
@@ -51,10 +60,11 @@ import scala.collection.immutable.SortedMap
     }
     val fingerprintHash = scope.hasher.hashFingerprint(sourceFingerprint, ArtifactType.SourceFingerprint)
 
-    HashedSourcesImpl(
+    SourceHashedSources(
       sourceFileContent.content,
       sourceFileContent.generatedSourceArtifacts,
-      fingerprintHash
+      fingerprintHash,
+      sourceFingerprint
     )
   }
 
@@ -62,7 +72,7 @@ import scala.collection.immutable.SortedMap
     val generatedSources = sourceGeneration.generatedSources
     ObtTrace.traceTask(id, HashSources) {
       val generatedSourceContent = generatedSources.apar.collect { case s: GeneratedSourceArtifact =>
-        s"$Generated:${s.tpe.name}" -> s.hashedContent(SourceFolder.isScalaOrJavaSourceFile)
+        s"$Generated:${s.generator}" -> s.hashedContent(SourceFolder.isScalaOrJavaSourceFile)
       }
 
       val staticSourceContent = staticContent

@@ -123,7 +123,8 @@ private[optimus] object AutomaticBrokerResolution {
       timer: ZkOpsTimer): DalZoneId = {
     if (zkOps.pathExists(s"/$mode/${inputZone.underlying}", timer)) inputZone
     else {
-      log.info(s"[ABR] no client automatic broker resolution override for zone $inputZone.")
+      log.info(
+        s"[ABR] no client automatic broker resolution override for zone $inputZone. Will read ABR config from default node - ${SharedRuntimeProperties.DsiZonePropertyDefaultValue}")
       SharedRuntimeProperties.DsiZonePropertyDefaultValue
     }
   }
@@ -155,8 +156,7 @@ private[optimus] object AutomaticBrokerResolution {
         }
         val continent = split(split.length - 1)
         val city = split(split.length - 2)
-        log.info(
-          s"[ABR] doing automatic DAL resolution for mode: $mode zoneId: ${zone.underlying} continent: $continent city: $city")
+        log.info(s"[ABR] doing automatic DAL resolution for mode: $mode continent: $continent city: $city")
         if (zkOps.pathExists(s"/$mode/${zone.underlying}/$continent/$city", timer))
           Some(s"${zone.underlying}/$continent/$city")
         else if (zkOps.pathExists(s"/$mode/${zone.underlying}/$continent", timer))

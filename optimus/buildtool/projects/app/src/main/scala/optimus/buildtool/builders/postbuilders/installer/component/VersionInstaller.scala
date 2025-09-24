@@ -30,8 +30,6 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 class VersionInstaller(
     cache: BundleFingerprintsCache,
     pathBuilder: InstallPathBuilder,

@@ -35,7 +35,7 @@ main {
       optimus.platform.utils
     ]
     libs = [
-      msjava.base,
+      msjava.rr-base,
       ossjava.commons-io,
       ossjava.commons-lang3,
       ossjava.guava,
@@ -46,5 +46,5 @@ main {
       ossscala.scala-parser-combinators
     ]
   }
-  runtime.libs += msjava.protobufutils
+  runtime.libs += msjava.rr-protobufutils
 }

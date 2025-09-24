@@ -35,7 +35,6 @@ import optimus.platform.util.Log
 import optimus.scalacompat.collection._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object JsonReporter {
   def writeJsonFile[T: JsonValueCodec](dir: Directory, entity: T, fileName: String): FileAsset = {

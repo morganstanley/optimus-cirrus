@@ -12,9 +12,10 @@
 package optimus.examples.platform01.data
 
 import optimus.examples.platform.entities.SimpleEntity
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 
-object SimpleRead extends LegacyOptimusApp[SupplyEntityNameArgs] {
+object SimpleRead extends LegacyOptimusApp[SupplyEntityNameArgs] with PrintlnInterceptor {
   val simpleEntity = SimpleEntity.get(cmdLine.name)
 
   println("Read the entity: " + cmdLine.name)

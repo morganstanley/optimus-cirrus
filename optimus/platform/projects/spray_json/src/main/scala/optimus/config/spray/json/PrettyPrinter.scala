@@ -18,7 +18,6 @@ package optimus.config.spray.json
 
 import java.lang.{StringBuilder => JStringBuilder}
 import scala.annotation.tailrec
-import scala.collection.Seq
 
 /**
  * A JsonPrinter that produces a nicely readable JSON source.

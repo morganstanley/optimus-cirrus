@@ -19,6 +19,7 @@ import optimus.platform.storable._
 import scala.jdk.CollectionConverters._
 import optimus.platform.bitemporal.ValidSegment
 import optimus.dsi.base.SlottedVersionedReference
+import optimus.dsi.notification.NotificationEntry.ReferenceOnlyNotificationEntry
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.NamedPartition
 import optimus.dsi.partitioning.PartitionHelper
@@ -184,6 +185,7 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
     with ProtoSerializer[NotificationEntry, NotificationEntryProto] {
   private val distinguishedSegmentVtIntervalBit = 1
   private val segmentTtFromPresenceBit = 2
+  private val referenceOnlyBit = 4
 
   override def serialize(entry: NotificationEntry): NotificationEntryProto =
     entry.proto({
@@ -218,7 +220,10 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
         }
         affectedVtIntervalAndSegmentProtoBuilder
       })
-
+      entry match {
+        case n: ReferenceOnlyNotificationEntry => builder.setFormat(builder.getFormat | referenceOnlyBit)
+        case _                                 =>
+      }
       builder.build
     })
 
@@ -243,9 +248,10 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
       if ((proto.getFormat & segmentTtFromPresenceBit) == 0) None else Some(fromProto(proto.getSegmentTtFrom))
     val partition =
       if (proto.hasPartitionName) PartitionHelper.getPartitionForString(proto.getPartitionName) else DefaultPartition
+    val referenceOnly = (proto.getFormat & referenceOnlyBit) != 0
     segmentTtFromOption match {
       case Some(segmentTtFrom) =>
-        NotificationEntry(
+        NotificationEntry.deserialized(
           notificationType,
           context,
           txTime,
@@ -255,10 +261,11 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
           segment,
           segmentTtFrom,
           proto.getPrimarySeq,
-          partition
+          partition,
+          referenceOnly
         )
       case None =>
-        NotificationEntry(
+        NotificationEntry.deserialized(
           notificationType,
           context,
           txTime,
@@ -267,7 +274,8 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
           proto.getLockToken,
           segment,
           proto.getPrimarySeq,
-          partition
+          partition,
+          referenceOnly
         )
     }
   }

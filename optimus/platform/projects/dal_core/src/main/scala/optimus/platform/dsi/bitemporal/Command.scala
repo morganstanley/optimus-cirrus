@@ -24,10 +24,9 @@ import optimus.dsi.session.EstablishSessionResult
 import optimus.dsi.session.EstablishSessionSuccess
 import optimus.entity.EntityAuditInfo
 import optimus.graph.DiagnosticSettings
-import optimus.platform.RuntimeEnvironment
-import optimus.platform.TimeInterval
-import optimus.platform.ValidTimeInterval
+import optimus.platform._
 import optimus.platform.dal.NotificationStream
+import optimus.platform.dal.NotificationStream.SubscriptionIdType
 import optimus.platform.dal.config.DalClientInfo
 import optimus.platform.dal.config.DalEnv
 import optimus.platform.dal.messages.StreamsACLs
@@ -49,6 +48,7 @@ import optimus.platform.dsi.expressions.{Select => SelectExpression}
 import optimus.platform.dsi.metrics.WriteMetadataOpsStats
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.storable._
+import optimus.scalacompat.collection._
 
 import java.time.Instant
 import java.util.Objects
@@ -241,15 +241,23 @@ object Put {
       lockToken: Option[Long],
       validTime: Instant,
       minAssignableTtOpt: Option[Instant] = None,
-      monoTemporal: Boolean = false): Put =
-    new Put(value, MicroPrecisionInstant.ofInstant(validTime), lockToken, minAssignableTtOpt, monoTemporal)
+      monoTemporal: Boolean = false,
+      ignoreRefResolve: Boolean = false): Put =
+    new Put(
+      value,
+      MicroPrecisionInstant.ofInstant(validTime),
+      lockToken,
+      minAssignableTtOpt,
+      monoTemporal,
+      ignoreRefResolve)
 }
 final case class Put private (
     value: SerializedEntity,
     vt: MicroPrecisionInstant,
     lockToken: Option[Long],
     minAssignableTtOpt: Option[Instant],
-    monoTemporal: Boolean
+    monoTemporal: Boolean,
+    ignoreRefResolve: Boolean
 ) extends WriteCommandWithValidTime
     with HasClassName {
   def cn = value.className
@@ -316,7 +324,8 @@ final case class PutApplicationEvent(
     elevatedForUser: Option[String] = None,
     appEvtId: Option[AppEventReference] = None,
     retry: Boolean = false,
-    minAssignableTtOpt: Option[Instant] = None
+    minAssignableTtOpt: Option[Instant] = None,
+    ignoreListForReferenceResolution: Set[EntityReference] = Set.empty[EntityReference]
 ) extends WriteCommand {
   // Not needed to be defined as the classnames are resolved using WriteBusinessEvent
   override protected def classNameImpl: Option[SerializedEntity.TypeRef] = None
@@ -788,16 +797,56 @@ object ExpressionQueryCommand {
 }
 
 object Obliterate {
+
+  sealed trait Mode {
+    def value: Int
+  }
+  object Mode {
+
+    /**
+     * This is default mode where all metadata is removed as a part of single command.
+     */
+    final case object Full extends Mode { override val value = 1 }
+
+    /**
+     * This will not remove key and grouping. And rest of the metadata will be removed in chunks depending on the
+     * batch-size configured on the server-side. This is useful for entities with very large number of versions,
+     * which can be safely obliterated during weekdays.
+     *
+     * Accordingly, it will send back ObliterateResult and client may need to re-issue the same command multiple
+     * times, where the last command should be with Full mode to remove key and grouping as well.
+     */
+    final case object Chunking extends Mode { override val value = 2 }
+
+    val default: Mode = Full
+    def fromValue(v: Int): Mode = v match {
+      case 1 => Full
+      case 2 => Chunking
+      case _ => throw new IllegalArgumentException(s"Unknown Obliterate mode value: $v")
+    }
+  }
+
   def apply(q: Query): Obliterate = Obliterate(Seq(q))
   def lift(cmds: Seq[Obliterate]): Obliterate = Obliterate(cmds.flatMap(_.queries))
 }
 
-final case class Obliterate(queries: Seq[Query]) extends WriteCommand {
+final case class Obliterate(
+    queries: Seq[Query],
+    mode: Obliterate.Mode = Obliterate.Mode.Full
+) extends WriteCommand {
+
+  require(
+    mode == Obliterate.Mode.Full ||
+      queries.forall(q => q.isInstanceOf[ReferenceQuery] || q.isInstanceOf[SerializedKeyQuery]),
+    s"Obliterate in ${Obliterate.Mode.Chunking} mode can only be used with ReferenceQuery or SerializedKeyQuery, but got: ${queries
+        .mkString(", ")}"
+  )
+
   def this(query: Query) = this(Seq(query))
 
   private val qStr =
-    if (queries.tail.isEmpty) s"Obliterate: ${queries.headOption.getOrElse("")}"
-    else s"ObliterateBatch of ${queries.size}"
+    if (queries.tail.isEmpty) s"Obliterate (mode: $mode): ${queries.headOption.getOrElse("")}"
+    else s"ObliterateBatch (mode: $mode) of ${queries.size}"
   override def logDisplay(level: Int): String = if (il(level)) s"[W]$qStr" else NoLog
   // Classname for Obliterate must be resolved using the queries contained in obliterate. So marking this as None
   override protected def classNameImpl: Option[SerializedEntity.TypeRef] = None
@@ -995,6 +1044,18 @@ final case class InvalidateAllCurrentByRefs(entityReferences: Seq[EntityReferenc
     else NoLog
 }
 
+final case class PrepareMonoTemporal(entityReferences: Seq[EntityReference], clazzName: String)
+    extends WriteCommand
+    with HasClassName {
+  def this(ref: EntityReference, clazzName: String) = this(Seq(ref), clazzName)
+  def cn = clazzName
+  override protected def classNameImpl: Option[SerializedEntity.TypeRef] = Option(clazzName)
+  def auditInfoString: String = logDisplay(CmdLogLevelHelper.DebugLevel)
+  override def logDisplay(level: Int): String =
+    if (il(level)) s"[M] ${getClass.getSimpleName}${if (dl(level)) iterDisplay(" Refs", entityReferences) else ""}"
+    else NoLog
+}
+
 final case class Heartbeat(uuid: String, sentTime: Instant) extends ReadOnlyCommand {
   override def needStreamingExecution: Boolean = false
 }
@@ -1124,7 +1185,7 @@ final case class CommitMessagesStream(override val streamId: String, commitIds: 
 }
 
 // streamAppId is passed from kafkaStreamsInputPipeline, inform us of the identifier of inputPipeline
-final case class StreamsACLsCommand(streamAppId: String, val acls: Seq[StreamsACLs]) extends MessagesServerCommand {
+final case class StreamsACLsCommand(streamAppId: String, acls: Seq[StreamsACLs]) extends MessagesServerCommand {
   override def logDisplay(level: Int): String =
     if (il(level))
       s"${getClass.getSimpleName}(appId=$streamAppId, acls=$acls)"
@@ -1187,10 +1248,12 @@ object MessagesPublishCommand {
 }
 
 final case class MessagesPublishTransactionCommand(
-    msg: MessagesPublishTransactionCommand.MessageType
+    msg: MessagesPublishTransactionCommand.MessageType,
+    waitForAck: Boolean = true
 ) extends MessagesPublishCommandBase {
-  // in case of Transaction we must ensure that message is delivered and persisted
-  override def option: MessagesPublishCommandBase.Option = MessagesPublishCommandBase.Option.Ack
+  // default to true in case of Transaction as we must ensure that message is delivered and persisted
+  override def option: MessagesPublishCommandBase.Option =
+    if (waitForAck) MessagesPublishCommandBase.Option.Ack else MessagesPublishCommandBase.Option.IgnoreAck
 
   override def identifier: String =
     s"Transaction (Event: $businessEventClassName Cls: [${classNames.mkString(", ")}])"
@@ -1256,6 +1319,22 @@ sealed trait AppEventWriteResult extends TimestampedResult with HasResultStats[A
   def invResults: Seq[InvalidateAfterResult]
   def assertResults: Seq[AssertValidResult]
   override lazy val weight = (putResults ++ invResults ++ assertResults).map(_.weight).sum
+
+  override def getResultStats(): Option[ResultStats] = {
+    super.getResultStats() match {
+      case None =>
+        val entEvtPutStats =
+          putResults.flatMap(r => r.permRef.getTypeId).groupBy(identity).mapValuesNow(_.length.toLong)
+        val entEvtInvStats =
+          invResults.flatMap(r => r.permRef.getTypeId).groupBy(identity).mapValuesNow(_.length.toLong)
+        val putStats = ResultStatsByInt(entEvtPutStats)
+        val invStats = ResultStatsByInt(entEvtInvStats)
+        val statsOpt = Option(WriteResultStatsByInt(putStats, invStats))
+        setResultStats(statsOpt)
+        statsOpt
+      case statsOpt => statsOpt
+    }
+  }
 }
 
 sealed trait VersionedResult extends TimestampedResult {
@@ -1264,7 +1343,7 @@ sealed trait VersionedResult extends TimestampedResult {
     if (il(level)) s"${super.logDisplay(level)} VR: $versionedRef" else NoLog
 }
 
-sealed trait VersionedResultWtihRef extends VersionedResult {
+sealed trait VersionedResultWithRef extends VersionedResult {
   def permRef: EntityReference
   override def logDisplay(level: Int): String = if (il(level)) s"${super.logDisplay(level)} PR: $permRef" else NoLog
 }
@@ -1283,7 +1362,7 @@ final case class PutResult(
     vtInterval: ValidTimeInterval,
     txTimeTo: Option[Instant],
     txTime: Instant)
-    extends VersionedResultWtihRef {
+    extends VersionedResultWithRef {
   override def logDisplay(level: Int): String = {
     if (il(level)) s"${super.logDisplay(level)}VR:${versionedRef.toString} LT:$lockToken VT:${vtInterval.toString}"
     else NoLog
@@ -1448,6 +1527,8 @@ trait ResultStats {
 
 final case class ResultStatsByInt(cnIdtoCount: Map[Int, Long]) extends ResultStats
 final case class ResultStatsByString(cnIdtoCount: Map[String, Long]) extends ResultStats
+final case class WriteResultStatsByInt(putStats: ResultStatsByInt, invalidateStats: ResultStatsByInt)
+    extends ResultStats
 
 sealed trait HasResultStats[T <: Result] { self: T =>
   private var resStats: Option[ResultStats] = None
@@ -1648,6 +1729,12 @@ final case class PartialGetEntityEventTimelineResult(
 }
 
 final case class InvalidateAllCurrentResult(count: Int, txTime: Option[Instant]) extends Result {
+  override def logDisplay(level: Int): String = {
+    if (il(level)) s"${super.logDisplay(level)}Cnt: $count" else NoLog
+  }
+}
+
+final case class PrepareMonoTemporalResult(count: Int, txTime: Option[Instant]) extends Result {
   override def logDisplay(level: Int): String = {
     if (il(level)) s"${super.logDisplay(level)}Cnt: $count" else NoLog
   }
@@ -1949,6 +2036,17 @@ object ReferenceQuery {
   def apply(r: EntityReference): ReferenceQuery = ReferenceQuery(ref = r, entitledOnly = false, className = None)
   def apply(r: EntityReference, className: String): ReferenceQuery =
     ReferenceQuery(ref = r, entitledOnly = false, className = Option(className))
+}
+
+final case class VersionedReferenceQuery(
+    versionedRef: VersionedReference,
+    validTimeInterval: ValidTimeInterval,
+    txTimeInterval: TimeInterval,
+    cn: String,
+    entitledOnly: Boolean)
+    extends EntityQuery
+    with AllowEntitledOnly {
+  override def className: Option[String] = Some(cn)
 }
 
 final case class SerializedKeyQuery(
@@ -2278,9 +2376,17 @@ sealed trait PubSubResult extends Result {
     if (il(level)) s"${this.getClass.getSimpleName}(id=$streamId)" else NoLog
 }
 
-final case class CreatePubSubStreamSuccessResult(override val streamId: String, txTime: Instant) extends PubSubResult
+final case class CreatePubSubStreamSuccessResult(
+    override val streamId: String,
+    txTime: Instant,
+    postChecks: Seq[SubscriptionIdType])
+    extends PubSubResult
 
-final case class ChangeSubscriptionSuccessResult(override val streamId: String, changeRequestId: Int, txTime: Instant)
+final case class ChangeSubscriptionSuccessResult(
+    override val streamId: String,
+    changeRequestId: Int,
+    txTime: Instant,
+    postChecks: Seq[SubscriptionIdType])
     extends PubSubResult {
   override def logDisplay(level: Int): String =
     if (il(level)) s"${getClass.getSimpleName}(id=$streamId, changeRequestId=$changeRequestId)" else NoLog
@@ -2588,4 +2694,25 @@ final case class DirectMessagesNotificationResult(
     if (il(level))
       s"${this.getClass.getSimpleName}(streamId=$streamId, publishReqId=$publishReqId, commitId: $commitId)"
     else NoLog
+}
+
+final case class ObliterateResult(
+    appEvent: SerializedAppEvent,
+    // Re-issue obliteration in "Chunking" mode.
+    pendingObliterations: Set[Query],
+    // Ready for last obliteration in "Full" mode.
+    pendingFinalObliterations: Set[Query]
+) extends TimestampedResult {
+  override def txTime: Instant = appEvent.tt
+  def merge(result: Result): Result = result match {
+    case r: ObliterateResult =>
+      ObliterateResult(
+        r.appEvent,
+        r.pendingObliterations ++ pendingObliterations,
+        r.pendingFinalObliterations ++ pendingFinalObliterations
+      )
+    case VoidResult     => this
+    case e: ErrorResult => e
+    case o              => throw new DSISpecificError("Unexpected DSI result type " + o.getClass.getName)
+  }
 }

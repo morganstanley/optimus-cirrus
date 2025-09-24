@@ -11,6 +11,8 @@
  */
 package optimus.breadcrumbs.crumbs
 
+import com.github.benmanes.caffeine.cache.Caffeine
+
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -19,6 +21,7 @@ import java.time.format.DateTimeFormatter
 import java.{util => ju}
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.PropertyUnits.BareNumber
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -47,10 +50,6 @@ abstract class KnownProperties extends Enumeration {
     def parse(s: String): A = s.parseJson.convertTo[A]
     def parse(js: JsValue): A = js.convertTo[A]
     def toJson(a: A): JsValue = a.toJson
-
-    private var _meta: MetaData = NullMeta
-    override def meta: MetaData = _meta
-
     private[crumbs] def withMeta(md: MetaData): this.type = {
       _meta = md.copy(owner = this)
       this
@@ -140,7 +139,7 @@ object PropertyUnits {
 object KnownProperties {
   val DefaultDescription = "Property"
   abstract class Set private[crumbs] (val kps: KnownProperties*)
-  private[crumbs] lazy val allKnownProperties = {
+  private[optimus] lazy val allKnownProperties = {
     Properties.values.map(_.asInstanceOf[KnownProperties#EnumeratedKey[_]]) | {
       ju.ServiceLoader.load(classOf[Set]).asScala.flatMap(_.kps).toSet.flatMap((_: KnownProperties).set)
     }
@@ -161,6 +160,7 @@ object KnownProperties {
     def graphable: Boolean = (flags & UNGRAPHABLE) == 0
     def isFlame: Boolean = (flags & FLAME) != 0
     def isTime: Boolean = units == Millis || units == Nanoseconds
+    def internal: Boolean = (flags & INTERNAL) != 0
 
     def description =
       if (descriptionOverride.nonEmpty) descriptionOverride
@@ -180,6 +180,7 @@ object KnownProperties {
   val AGG_HYPER = 4
   val UNGRAPHABLE = 8
   val FLAME = 16
+  val INTERNAL = 32
 
   val NullMeta = MetaData(0, BareNumber)
   val TimeSpent = MetaData(AGG_ALL, Millis)
@@ -188,8 +189,10 @@ object KnownProperties {
   val MemoryInUse = MetaData(AGG_OVER_ENGINES, MegaBytes)
   val UnintegrableCount = MetaData(AGG_OVER_ENGINES, Count)
   val IntegrableCount = MetaData(AGG_ALL, Count)
+  val InternalIntegrableCount = MetaData(AGG_ALL | INTERNAL, Count)
   val CumulativeEventCount = MetaData(AGG_OVER_ENGINES, Count)
   val GaugeLevel = MetaData(0, BareNumber)
+  val InternalGaugeLevel = MetaData(INTERNAL, BareNumber)
 
 }
 
@@ -359,11 +362,15 @@ object Properties extends KnownProperties {
     }
 
     implicit object ChainedIDJsonFormat extends RootJsonFormat[ChainedID] {
+      // identity cache - we're generally sending the same chained id over and over again
+      private val cache = Caffeine.newBuilder().weakKeys().maximumSize(10).build[ChainedID, JsValue]
+
       override def read(json: JsValue): ChainedID = {
         val (repr, depth, level, vuid) = json.convertTo[(String, Int, Int, String)]
         new ChainedID(repr, depth, level, vuid)
       }
-      override def write(obj: ChainedID): JsValue = (obj.repr, obj.depth, obj.crumbLevel, obj.vertexId).toJson
+      override def write(obj: ChainedID): JsValue =
+        cache.get(obj, obj => (obj.repr, obj.depth, obj.crumbLevel, obj.vertexId).toJson)
     }
 
     implicit object KeyJsonFormat extends RootJsonFormat[Key[_]] {
@@ -499,7 +506,7 @@ object Properties extends KnownProperties {
       })
   }
 
-  trait Key[A] {
+  trait Key[A] extends HasMetaData {
     def name: String
     @inline def ->(a: A) = Elem(this, a)
     @inline def :=(a: A) = Elem(this, a)
@@ -510,8 +517,12 @@ object Properties extends KnownProperties {
     def maybe(p: A => Boolean, a: A): Elems = if (p(a)) Elems(this -> a) else Elems.Nil
     def maybe(o: Option[A]): Elems = o.fold(Elems.Nil)(a => Elems(this -> a))
     def nonNull(o: A): Elems = if (Objects.nonNull(o)) Elems(this -> o) else Elems.Nil
+  }
 
-    def meta: MetaData = NullMeta
+  trait HasMetaData {
+    protected var _meta: MetaData = NullMeta
+    def name: String
+    def meta: MetaData = _meta
   }
 
   class UntypedProperty(val name: String, src: Option[String]) extends Key[String] {
@@ -588,7 +599,12 @@ object Properties extends KnownProperties {
   val distedTo = prop[String]
   val distedFrom = prop[String]
   val engineId = prop[ChainedID]
-  val engineRoot = prop[String]
+  val engineRoot = prop[String].withMeta(
+    NullMeta,
+    "'Engine Root' refers to the sampled root UUID of a specific JVM, which can be either local or remote.\n" +
+      "For example, if there are 5 engines, it typically means that this execution involved 5 JVMs:\n" +
+      "1 JVM for main process, while the other 4 JVMs execute distributed tasks remotely(or locally)."
+  )
   val engineRootsCount =
     propI.withMeta(UnintegrableCount, "The number of engine roots in the sampling interval")
   val engine = prop[String]
@@ -672,7 +688,7 @@ object Properties extends KnownProperties {
   val gcDuration =
     propL.withMeta(TimeSpent, "Total of GC times that were reported to GCMonitor during this sampling interval")
   val gcTotalPausesInCycle = propL.withMeta(IntegrableCount)
-  val gcMaxPauseInCycle = propL.withMeta(UnintegrableCount)
+  val gcMaxPauseInCycle = propL.withMeta(GaugeLevel)
   val gcCacheRemoved = propI.withMeta(IntegrableCount)
   val gcCacheRemaining = propI.withMeta(UnintegrableCount)
   val gcCleanupsFired = propL.withMeta(IntegrableCount)
@@ -786,13 +802,13 @@ object Properties extends KnownProperties {
   // Events about DependencyTracker queue sizes
   // Technically, Queued = Added - Processed but in practice it might differ slightly depending on when snaps are
   // published.
-  
+
   // Totals are always published
   val profDepTrackerTaskTotalAdded = propL.withMeta(IntegrableCount)
   val profDepTrackerTaskTotalProcessed = propL.withMeta(IntegrableCount)
   val profDepTrackerTaskTotalQueued = propI.withMeta(UnintegrableCount)
-  
-  // Breakdown per queue is only published for the first -Doptimus.sampling.deptracker.maxqueues queues (defaults to 0) 
+
+  // Breakdown per queue is only published for the first -Doptimus.sampling.deptracker.maxqueues queues (defaults to 0)
   val profDepTrackerTaskAdded = prop[Map[String, Long]].withMeta(IntegrableCount)
   val profDepTrackerTaskProcessed = prop[Map[String, Long]].withMeta(IntegrableCount)
   val profDepTrackerTaskQueued = prop[Map[String, Int]].withMeta(UnintegrableCount)
@@ -825,7 +841,7 @@ object Properties extends KnownProperties {
 
   val snapTimeMs = propL.withMeta(TimeSpent)
   val snapTimeUTC = prop[String]
-  val snapEpochId = propL.withMeta(TimeSpent)
+  val snapEpochId = propL.withMeta(NullMeta)
   val snapPeriod = propL.withMeta(TimeSpent)
   val snapDuration = propL.withMeta(TimeSpent)
   val snapBatch = propI
@@ -874,8 +890,6 @@ object Properties extends KnownProperties {
   val time = prop[String]
   val splunkTime = prop[String]
   val rootUuid = prop[String]
-  val appPrint = prop[String]
-  val engPrint = prop[String]
   val publisherId = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
@@ -931,6 +945,7 @@ object Properties extends KnownProperties {
   val obtCategory = prop[String]
   val obtBenchmarkScenario = prop[String]
   val obtBuildId = prop[String]
+  val obtRunDetails = prop[Map[String, String]]
   val obtDurationByPhase = prop[Map[String, Map[String, Long]]]
   val obtDurationCentilesByPhase = prop[Map[String, Seq[Long]]]
   val obtDurationByCategory = prop[Map[String, Map[String, Long]]]
@@ -984,7 +999,7 @@ object Properties extends KnownProperties {
   val hotspotCacheMiss = propL.withMeta(IntegrableCount, "Number of cache misses")
   val hotspotCacheTime = propL.withMeta(TimeSpent, "Time spent on cache lookup logic")
   val hotspotCacheCycle =
-    propL.withMeta(UnintegrableCount, "The maximum depth in the LRU cache at which we re-used (re-cycled) the node")
+    propL.withMeta(GaugeLevel, "The maximum depth in the LRU cache at which we re-used (re-cycled) the node")
   val hotspotCacheCycleStats =
     prop[Seq[Long]]
       .withMeta(NullMeta, "Histogram Y-axis of the LRU depths(log_2 of the count that occurred at this depth)")
@@ -1068,19 +1083,23 @@ object Properties extends KnownProperties {
   val childProcessCount = propI.withMeta(UnintegrableCount, "Number of child processes")
   val childProcessCPU = propD.withMeta(GaugeLevel, "Total CPU load of all child processes")
   val childProcessRSS = propL.withMeta(MemoryInUse, "Total resident memory size of all child processes")
-  val spInternalStats = prop[Map[String, Map[String, Double]]]
-  val apInternalStats = prop[Map[String, Double]]
+  val spInternalStats = prop[Map[String, Map[String, Double]]].withMeta(InternalGaugeLevel)
+  val apInternalStats = prop[Map[String, Double]].withMeta(InternalGaugeLevel)
 
   val crumbplexerIgnore = prop[String] // tells crumbplexer to ignore the whole crumb; value is the reason
   val plexerCountPrinted = propL.withMeta(IntegrableCount)
   val plexerCountDeduped = propL.withMeta(IntegrableCount)
   val plexerCountDropped = propL.withMeta(IntegrableCount)
   val plexerCountParseError = propL.withMeta(IntegrableCount)
-  val plexerSnapRootCount = propL.withMeta(IntegrableCount)
-  val plexerSnapLagClient = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since crumb time"))
-  val plexerSnapLagKafka = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since kafka publish"))
-  val plexerSnapLagQueue = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Millis, "Lag since enqueued"))
-  val plexerSnapQueueSize = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Count))
+  val plexerCountPause = propL.withMeta(TimeSpent)
+  val plexerSnapFreeDisk = propL.withMeta(MemoryInUse)
+  val plexerSnapOldestHours = propL.withMeta(GaugeLevel)
+  val plexerSnapRootCount = propL.withMeta(UnintegrableCount)
+  val plexerSnapLagClient = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Print lag since crumb time"))
+  val plexerSnapLagKafka = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Print lag since kafka publish"))
+  val plexerSnapLagQueue = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Millis, "Print lag since enqueued"))
+  val plexerSnapQueueSize = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Count), "Queue length")
+  val plexerCountExceptions = propL.withMeta(IntegrableCount, "Exceptions in main poll loop")
 
   val profDmcCacheAttemptCount = propL.withMeta(IntegrableCount)
   val profDmcCacheMissCount = propL.withMeta(IntegrableCount)
@@ -1093,12 +1112,14 @@ object Properties extends KnownProperties {
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
-  val numStacksPublished = propL.withMeta(IntegrableCount)
-  val numStacksReferenced = propL.withMeta(IntegrableCount)
+  val numStacksPublished = propL.withMeta(InternalIntegrableCount)
+  val numStacksReferenced = propL.withMeta(InternalIntegrableCount)
   val numSamplesPublished =
     propL.withMeta(IntegrableCount, "Number of stacks published from sampling profiler during this sampling interval")
-  val numCrumbFailures = propI.withMeta(IntegrableCount)
-  val crumbQueueLength = propI.withMeta(UnintegrableCount)
+  val numCrumbFailures = propI.withMeta(InternalIntegrableCount)
+  val numStackProblems = propL.withMeta(InternalIntegrableCount)
+  val numSamplersDisabled = propL.withMeta(InternalIntegrableCount)
+  val crumbQueueLength = propI.withMeta(InternalGaugeLevel)
   val stackElem = prop[String]
   val pTpe = prop[String]
   val jfrSize = propL

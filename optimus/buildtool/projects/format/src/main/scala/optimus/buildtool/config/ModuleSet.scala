@@ -25,7 +25,7 @@ final case class ModuleSet(
   private def transitiveDependencySets: Set[DependencySetId] =
     dependencySets ++ canDependOn.flatMap(_.transitiveDependencySets)
 
-  def transitiveNonVariantDependencySets: Set[DependencySetId] =
+  lazy val transitiveNonVariantDependencySets: Set[DependencySetId] =
     transitiveDependencySets.filter(ds => !variantSets.exists(_.dependencySetId == ds))
 }
 object ModuleSet {

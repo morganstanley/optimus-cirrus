@@ -19,11 +19,13 @@ import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.trace.DeploymentScriptCommand
+import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.trace.Queue
+import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.OsUtils
 import optimus.platform._
 
 import java.nio.file.Files
-import scala.collection.immutable.Seq
 import scala.util._
 
 final case class DeploymentResponse(response: String)
@@ -32,6 +34,11 @@ final case class DeploymentException(msg: String) extends RuntimeException(msg)
 object DeploymentScriptWriter extends DeploymentScriptWriter {
   private val log = getLogger(this)
   private val id = BackgroundCmdId("DeploymentScriptWriter")
+  private val concurrentScripts = OptimusBuildToolProperties.asInt("concurrentDeploymentScripts").getOrElse(10)
+  private val throttle = AdvancedUtils.newThrottle(concurrentScripts)
+  private val remoteLogs = OptimusBuildToolProperties.getOrFalse("remoteDeploymentLogs")
+  private val remoteLogVar: String = StaticConfig.string("deploymentScriptNoRemoteLog")
+  private val env = if (remoteLogs) Map.empty[String, String] else Map(remoteLogVar -> "1")
 }
 
 class DeploymentScriptWriter {
@@ -40,13 +47,18 @@ class DeploymentScriptWriter {
   val cmdPrefix: Seq[String] = if (OsUtils.isWindows) Seq("cmd", "/c") else Seq("sh", "-c")
   val cmdSeparator: String = if (OsUtils.isWindows) "&&" else ";"
 
-  @async protected def runCmdString(cmd: String, scopeId: ScopeId, logFile: FileAsset): Try[String] =
-    asyncResult {
-      BackgroundProcessBuilder(id, logFile, cmdPrefix :+ cmd, useCrumbs = false)
-        .build(scopeId, DeploymentScriptCommand, lastLogLines = 100)
+  @async protected def runCmdString(cmd: String, scopeId: ScopeId, logFile: FileAsset): Try[String] = {
+    val queueTask = ObtTrace.startTask(scopeId, Queue(DeploymentScriptCommand))
+    throttle {
+      queueTask.end(success = true)
+      asyncResult {
+        BackgroundProcessBuilder(id, logFile, cmdPrefix :+ cmd, useCrumbs = false, envVariablesToAdd = env)
+          .build(scopeId, DeploymentScriptCommand, lastLogLines = 100)
 
-      Files.readString(logFile.path)
-    }.toTry
+        Files.readString(logFile.path)
+      }.toTry
+    }
+  }
 
   private val executable: String = StaticConfig.string("deploymentScriptExecutable")
 

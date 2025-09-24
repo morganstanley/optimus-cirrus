@@ -14,6 +14,7 @@ package optimus.entity
 import optimus.platform.pickling.PickledOutputStream
 import optimus.platform.pickling.Pickler
 import optimus.platform.pickling.PropertyMapOutputStream
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.storable._
 import optimus.scalacompat.collection.AbstractImmutableMap
 
@@ -65,7 +66,7 @@ abstract class IndexInfo[A <: Storable, K](
     bldr.writeStartArray()
     pickle(e, bldr)
     bldr.writeEndArray()
-    val values = bldr.value.asInstanceOf[Seq[Any]]
+    val values = bldr.value.asInstanceOf[PickleSeq[Any]]
     propertyNames.iterator.zip(values.iterator).map { case (k, v) => s"$k -> $v" }.mkString(", ")
   }
 

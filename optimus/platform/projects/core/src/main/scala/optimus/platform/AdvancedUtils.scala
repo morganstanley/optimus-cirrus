@@ -15,11 +15,12 @@ import com.sun.management.GarbageCollectionNotificationInfo
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
 import msjava.slf4jutils.scalalog.Logger
+import optimus.config.NodeCacheConfigs
+import optimus.config.OptconfContent
 import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayKey
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayTag
-import optimus.core.needsPlugin
 import optimus.graph.CompletableNode
 import optimus.graph.DiagnosticSettings.getBoolProperty
 import optimus.graph.GraphInInvalidState
@@ -71,6 +72,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
+@loom
 object AdvancedUtils {
 
   def createUuidOffGraphForTesting: String = {
@@ -151,10 +153,10 @@ object AdvancedUtils {
 
   object OracleJvmAndGCNativeMemoryManager extends MemoryManager with NotificationListener {
 
-    val maxGcWaitMs: JLong = JLong.getLong("optimus.memory.maxGcWaitMs", 5000)
-    val finalizationWaitMs: JLong = JLong.getLong("optimus.memory.finalizationWaitMs", 5000)
+    private val maxGcWaitMs: JLong = JLong.getLong("optimus.memory.maxGcWaitMs", 5000)
+    private val finalizationWaitMs: JLong = JLong.getLong("optimus.memory.finalizationWaitMs", 5000)
 
-    val oldGenPoolNames: Set[String] = Set("PS Old Gen", "CMS Old Gen", "G1 Old Gen")
+    private val oldGenPoolNames: Set[String] = Set("PS Old Gen", "CMS Old Gen", "G1 Old Gen")
 
     private val oldGenPool =
       ManagementFactory.getMemoryPoolMXBeans.asScala.filter(pool => oldGenPoolNames.contains(pool.getName)).head
@@ -169,7 +171,7 @@ object AdvancedUtils {
     private val maxNativeHeapAtStart: Long =
       if (GCNative.loaded) GCNative.getNativeWatermark / 10 * 18 else Long.MaxValue
 
-    @volatile var waitingForExplicitGc: Boolean = false
+    @volatile private var waitingForExplicitGc: Boolean = false
 
     override def maxNativeHeap: Long = maxNativeHeapAtStart
     override def usedNativeHeap: Long = if (GCNative.loaded) GCNative.getNativeAllocation else 0
@@ -233,7 +235,7 @@ object AdvancedUtils {
     override def dumpHeap(fileNamePrefix: String, live: Boolean): Unit = GCNative.dumpHeap(fileNamePrefix, live)
 
     // see http://www.fasterj.com/articles/oraclecollectors1.shtml
-    val oldGenGcNames: Set[String] =
+    private val oldGenGcNames: Set[String] =
       Set("PS MarkSweep", "MarkSweepCompact", "ConcurrentMarkSweep", "G1 Mixed Generation")
 
     override def handleNotification(notification: Notification, handback: scala.Any): Unit = {
@@ -504,7 +506,8 @@ object AdvancedUtils {
    */
   @nodeSync
   @nodeSyncLift
-  final def temporalContextAddToPermittedList[T](comment: String)(@nodeLift @nodeLiftByName f: => T): T = needsPlugin
+  final def temporalContextAddToPermittedList[T](comment: String)(@nodeLift @nodeLiftByName f: => T): T =
+    temporalContextAddToPermittedList$withNode(comment)(toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def temporalContextAddToPermittedList$queued[T](comment: String)(f: Node[T]): Node[T] =
     temporalContextAddToPermittedList$newNode(comment)(f).enqueueAttached
@@ -546,10 +549,12 @@ object AdvancedUtils {
   @nodeSync
   @nodeSyncLift
   final def temporalContextAddToPermittedListGiven[T](comment: String)(scenario: Scenario)(
-      @nodeLift @nodeLiftByName f: => T): T = needsPlugin
+      @nodeLift @nodeLiftByName f: => T): T =
+    temporalContextAddToPermittedListGiven$withNode(comment)(scenario)(toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def temporalContextAddToPermittedListGiven$queued[T](comment: String)(scenario: Scenario)(f: Node[T]): Node[T] =
     temporalContextAddToPermittedListGivenInternal(comment)(scenario)(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol
   final def temporalContextAddToPermittedListGiven$withNode[T](comment: String)(scenario: Scenario)(f: Node[T]): T =
     temporalContextAddToPermittedListGivenInternal(comment)(scenario)(f).get
 
@@ -652,6 +657,48 @@ object AdvancedUtils {
   }
 
   @nodeSync
+  /**
+   * Adds a frame in the async stack with `frame` as the title.
+   *
+   * This method wraps the given computation in a custom async stack frame,
+   * providing better traceability and debugging by labeling the stack with the provided name.
+   *
+   * Note: There is a limit to the number of unique custom frames that can be created.
+   * If this limit is exceeded, any additional frames will be labeled as `[OUT_OF_INDEX_CUSTOM_FRAME]`.
+   * This ensures stack overhead remains bounded and avoids excessive memory use.
+   *
+   * @example
+   *   withCustomFrame("myFrame") {
+   *     // body of your async computation
+   *   }
+   */
+  @nodeSyncLift
+  final def withCustomFrame[T](frame: String)(@nodeLift @nodeLiftByName f: => T): T = {
+    withCustomFrame$withNode(frame)(toNode(f _))
+  }
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withCustomFrame$queued[T](frame: String)(f: Node[T]): Node[T] =
+    withCustomFrame$newNode(frame)(f).enqueue
+  final def withCustomFrame$withNode[T](frame: String)(f: Node[T]): T =
+    withCustomFrame$newNode(frame)(f).get
+  final private[this] def withCustomFrame$newNode[T](frame: String)(f: Node[T]): Node[T] = {
+    new CompletableNode[T] {
+      private var nodeState = 0
+
+      override val executionInfo: NodeTaskInfo = NodeTaskInfo.userCustomDefined(frame)
+      override def run(ec: OGSchedulerContext): Unit = {
+        if (nodeState == 0) {
+          nodeState = 1
+          f.enqueue
+          f.continueWith(this, ec)
+        } else {
+          completeFromNode(f, ec)
+        }
+      }
+    }
+  }
+
+  @nodeSync
   @nodeSyncLift
   final def givenFullySpecifiedScenario[T](scenario: Scenario, inheritSIParams: Boolean)(
       @nodeLift @nodeLiftByName f: => T): T =
@@ -692,7 +739,7 @@ object AdvancedUtils {
       f: Node[T]): Node[T] =
     givenFullySpecifiedScenarioWithInitialTime$newNode(scenario, initialTime, inheritSIParams = true)(f).enqueueAttached
 
-  final private[this] def givenFullySpecifiedScenarioWithInitialTime$newNode[T](
+  final private[platform] def givenFullySpecifiedScenarioWithInitialTime$newNode[T](
       scenario: Scenario,
       initialTime0: Instant,
       inheritSIParams: Boolean)(f: Node[T]) = {
@@ -710,14 +757,10 @@ object AdvancedUtils {
     // given that we are fully replacing the scenario there is no need to treat this new stack as SI (even if ss0 was
     // SI) because we will never be reading tweaks from ss0. There is also no point recording or tracking tweaks for
     // the same reason.
-    val ss = initSS
-      .createChild(scenario, f)
+    val ss = initSS.createChild(scenario, f)
 
     val maybeInheritedSIParamsSS =
-      if (inheritSIParams)
-        ss.withNonScenarioPropertiesFrom(
-          ss0,
-          clearFlags = EvaluationState.ALL_SI_FLAGS | EvaluationState.TRACK_OR_RECORD_TWEAKS)
+      if (inheritSIParams) ss.withNonScenarioPropertiesFrom(ss0)
       else ss
     EvaluationContext.given(maybeInheritedSIParamsSS, f)
   }
@@ -808,7 +851,7 @@ object AdvancedUtils {
   // [SEE_CURRENT_SCENARIO_REF]
   private def correctCurrentScenario(stack: ScenarioStack, current: ScenarioReference): ScenarioStack = {
     val currentScenRefTweak = SimpleValueTweak(ScenarioReference.current$newNode)(current)
-    stack.createChild(Scenario(currentScenRefTweak), EvaluationContext.currentNode)
+    stack.createChild(Scenario(currentScenRefTweak), this /* id for debugger */ )
   }
 
   /** for evaluateIn and givenOverlay, which are currently not supported in SI or XS nodes */
@@ -928,7 +971,7 @@ object AdvancedUtils {
       ) // Currently
 
     val newSS: ScenarioStack =
-      newScenarioStack.withNonScenarioPropertiesFrom(curScenarioStack, clearFlags = EvaluationState.CONSTANT)
+      newScenarioStack.withNonScenarioPropertiesFrom(curScenarioStack)
     val ss = if (addScenario eq null) newSS else newSS.createChild(addScenario, f)
     EvaluationContext.given(ss, f)
   }
@@ -952,7 +995,7 @@ object AdvancedUtils {
     val tagToInsert = EvaluationContext.scenarioStack.findPluginTag[V](key) map { v =>
       key.resolve(v, tag)
     } getOrElse tag
-    val ss = EvaluationContext.scenarioStack.createChild(s, this)
+    val ss = EvaluationContext.scenarioStack.createChild(s, this /* id for the debugger UI*/ )
     EvaluationContext.given(ss.withPluginTag(key, tagToInsert), f)
   }
 
@@ -981,14 +1024,29 @@ object AdvancedUtils {
   final def givenWithPluginTag$withNode[T, P](key: PluginTagKey[P], tag: P, s: Scenario)(f: Node[T]): T =
     givenWithPluginTag$newNode(key, tag, s)(f).get
   final private[this] def givenWithPluginTag$newNode[T, P](key: PluginTagKey[P], tag: P, s: Scenario)(f: Node[T]) = {
-    val ss = EvaluationContext.scenarioStack.createChild(s, this)
+    val ss = EvaluationContext.scenarioStack.createChild(s, this /* id for the debugger UI*/ )
     EvaluationContext.given(ss.withPluginTag(key, tag), f)
   }
 
   @nodeSync
   @nodeSyncLift
+  final def givenWithoutPluginTag[T, P](key: PluginTagKey[P], s: Scenario)(@nodeLift @nodeLiftByName f: => T): T =
+    givenWithoutPluginTag$withNode(key, s)(toNode(f _))
+  final def givenWithoutPluginTag$queued[T, P](key: PluginTagKey[P], s: Scenario)(f: Node[T]): Node[T] =
+    givenWithoutPluginTag$newNode(key, s)(f).enqueueAttached
+  final def givenWithoutPluginTag$queued[T, P](key: PluginTagKey[P], s: Scenario, f: => T): NodeFuture[T] =
+    givenWithoutPluginTag$queued(key, s)(toNode(f _))
+  final def givenWithoutPluginTag$withNode[T, P](key: PluginTagKey[P], s: Scenario)(f: Node[T]): T =
+    givenWithoutPluginTag$newNode(key, s)(f).get
+  final private[this] def givenWithoutPluginTag$newNode[T, P](key: PluginTagKey[P], s: Scenario)(f: Node[T]) = {
+    val ss = EvaluationContext.scenarioStack.createChild(s, this /* id for the debugger UI*/ )
+    EvaluationContext.given(ss.withoutPluginTag(key), f)
+  }
+
+  @nodeSync
+  @nodeSyncLift
   final def givenWithPluginTags[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(@nodeLift @nodeLiftByName f: => T): T =
-    needsPlugin
+    givenWithPluginTags$withNode(kvs, s)(toNode(f _))
   final def givenWithPluginTags$queued[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): Node[T] =
     givenWithPluginTags$newNode(kvs, s)(f).enqueueAttached
   final def givenWithPluginTags$withNode[T](kvs: Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): T =
@@ -1013,6 +1071,12 @@ object AdvancedUtils {
   final private[this] def withConfigTargetPath$newNode[T](targetPath: String)(f: Node[T]) = {
     val ss = EvaluationContext.scenarioStack.withPathMask(NCPolicy.scopeMaskFromPath(targetPath))
     EvaluationContext.given(ss, f)
+  }
+
+  final def applyScopeDependentOptconf(optconfContent: String, scopePath: String): Unit = {
+    require(scopePath != null && scopePath.nonEmpty)
+    val content = OptconfContent(optconfContent, scopePath = Some(scopePath))
+    NodeCacheConfigs.applyScopeDependent(content)
   }
 
   /**
@@ -1045,7 +1109,7 @@ object AdvancedUtils {
   @nodeSync
   @nodeSyncLift
   final def givenWithScopedNodeInput[S, T](ni: ScopedSINodeInput[S], v: S)(@nodeLift @nodeLiftByName f: => T): T =
-    needsPlugin
+    givenWithScopedNodeInput$withNode(ni, v)(toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def givenWithScopedNodeInput$queued[S, T](ni: ScopedSINodeInput[S], v: S)(f: Node[T]): Node[T] =
     givenWithScopedNodeInput$newNode(ni, v)(f).enqueueAttached
@@ -1081,7 +1145,7 @@ object AdvancedUtils {
   @nodeSync
   @nodeSyncLift
   final def givenWithComment[T](comment: String)(@nodeLift @nodeLiftByName f: => T): T =
-    needsPlugin
+    givenWithComment$withNode(comment)(toNode(f _))
   // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
   final def givenWithComment$queued[T](comment: String)(f: Node[T]): Node[T] =
     givenWithComment$newNode(comment)(f).enqueueAttached
@@ -1098,7 +1162,8 @@ object AdvancedUtils {
 
   @nodeSync
   @nodeSyncLift
-  final def suspendAuditorCallbacks[T](@nodeLift @nodeLiftByName f: => T): T = needsPlugin
+  final def suspendAuditorCallbacks[T](@nodeLift @nodeLiftByName f: => T): T = suspendAuditorCallbacks$withNode(
+    toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def suspendAuditorCallbacks$queued[T](f: Node[T]): Node[T] = suspendAuditorCallbacks$newNode(f).enqueueAttached
   // noinspection ScalaUnusedSymbol
@@ -1283,13 +1348,22 @@ object AdvancedUtils {
    */
   @closuresEnterGraph // which is the entire point of this method
   private[optimus /*platform*/ ] def suppressSyncStackDetection[T](f: => T): T = {
-    if (Settings.syncStacksDetectionEnabled || OGTrace.observer.recordLostConcurrency) {
+    disableFeatures(suppressSyncStackDetection = true)(f)
+  }
+
+  @closuresEnterGraph // which is the entire point of this method
+  private[optimus /*platform*/ ] def disableFeatures[T](
+      suppressSyncStackDetection: Boolean = true,
+      disablePicklingInterning: Boolean = false)(f: => T): T = {
+    val flags = (if (disablePicklingInterning) EvaluationState.DISABLE_PICKLING_INTERNING else 0) |
+      (if (suppressSyncStackDetection) EvaluationState.IGNORE_SYNC_STACKS else 0)
+    if (flags != 0) {
       // This is not an RT violation as we are just temporarily enabling
       // ignore sync stack on the scenario stack and then restore it
       val cn = OGSchedulerContext._TRACESUPPORT_unsafe_current().getCurrentNodeTask
       val prevStack = cn.scenarioStack()
       try {
-        cn.replace(prevStack.withIgnoreSyncStack)
+        cn.replace(prevStack.withFlag(flags))
         f
       } finally {
         cn.replace(prevStack)
@@ -1326,7 +1400,7 @@ object AdvancedUtils {
             scenarioAccumulator = scenarioAccumulator.nest(scenario)
             // if there is more translation to do, update the current scenario stack (each translation is supposed to
             // run with the previous scenario applied)
-            if (toTranslate.nonEmpty) replace(scenarioStack.createChild(scenario, this))
+            if (toTranslate.nonEmpty) replace(scenarioStack.createChild(scenario, translator))
           }
         }
         if (!isDone) {
@@ -1364,6 +1438,20 @@ object AdvancedUtils {
   def asyncUsing$queued[R <: AutoCloseable, B](resource: => R, f: R => B): NodeFuture[B] =
     asyncUsing$queued(resource)(toNodeFactory(f))
 
+  @nodeSyncLift
+  def soonAfterCompletion(n: NodeTask)(@nodeLift @nodeLiftByName cb: => Unit): Unit = {
+    n.continueWith(
+      (eq: EvaluationQueue, node: NodeTask) => { eq.scheduler.evaluateAsync(ScenarioStack.constant)(cb) },
+      EvaluationContext.current)
+  }
+  // noinspection ScalaUnusedSymbol
+  def soonAfterCompletion$withNode[T](n: NodeTask)(cb: Node[Unit]): Unit = {
+    cb.attach(ScenarioStack.constant)
+    n.continueWith(
+      (eq: EvaluationQueue, node: NodeTask) => { eq.scheduler.enqueueAndTrackCompletion(cb) },
+      EvaluationContext.current)
+  }
+
   /**
    * Code (transitively called from) within a withoutDAL { } block cannot make DAL (most) read or write calls.
    * This is useful for testing purposes and also for ensuring more dependable timings by detecting unintended DAL access.
@@ -1389,10 +1477,11 @@ object AdvancedUtils {
   final def withoutDAL$withNode[T](f: Node[T]): T = withoutDAL$newNode(f).get
   final private[this] def withoutDAL$newNode[T](f: Node[T]): Node[T] = {
     val plugin = new WithoutDALViolationCollector(mutable.Set.empty)
-    val ss = EvaluationContext.scenarioStack.withPluginTag(WithoutDALViolationCollector, plugin)
+    val ss = EvaluationContext.scenarioStack
+      .withPluginTag(EvaluationState.IN_WITHOUT_DAL_BLOCK, WithoutDALViolationCollector, plugin)
     val attachedInnerNode = EvaluationContext.given(ss, f)
     val mappedNode = attachedInnerNode.map(r =>
-      if (attachedInnerNode.accessedDAL) {
+      if (attachedInnerNode.accessedRuntimeEnv()) {
         val locations = plugin.getLocations
         val msg =
           s"DAL access detected in withoutDAL block ${if (locations.nonEmpty) s"at ${locations.mkString(", ")}" else ""} (some locations may be missed due to cache hits - re-run the node in the Graph debugger to find all locations of DAL calls)"

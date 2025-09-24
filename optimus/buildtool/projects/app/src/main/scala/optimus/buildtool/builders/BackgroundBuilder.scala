@@ -33,7 +33,6 @@ import java.nio.charset.StandardCharsets
 import java.time.{Instant, Duration => JDuration}
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Success
@@ -55,6 +54,7 @@ class BackgroundProcessBuilder protected (
     cmds: Seq[String],
     envVariablesToAdd: Map[String, String],
     envVariablesToClean: Seq[String],
+    envVariablesToRetain: Option[Set[String]],
     workingDir: Option[Directory],
     useCrumbs: Boolean
 ) extends BackgroundBuilder
@@ -74,6 +74,9 @@ class BackgroundProcessBuilder protected (
     workingDir.foreach(dir => builder.directory(dir.path.toFile))
 
     val env = builder.environment()
+    envVariablesToRetain.foreach { retain =>
+      env.asScala.keySet.toSeq.foreach { key => if (!retain(key)) env.remove(key) }
+    }
     envVariablesToAdd.foreach { case (k, v) => env.put(k, v) }
     envVariablesToClean.foreach(v => env.remove(v))
 
@@ -201,10 +204,19 @@ object BackgroundProcessBuilder {
       cmdLine: Seq[String],
       envVariablesToAdd: Map[String, String] = Map.empty,
       envVariablesToClean: Seq[String] = Nil,
+      envVariablesToRetain: Option[Set[String]] = None,
       workingDir: Option[Directory] = None,
       useCrumbs: Boolean
   ): BackgroundProcessBuilder =
-    new BackgroundProcessBuilder(id, logFile, cmdLine, envVariablesToAdd, envVariablesToClean, workingDir, useCrumbs)
+    new BackgroundProcessBuilder(
+      id,
+      logFile,
+      cmdLine,
+      envVariablesToAdd,
+      envVariablesToClean,
+      envVariablesToRetain,
+      workingDir,
+      useCrumbs)
 
   def lastLogLines(outputFile: FileAsset, n: Int): Seq[String] = {
     import org.apache.commons.io.input.ReversedLinesFileReader
@@ -218,7 +230,7 @@ object BackgroundProcessBuilder {
     @tailrec
     def readLogFile(totalLines: Int): Seq[String] = {
       val loadedLine = rlfReader.readLine()
-      if (totalLines < 1 || loadedLine == null) seqBuilder.result().to(Seq)
+      if (totalLines < 1 || loadedLine == null) seqBuilder.result().to(Seq).reverse
       else {
         seqBuilder += loadedLine
         readLogFile(totalLines - 1)

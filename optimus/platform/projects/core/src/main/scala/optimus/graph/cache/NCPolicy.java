@@ -12,7 +12,7 @@
 package optimus.graph.cache;
 
 import static optimus.graph.cache.DelayedXSFTProxyNode.canUseValue;
-import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScope;
+import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScopeAndEnv;
 import static optimus.graph.cache.NCSupport.matchXscenario;
 import java.io.Serial;
 import java.io.Serializable;
@@ -100,7 +100,9 @@ public abstract class NCPolicy implements Serializable {
     if (!nti.getCacheable()) return NCPolicy.DontCache;
     if (nti.isInternal() || (nti.snapFlags() & NodeTaskInfo.NOTNODE) != 0 || nti.isRecursive())
       return NCPolicy.Basic;
-    if (nti.isGroupCached()) return NCPolicy.Basic;
+    if (nti.isGroupCached())
+      // Currently grouped caches don't support XS and XSFT policies
+      return requestedPolicy.downgradeToBasic();
 
     return requestedPolicy;
   }
@@ -151,7 +153,7 @@ public abstract class NCPolicy implements Serializable {
     synchronized (scopePathToIDs) {
       scopeID = scopePathToIDs.computeIfAbsent(scopedPath, path -> scopePathToIDs.size());
     }
-    if (scopeID > 62) OGScheduler.log.error("Too many scoped paths: " + scopeID);
+    if (scopeID > 62) OGScheduler.log.error("Too many scoped paths: {}", scopeID);
     return scopeID;
   }
 
@@ -168,6 +170,16 @@ public abstract class NCPolicy implements Serializable {
   /** Returns new policy with path-independent policy set if one wasn't provide before */
   public NCPolicy withPathIndependentIfNotSet(NCPolicy scopeIndependent) {
     return this; // Since default is pathIndependent, it's always already set
+  }
+
+  /** Returns the policy that does not have XS or XSFT in it, hoping to remove this API */
+  public NCPolicy downgradeToBasic() {
+    if (this == XS || this == XSFT) return Basic;
+    if (this instanceof NCPolicyComposite composite) {
+      var cn = composite.toCompositeN();
+      return cn.downgradeToBasic();
+    }
+    return this;
   }
 
   /** Every policy other than composite is always pathIndependent */
@@ -274,7 +286,7 @@ public abstract class NCPolicy implements Serializable {
   }
 
   private static class NCPolicyMoniker implements Serializable {
-    String name;
+    private final String name;
 
     NCPolicyMoniker(String name) {
       this.name = name;
@@ -282,7 +294,7 @@ public abstract class NCPolicy implements Serializable {
 
     @Serial
     Object readResolve() {
-      return NCPolicy.forName(name);
+      return name == null ? NCPolicy.Basic : NCPolicy.forName(name);
     }
   }
 
@@ -522,7 +534,8 @@ public abstract class NCPolicy implements Serializable {
         ScenarioStack k_ss = key.scenarioStack();
         ScenarioStack v_ss = cValue.scenarioStack();
         if (cValue.isDone()) {
-          return isDirectlyReusableWRTCancelScope(key, cValue) && matchXscenario(key, k_ss, v_ss);
+          return isDirectlyReusableWRTCancelScopeAndEnv(key, cValue)
+              && matchXscenario(key, k_ss, v_ss);
         } else if (Settings.delayResolveXSCache) {
           // Quick check of current recorded tweakables to see if this node is not a match
           var partialMatch = NCSupport.partialMatchXS(cValue, k_ss, v_ss);

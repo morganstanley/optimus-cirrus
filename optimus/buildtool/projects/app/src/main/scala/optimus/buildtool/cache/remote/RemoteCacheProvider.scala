@@ -65,7 +65,7 @@ import optimus.platform._
     val forcedReadThroughStores: Set[DHTStore] = cmdLine.crossRegionReadThroughDHTLocations.apar
       .withFilter(!_.equalsIgnoreCase(NoneArg))
       .map { location =>
-        new DHTStore(pathBuilder, DHTStore.zkClusterType(location), version, cacheMode, DHTStore.ZkBuilder(location))
+        DHTStore(pathBuilder, DHTStore.zkClusterType(location), version, cacheMode, DHTStore.ZkBuilder(location))
       }
       .toSet
     if (forcedReadThroughStores.nonEmpty) {
@@ -102,7 +102,7 @@ import optimus.platform._
           }
           .getOrElse(DHTStore.ZkBuilder(dht)) // custom ZK path
 
-        new DHTStore(pathBuilder, clusterType, version, cacheMode, clientBuilder)
+        DHTStore(pathBuilder, clusterType, version, cacheMode, clientBuilder)
 
     }
     getCrossRegionPopulatingCache(store, cacheMode, version)

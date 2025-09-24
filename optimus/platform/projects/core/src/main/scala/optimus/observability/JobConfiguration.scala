@@ -22,7 +22,16 @@ import optimus.platform.storable.HasDefaultUnpickleableValue
  * parameters that can be attached to a [[ScenarioStack]].
  */
 @EmbeddableMetaDataAnnotation(isTrait = true)
-@embeddable trait JobConfiguration extends Embeddable
+@embeddable trait JobConfiguration extends Embeddable {
+
+  /**
+   * Returns the stable calculation tags associated with this job configuration.
+   *
+   * @return The stable calculation tags for this job configuration.
+   *         Returns [[StableCalcTags.Missing]] by default if no tags are specified.
+   */
+  def stableCalcTags: StableCalcTags = StableCalcTags.Missing
+}
 object JobConfiguration extends EmbeddableTraitCompanionBase with HasDefaultUnpickleableValue[JobConfiguration] {
   def defaultUnpickleableValue: JobConfiguration = MissingJobConfiguration
 }

@@ -36,7 +36,9 @@ public class AwaitStackManagement {
       }
   }
 
-  private AwaitableContext ec;
+  private final AwaitableContext ec;
+  // If not using VT, assume one instance per thread.
+  private final long threadAwaitData;
 
   /*  Memory layout in C++ of thread-local awaitData block:
             long methodID
@@ -45,17 +47,10 @@ public class AwaitStackManagement {
             long stackId[MAX_AWAIT_STACKS+1];
   */
 
-  private final long awaitData;
-
-  private void putAwaitData(int i, long v) {
-    U.putLong(awaitData + i * 8, v);
-  }
-
   AwaitStackManagement(AwaitableContext ec) {
-    long ad = AsyncProfilerIntegration.getAwaitDataAddress();
-    U.putLong(ad, runChainMethodID);
-    awaitData = ad + 8;
     this.ec = ec;
+    this.threadAwaitData =
+        DiagnosticSettings.useVirtualThreads ? 0 : AsyncProfilerIntegration.getAwaitDataAddress();
 
     // TODO (OPTIMUS-55070): Remove with _savedAwaitStacks race condition is fixed in profiler.cpp
     // For now, save a frame gratuitously in this thread to assure that flightRecorder.cpp sees the
@@ -63,6 +58,25 @@ public class AwaitStackManagement {
     work[0] = overflowMarker;
     work[1] = 0;
     AsyncProfilerIntegration.saveAwaitFrames(work, 1);
+  }
+
+  private static int METHOD_ID_OFFSET = 0;
+  private static int TASK_ID_OFFSET = 1;
+  private static int SAMPLED_TASK_ID_OFFSET = 2;
+  private static int STACK_HASHES_OFFSET = 3;
+
+  private void putAwaitData(long awaitData, int offset, long v) {
+    U.putLong(awaitData + offset * 8, v);
+  }
+
+  private long getAwaitData(long awaitData, int offset) {
+    return U.getLong(awaitData + offset * 8);
+  }
+
+  private long awaitDataAddress() {
+    return DiagnosticSettings.useVirtualThreads
+        ? AsyncProfilerIntegration.getAwaitDataAddress()
+        : threadAwaitData;
   }
 
   // Leaky map of await stacks that have already been saved.
@@ -87,13 +101,17 @@ public class AwaitStackManagement {
   private static long overflowMarker = 0;
   private static String overflowName = "[overflow]";
 
+  private static final int MAX_AWAIT_STACKS;
+
   static {
     if (AsyncProfilerIntegration.ensureLoadedIfEnabled()) {
       runChainMethodID =
           AsyncProfilerIntegration.getMethodID(
               AwaitStackManagement.class, "runChain", "(Loptimus/graph/Launchable;)V");
       overflowMarker = AsyncProfilerIntegration.saveString(overflowName);
-    }
+      var slots = DiagnosticSettings.useVirtualThreads ? 12289 : 0;
+      MAX_AWAIT_STACKS = AsyncProfilerIntegration.initAwaitData(slots);
+    } else MAX_AWAIT_STACKS = 0;
   }
 
   // Launcher stack hash id that will replace the insertion id
@@ -236,11 +254,15 @@ public class AwaitStackManagement {
     return false;
   }
 
-  public void maybeSaveAwaitStack(Launchable launchable) {
-    if (savedIfNecessary) return;
+  public synchronized void maybeSaveAwaitStack(Launchable launchable) {
+    maybeSaveAwaitStack(awaitDataAddress(), launchable);
+  }
+
+  public synchronized void maybeSaveAwaitStack(long awaitData, Launchable launchable) {
+    if (savedIfNecessary || awaitData == 0) return;
 
     // If sampling occurred, will have been set to our taskId
-    long signal = U.getLong(awaitData + 8);
+    long signal = getAwaitData(awaitData, SAMPLED_TASK_ID_OFFSET);
     if (signal != launchable.getId()) return;
 
     savedIfNecessary = true;
@@ -383,7 +405,6 @@ public class AwaitStackManagement {
     }
   }
 
-  private static int MAX_AWAIT_STACKS = 10; // matches profiler.h
   private long[] currentHashes = new long[MAX_AWAIT_STACKS + 1];
   private int[] currentTaskIds = new int[MAX_AWAIT_STACKS + 1];
   private long[] insertionIds = new long[MAX_AWAIT_STACKS + 1];
@@ -392,53 +413,61 @@ public class AwaitStackManagement {
   // This gets called before every awaitable is run.  It does only writes into thread-specific
   // memory
   // and in particular no JNI.
-  private void beforeRun(Launchable launchable, long insertionID) {
+  private synchronized void beforeRun(long awaitData, Launchable launchable, long insertionID) {
     long hash = launchable.getLauncherStackHash();
     int taskId = launchable.getId();
-    int a = 0;
+    putAwaitData(awaitData, METHOD_ID_OFFSET, runChainMethodID);
     // If we're sampled, a-p will put this taskId into the next field.
-    putAwaitData(a++, taskId);
-    putAwaitData(a++, 0);
+    putAwaitData(awaitData, TASK_ID_OFFSET, taskId);
+    putAwaitData(awaitData, SAMPLED_TASK_ID_OFFSET, 0);
 
     irh += 1;
+    int stackHashOffset = STACK_HASHES_OFFSET;
     if (irh < MAX_AWAIT_STACKS) {
       currentHashes[irh] = hash;
       currentTaskIds[irh] = taskId;
       insertionIds[irh] = insertionID;
       // Now fill the stackId array with hashes from each java frame-delimited section
-      for (int i = 0; i <= irh; i++) putAwaitData(a++, currentHashes[irh - i]);
+      for (int i = 0; i <= irh; i++)
+        putAwaitData(awaitData, stackHashOffset++, currentHashes[irh - i]);
       // and terminate with zero
-      putAwaitData(a++, 0);
+      putAwaitData(awaitData, stackHashOffset++, 0);
     } else {
-      putAwaitData(a++, hash);
-      putAwaitData(a++, 0);
+      putAwaitData(awaitData, TASK_ID_OFFSET, hash);
+      putAwaitData(awaitData, stackHashOffset++, 0);
     }
 
     savedIfNecessary = false;
   }
 
-  private void afterRun(Launchable launchable) {
-    maybeSaveAwaitStack(launchable);
+  private void afterRun(long awaitData, Launchable launchable) {
+    maybeSaveAwaitStack(awaitData, launchable);
     irh -= 1;
-    int a = 0;
+    int stackHashsOffset = STACK_HASHES_OFFSET;
     if (irh >= 0 && irh < MAX_AWAIT_STACKS) {
-      putAwaitData(a++, currentTaskIds[irh]);
-      putAwaitData(a++, 0);
-      for (int i = 0; i <= irh; i++) putAwaitData(a++, currentHashes[irh - i]);
-      putAwaitData(a++, 0);
+      putAwaitData(awaitData, TASK_ID_OFFSET, currentTaskIds[irh]);
+      putAwaitData(awaitData, SAMPLED_TASK_ID_OFFSET, 0);
+      for (int i = 0; i <= irh; i++)
+        putAwaitData(awaitData, stackHashsOffset++, currentHashes[irh - i]);
+      putAwaitData(awaitData, stackHashsOffset++, 0);
     } else {
-      putAwaitData(a++, 0);
-      putAwaitData(a++, 0);
+      putAwaitData(awaitData, stackHashsOffset++, 0);
+      putAwaitData(awaitData, stackHashsOffset++, 0);
     }
     savedIfNecessary = false;
   }
 
   void runChain(Launchable launchable) {
-    beforeRun(launchable, runChainMethodID);
+    long awaitData = awaitDataAddress();
+    if (awaitData == 0) {
+      launchable.launch(ec);
+      return;
+    }
+    beforeRun(awaitData, launchable, runChainMethodID);
     try {
       launchable.launch(ec);
     } finally {
-      afterRun(launchable);
+      afterRun(awaitData, launchable);
     }
   }
 

@@ -37,18 +37,12 @@ final case class RunConfInventoryEntry(
 object RunConfInventoryEntry {
   private val sourceQualifier = "sourceFile="
 
-  // backward-compatibility for inventory files written by older OBT versions
-  private def upgradeName(possiblyScopedName: String): String =
-    possiblyScopedName.split('.').last
-
   def parseFrom(str: String): Option[RunConfInventoryEntry] =
     PartialFunction.condOpt(str.split("/", 4)) {
-      case Array(scopeId, possiblyScopedName, RunConfType(tpe), relativeSourcePath) if !scopeId.startsWith("#") =>
-        val name = upgradeName(possiblyScopedName)
+      case Array(scopeId, name, RunConfType(tpe), relativeSourcePath) if !scopeId.startsWith("#") =>
         RunConfInventoryEntry(ScopeId.parse(scopeId), name, tpe, Some(relativeSourcePath.stripPrefix(sourceQualifier)))
 
-      case Array(scopeId, possiblyScopedName, RunConfType(tpe)) if !scopeId.startsWith("#") =>
-        val name = upgradeName(possiblyScopedName)
+      case Array(scopeId, name, RunConfType(tpe)) if !scopeId.startsWith("#") =>
         RunConfInventoryEntry(ScopeId.parse(scopeId), name, tpe, None)
     }
 }

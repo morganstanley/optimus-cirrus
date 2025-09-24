@@ -13,8 +13,8 @@ package optimus.buildtool.generators
 
 import java.nio.file.FileSystems
 import java.nio.file.Files
-
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
@@ -43,8 +43,9 @@ import scala.collection.immutable.SortedMap
 import scala.reflect._
 
 @entity trait SourceGenerator {
-  def artifactType: GeneratedSourceArtifactType
-  def tpe: GeneratorType = GeneratorType(artifactType.name)
+  val artifactType: GeneratedSourceArtifactType = ArtifactType.GeneratedSource
+  protected def generatorType: String
+  def tpe: GeneratorType = GeneratorType(generatorType)
 
   type Inputs <: SourceGenerator.Inputs
 
@@ -155,6 +156,7 @@ object SourceGenerator {
   }
 
   @async private[generators] def createJar(
+      generatorType: GeneratorType,
       generatorName: String,
       sourcePath: RelativePath,
       messages: Seq[CompilationMessage],
@@ -163,15 +165,22 @@ object SourceGenerator {
       tempDir: Directory = null
   )(f: ConsistentlyHashedJarOutputStream => Unit = _ => ()): Seq[CompilationMessage] = {
     import optimus.buildtool.artifacts.JsonImplicits.generatedSourceMetadataValueCodec
-    Jars.createJar(jar, GeneratedSourceMetadata(generatorName, sourcePath, messages, hasErrors), Option(tempDir))(f)
+    Jars.createJar(
+      jar,
+      GeneratedSourceMetadata(generatorType, generatorName, sourcePath, messages, hasErrors),
+      Option(tempDir)
+    )(f)
     messages
   }
 
   // Ensure files exist on disk in their declared paths, and write content to a temporary location if not
-  @node def validateFiles(contentRoot: Directory, content: SortedMap[FileAsset, HashedContent]): ValidatedFiles = {
+  @node def validateFiles(
+      contentRoot: Directory,
+      content: SortedMap[FileAsset, HashedContent],
+      tempDir: Directory = Directory.temporary()
+  ): ValidatedFiles = {
     if (content.keySet.forall(_.existsUnsafe)) ValidatedFiles(contentRoot, content.keySet.toIndexedSeq)
     else {
-      val tempDir = Directory.temporary()
       val tempFiles = content.toIndexedSeq.apar.map { case (f, hc) =>
         val tempFile = tempDir.resolveFile(contentRoot.relativize(f))
         Utils.createDirectories(tempFile.parent)

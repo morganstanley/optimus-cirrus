@@ -17,7 +17,6 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.ResolverDefinition.ResolverType
 
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 import scala.collection.compat._
 import scala.util.control.NonFatal
 

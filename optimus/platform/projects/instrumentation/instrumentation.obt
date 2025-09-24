@@ -23,11 +23,14 @@ main {
       optimus.platform.utils
     ]
     libs = [
+      com.github.plokhotnyuk.jsoniter-scala.jsoniter-scala-core,
+      com.github.plokhotnyuk.jsoniter-scala.jsoniter-scala-macros,
       java-jq,
       optimus.async-profiler,
       ossjava.commons-io,
       ossjava.httpcomponents-client.mime,
       ossjava.metrics-core
+      ossscala.apache-kafka
     ]
   }
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.mbeans
@@ -39,6 +42,7 @@ main {
 }
 
 test {
+  open = true
   hasMacros = false
   compile {
     modules += optimus.platform.instrumentation

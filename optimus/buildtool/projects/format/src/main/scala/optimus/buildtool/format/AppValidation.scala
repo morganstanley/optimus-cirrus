@@ -17,7 +17,6 @@ import optimus.buildtool.runconf.Validator
 
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
 
 final case class AppValidator(rules: Seq[Rule]) extends Validator[AppRunConf] {
   def validationErrors(app: AppRunConf): Seq[String] =

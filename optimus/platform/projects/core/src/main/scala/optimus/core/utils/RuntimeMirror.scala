@@ -22,11 +22,11 @@ import optimus.core.MonitoringBreadcrumbs
  * recompute it every time as they are quite expensive.
  */
 object RuntimeMirror {
-
+  private val log = getLogger(this)
   private val mirrors = new ConcurrentHashMap[ClassLoader, RuntimeMirror]()
 
   def forClass(cls: Class[_]): Mirror = mirrorForClass(cls).mirror
-  def mirrorForClass(cls: Class[_]): RuntimeMirror = {
+  private def mirrorForClass(cls: Class[_]): RuntimeMirror = {
     // getClassLoader returns null when the bootstrap class loader was used
     // in those cases we use the system class loader instead
     val classLoader = Option(cls.getClassLoader).getOrElse(ClassLoader.getSystemClassLoader)
@@ -42,9 +42,6 @@ object RuntimeMirror {
 }
 
 class RuntimeMirror(classLoader: ClassLoader) {
-
-  private val log = getLogger(this)
-
   val mirror: Mirror = universe.runtimeMirror(classLoader)
   private val modules = new ConcurrentHashMap[String, AnyRef]()
 
@@ -67,7 +64,7 @@ class RuntimeMirror(classLoader: ClassLoader) {
         try searchForInnerModule(originalName)
         catch {
           case ex: Exception =>
-            log.debug(s"Couldn't find module $originalName with Java reflection, trying Scala", ex)
+            RuntimeMirror.log.debug(s"Couldn't find module $originalName with Java reflection, trying Scala", ex)
             scalaFallback(originalName, callingClass)
         }
     }

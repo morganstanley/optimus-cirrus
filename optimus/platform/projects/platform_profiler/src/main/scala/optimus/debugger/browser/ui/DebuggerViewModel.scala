@@ -253,7 +253,9 @@ private[debugger] class DebuggerViewModel(val interpreter: HtmlInterpreters.Type
     if (hb.cfg.xsTweaks) writeXSTweaks(hb)
 
     if (hb.cfg.result) {
-      hb.separated(2) {
+      hb.namedGroup("Result", separateBy = 2) {
+        hb ++= ResultHeader("Result")
+        hb ++= NewLine
         hb ++= PreFormatted(review.task.resultDisplayString, hb.cfg.wrap)
 
         review.task.resultKey() match {

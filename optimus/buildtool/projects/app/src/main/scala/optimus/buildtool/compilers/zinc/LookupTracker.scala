@@ -25,7 +25,6 @@ import xsbti.VirtualFileRef
 import xsbti.api.AnalyzedClass
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 final case class SingleRawLookup(classname: String, file: Option[String])
 

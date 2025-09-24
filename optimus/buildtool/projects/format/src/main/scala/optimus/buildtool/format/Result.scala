@@ -14,7 +14,6 @@ package optimus.buildtool.format
 import com.typesafe.config._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 sealed trait Result[+A] {
   val problems: Seq[Message]
@@ -92,6 +91,13 @@ object Result {
 
   def traverseWithFilter[A, B](as: Result[Seq[A]])(op: A => Result[B])(f: A => Boolean): Result[Seq[B]] =
     as.flatMap(s => traverse(s.filter(f))(op))
+
+  def fromOption[A](op: => Option[A], ifMissing: => Seq[Message]): Result[A] = {
+    op match {
+      case Some(value) => Success[A](value)
+      case None        => Failure(ifMissing)
+    }
+  }
 
   def tryWith[A](file: ObtFile, line: Int)(op: => Result[A]): Result[A] =
     try op

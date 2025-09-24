@@ -26,13 +26,14 @@ import optimus.buildtool.config.RelaxedIdString
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.utils.OptimusBuildToolProperties
 
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
-import scala.collection.immutable.Seq
 
 object ConfigUtils {
+  def strictValidation = OptimusBuildToolProperties.getOrFalse("private.strictValidation")
 
   implicit class ConfOps(conf: Config) {
     private def asObject(
@@ -131,6 +132,26 @@ object ConfigUtils {
       val extraKeys = keys(origin).getOrElse(Nil).toSet.filter(filter) -- expected.all -- Keys.ignoredKeysForValidation
       def msg(key: String) = s"Unrecognized key: '$key', possible ones: ${expected.order.mkString(", ")}"
       extraKeys.map(k => origin.warningAt(conf.getValue(k), msg(k))).to(Seq)
+    }
+
+    def checkRequiredKeys(
+        origin: ObtFile,
+        expected: Keys.KeySet,
+        filter: String => Boolean = _ => true
+    ): Seq[Message] = {
+      val missingKeys =
+        expected.all -- keys(origin).getOrElse(Nil).toSet.filter(filter) -- Keys.ignoredKeysForValidation
+      def msg(key: String) = s"Missing required key: '$key'"
+      missingKeys.map(k => origin.warningAt(conf.getValue(k), msg(k))).to(Seq)
+    }
+
+    def checkRequiredInternalKeys(
+        origin: ObtFile,
+        expected: Keys.KeySet,
+        filter: String => Boolean = _ => true
+    ): Seq[Message] = {
+      if (strictValidation) checkRequiredKeys(origin, expected, filter)
+      else Nil
     }
 
     def checkUniqueValuesForKey(origin: ObtFile, topLevelKey: String, key: String): Seq[Message] = {

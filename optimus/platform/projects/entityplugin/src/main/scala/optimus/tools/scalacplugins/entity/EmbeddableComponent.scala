@@ -35,13 +35,16 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
     with ast.TreeDSL
     with WithOptimusPhase {
   import global._, CODE._
-
   def newTransformer0(unit: CompilationUnit) = new EmbeddableTransformer(unit)
 
   /**
    * TODO (OPTIMUS-0000): Has bugs, as object entity extends someEntity is really broken
    */
   class EmbeddableTransformer(unit: CompilationUnit) extends TypingTransformer(unit) {
+    private final lazy val strictEqualsIsActive: Tree =
+      q"${PluginSupport.PlatformPluginHelpers}.${PluginSupport.localNames.strictEqualsIsActive}"
+    private final lazy val strictEquals: Tree =
+      q"${PluginSupport.PlatformPluginHelpers}.${PluginSupport.localNames.strictEquals}"
 
     /** Ideally we should use @intern on the class itself */
     private def shouldInternValues(module: Symbol): Boolean = {
@@ -63,41 +66,43 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       } else super.transform(dd)
     }
 
-    override def transform(tree: Tree): Tree = tree match {
-      case clz: ClassDef if clz.symbol.isCaseClass && (isEmbeddable(clz.symbol) || isStable(clz.symbol)) =>
-        val newClass = handleClassDef(tree, clz)
-        super.transform(newClass)
+    override def transform(tree: Tree): Tree = {
+      def shouldTransform(s: Symbol) = isEmbeddable(s) || isStable(s)
+      tree match {
+        case clz: ClassDef if clz.symbol.isCaseClass && shouldTransform(clz.symbol) =>
+          val newClass = handleClassDef(clz)
+          super.transform(newClass)
 
-      case impl: ImplDef if impl.symbol.baseClasses.exists(isEmbeddable) && !isEmbeddable(impl.symbol) =>
-        alarm(
-          OptimusErrors.EMBEDDABLE_SUBTYPE,
-          impl.pos,
-          impl.symbol.baseClasses.find(isEmbeddable).get.name.toString,
-          impl.name.toString)
-        super.transform(impl)
+        case impl: ImplDef if impl.symbol.baseClasses.exists(isEmbeddable) && !isEmbeddable(impl.symbol) =>
+          alarm(
+            OptimusErrors.EMBEDDABLE_SUBTYPE,
+            impl.pos,
+            impl.symbol.baseClasses.find(isEmbeddable).get.name.toString,
+            impl.name.toString)
+          super.transform(impl)
 
-      case md: ModuleDef if shouldInternValues(md.symbol) =>
-        val newModDef = deriveModuleDef(md)(deriveTemplate(_) { body =>
-          markEmbeddableAsInterning(md.symbol) :: body
-        })
-        super.transform(newModDef)
+        case md: ModuleDef if shouldInternValues(md.symbol) =>
+          val newModDef = deriveModuleDef(md)(deriveTemplate(_) { body =>
+            markEmbeddableAsInterning(md.symbol) :: body
+          })
+          super.transform(newModDef)
 
-      case dd @ DefDef(_, nme.hashCode_, _, List(Nil), _, _) if dd.symbol.owner.hasAttachment[StableAttachment] =>
-        buildHashCode(dd)
+        case dd @ DefDef(_, nme.hashCode_, _, List(Nil), _, _) if shouldTransform(dd.symbol.owner) =>
+          buildHashCode(dd)
 
-      case dd @ DefDef(_, nme.equals_, Nil, List(List(param: ValDef)), _, _)
-          if dd.symbol.owner.hasAttachment[StableAttachment] =>
-        buildEquals(dd, param)
+        case dd @ DefDef(_, nme.equals_, Nil, List(List(param: ValDef)), _, _) if shouldTransform(dd.symbol.owner) =>
+          buildEquals(dd, param)
 
-      case dd @ DefDef(_, names.apply, _, _, _, _)
-          if dd.symbol.owner.companion.isCaseClass && isEmbeddable(dd.symbol.owner.companion) =>
-        wrapInIntern(dd)
-      case dd @ DefDef(_, names.copy, _, _, _, _) if dd.symbol.owner.isCaseClass && isEmbeddable(dd.symbol.owner) =>
-        wrapInIntern(dd)
-      case _ => super.transform(tree)
+        case dd @ DefDef(_, names.apply, _, _, _, _)
+            if dd.symbol.owner.companion.isCaseClass && isEmbeddable(dd.symbol.owner.companion) =>
+          wrapInIntern(dd)
+        case dd @ DefDef(_, names.copy, _, _, _, _) if dd.symbol.owner.isCaseClass && isEmbeddable(dd.symbol.owner) =>
+          wrapInIntern(dd)
+        case _ => super.transform(tree)
+      }
     }
 
-    private def handleClassDef(tree: global.Tree, clz: global.ClassDef) = {
+    private def handleClassDef(clz: global.ClassDef): global.ClassDef = {
       // unfortunately the annotations on the params don't make it into the accessor methods
       val ignoredParams: Set[String] =
         clz.symbol.asClass.primaryConstructor.paramss.head.collect {
@@ -111,20 +116,24 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
           m.asMethod
       }.toList
 
+      // We now support @embeddables that are "rich enumerations" (i.e. classes that extend Super.Val())
+      // And we want to make sure that when it comes to treatment of inherited equals/hashcode, we are
+      // dealing with these correctly regarding alarms.
+      val isEnumEmbeddable = clz.symbol.baseClasses.contains(Enumeration_Value)
+
       val stable: StableAttachment = new StableAttachment(isEmbeddable(clz.symbol), isStable(clz.symbol), params)
       var okToProceed = true
-
       if (!useOptimusHashCodeMechanismsForEmbeddable && stable.embeddable && !stable.stable && ignoredParams.nonEmpty) {
         alarm(OptimusErrors.EMBBEDDABLE_WITH_IGNORED, clz.pos)
         okToProceed = false
       }
 
       // for the moment we will allow @stable @embeddable to ease the migration
-      // when the migration is complete we may consider if all @embeddabes are @stable
+      // when the migration is complete we may consider if all @embeddables are @stable
 //
 //      //its bad, but will not affect the rewrite, so we can leave okToProceed alone
 //      if (stable.embeddable && isStable(clz.symbol))
-//        alarm(OptimusErrors.NOT_STABLE_AND_EMBBEDDABLE, clz.pos)
+//        alarm(OptimusErrors.NOT_STABLE_AND_EMBEDDABLE, clz.pos)
 
       // its bad, but will not affect the rewrite, so we can leave okToProceed alone
       // are all of the parameters ignored?
@@ -143,10 +152,22 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       } match {
         case None =>
           okToProceed = false
-          if (stable.embeddable)
-            alarm(OptimusErrors.NO_METHOD_IN_EMBEDDABLE_CASE_CLASS, clz.pos, "equals")
           if (stable.stable)
-            alarm(OptimusErrors.NO_METHOD_IN_STABLE_CASE_CLASS, clz.pos, "equals")
+            alarm(OptimusErrors.NO_METHOD_IN_STABLE_CASE_CLASS, clz.pos, nme.equals_)
+          else if (stable.embeddable && !isEnumEmbeddable) {
+            alarm(OptimusErrors.NO_METHOD_IN_EMBEDDABLE_CASE_CLASS, clz.pos, nme.equals_)
+            // Also enforce that the type that implements the equals method
+            // is an @embeddable or Enumeration#Value
+            clz.symbol.baseClasses
+              .find { base =>
+                val sym = base.info.decl(nme.equals_)
+                sym != NoSymbol && !sym.isAbstract
+              }
+              .foreach { base =>
+                if (!isEmbeddable(base) && base != Enumeration_Value)
+                  alarm(OptimusErrors.EMBEDDABLE_WITH_UNSTABLE_EQUALS, clz.pos, base.tpe, clz.tpe)
+              }
+          }
         case Some(sym) =>
           if (!sym.isSynthetic) {
             okToProceed = false
@@ -160,23 +181,23 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       clz.symbol.info.decl(nme.hashCode_).alternatives.find { _.paramss == List(Nil) } match {
         case None =>
           okToProceed = false
-          if (stable.embeddable)
-            alarm(OptimusErrors.NO_METHOD_IN_EMBEDDABLE_CASE_CLASS, clz.pos, "hashCode")
+          if (stable.embeddable && !isEnumEmbeddable)
+            alarm(OptimusErrors.NO_METHOD_IN_EMBEDDABLE_CASE_CLASS, clz.pos, nme.hashCode_)
           if (stable.stable)
-            alarm(OptimusErrors.NO_METHOD_IN_STABLE_CASE_CLASS, clz.pos, "hashCode")
+            alarm(OptimusErrors.NO_METHOD_IN_STABLE_CASE_CLASS, clz.pos, nme.hashCode_)
         case Some(sym) =>
           if (!sym.isSynthetic) {
             if (stable.embeddable)
               alarm(OptimusErrors.NO_CUSTOM_METHOD_IN_EMBEDDABLE_CASE_CLASS, clz.pos, nme.hashCode_)
             if (stable.stable)
-              alarm(OptimusErrors.NO_CUSTOM_METHOD_IN_STABLE_CASE_CLASS, clz.pos, nme.hashCode)
+              alarm(OptimusErrors.NO_CUSTOM_METHOD_IN_STABLE_CASE_CLASS, clz.pos, nme.hashCode_)
           }
       }
       // There will be some edge cases where there is a child class if it overrides hashcode or equals
       // and we can't just make the method final not as the typechecker will not have to run on the child class
       // and the message would be confusing anyway
       // if safe if th class is final, or at least there ar no subclasses
-      // we allow final case class ... or sealed case class ...., but only if its sealed and there are no chlld classes
+      // we allow final case class ... or sealed case class ...., but only if its sealed and there are no child classes
       // the sealed form is to allow us to get around mocking, which requires the class is non final
       // but we can allow mocking to use this back door, and still have compile time safety
       if (!clz.symbol.isFinal && !(clz.symbol.isSealed && clz.symbol.knownDirectSubclasses.isEmpty)) {
@@ -242,146 +263,163 @@ class EmbeddableComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       }
       result
     }
-    private def buildEquals(dd: global.DefDef, param: ValDef) = try {
+
+    // This method transforms an existing def equals into one of two implementations:
+    // 1- If the owner has the StableAttachment, we generate an optimus-specific implementation
+    //    that aims to be more efficient than the default scala generated one
+    // 2- Otherwise, since the absence of the StableAttachment implies that we are dealing with
+    //    a custom equals implementation, we wrap that custom implementation with a call to
+    //    PluginHelpers.strictEquals which enforces strict-equality if it is active.
+    //    Strict equality is active during interning of values.
+    private def buildEquals(dd: global.DefDef, param: ValDef): global.DefDef = try {
       val ownerSymbol = dd.symbol.owner
-      val stable = ownerSymbol.attachments.get[StableAttachment].get
-      val res = deriveDefDef(dd) { _ =>
-        if (stable.hasParams) {
-          val newMethod = localTyper.typedPos(dd.pos) {
+      ownerSymbol.attachments.get[StableAttachment].map { stable =>
+        // We have a class that is marked as stable which means we can generate
+        // our own equals in the way we want.
+        val res = deriveDefDef(dd) { _ =>
+          if (stable.hasParams) {
+            localTyper.typedPos(dd.pos) {
 
-            // we order the checks that we apply in increasing cost
-            // 1 - primitive values - they are really cheap
-            // 2 - String - very common and should be cheap
-            // 3 - @embeddable, @stable @entity and @event - should all have fast hashcode and equals
-            // 4 - the rest
-            def order(param: (global.Symbol, RunId)): RunId = {
-              val (sym, pos) = param
-              val tpe = sym.tpe
-              val complex =
-                if (tpe.dealias.typeSymbol.isPrimitiveValueClass) 0
-                else if (tpe =:= typeOf[String]) 1
-                else if (isEmbeddable(sym) || isStable(sym) || isEntityOrEvent(sym)) 2
-                else 3
-              complex * 1000 + pos
+              // we order the checks that we apply in increasing cost
+              // 1 - primitive values - they are really cheap
+              // 2 - String - very common and should be cheap
+              // 3 - @embeddable, @stable @entity and @event - should all have fast hashcode and equals
+              // 4 - the rest
+              def order(param: (global.Symbol, RunId)): RunId = {
+                val (sym, pos) = param
+                val tpe = sym.tpe
+                val complex =
+                  if (tpe.dealias.typeSymbol.isPrimitiveValueClass) 0
+                  else if (tpe =:= typeOf[String]) 1
+                  else if (isEmbeddable(sym) || isStable(sym) || isEntityOrEvent(sym)) 2
+                  else 3
+                complex * 1000 + pos
+              }
+
+              val fields = stable.params.zipWithIndex.sortBy(order).map(_._1)
+
+              val that = dd.symbol
+                .newVariable(freshTermName("equals$that")(unit.fresh), dd.pos.focus) setInfo ownerSymbol.tpe
+              val other = newValDef(that, REF(param.symbol) AS ownerSymbol.tpe)()
+
+              val identical: Tree = This(ownerSymbol) OBJ_EQ Ident(that)
+              val hashEquals = Apply(
+                PluginSupport.equalsAvoidingZero,
+                List[Tree](Select(This(ownerSymbol), stable.hashcode), Select(Ident(that), stable.hashcode)))
+              val quickChecks = fields map {
+                case param if param.tpe.dealias.typeSymbol.isPrimitiveValueClass =>
+                  Apply(PluginSupport.equals, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
+                case param =>
+                  val method =
+                    if (isEntityOrEvent(param)) PluginSupport.canEqualStorable
+                    else PluginSupport.canEqual
+                  Apply(method, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
+              }
+              val deepChecks = fields collect {
+                case param if !param.tpe.dealias.typeSymbol.isPrimitiveValueClass =>
+                  Apply(PluginSupport.equals, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
+              }
+              val calcEquals = Block(List(other), identical OR AND(hashEquals :: quickChecks ::: deepChecks: _*))
+
+              BLOCK(
+                IF(REF(param.symbol) IS_OBJ ownerSymbol.tpe) THEN {
+                  calcEquals
+                } ELSE FALSE
+              )
             }
-
-            val fields = stable.params.zipWithIndex.sortBy(order).map(_._1)
-
-            val that = dd.symbol
-              .newVariable(freshTermName("equals$that")(unit.fresh), dd.pos.focus) setInfo ownerSymbol.tpe
-            val other = newValDef(that, REF(param.symbol) AS ownerSymbol.tpe)()
-
-            val identical: Tree = This(ownerSymbol) OBJ_EQ Ident(that)
-            val hashEquals = Apply(
-              PluginSupport.equalsAvoidingZero,
-              List[Tree](Select(This(ownerSymbol), stable.hashcode), Select(Ident(that), stable.hashcode)))
-            val quickChecks = fields map {
-              case param if param.tpe.dealias.typeSymbol.isPrimitiveValueClass =>
-                Apply(PluginSupport.equals, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
-              case param =>
-                val method =
-                  if (isEntityOrEvent(param)) PluginSupport.canEqualStorable
-                  else PluginSupport.canEqual
-                Apply(method, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
-            }
-            val deepChecks = fields collect {
-              case param if !param.tpe.dealias.typeSymbol.isPrimitiveValueClass =>
-                Apply(PluginSupport.equals, List[Tree](Select(This(ownerSymbol), param), Select(Ident(that), param)))
-            }
-            val calcEquals = Block(List(other), identical OR AND(hashEquals :: quickChecks ::: deepChecks: _*))
-
-            BLOCK(
-              IF(REF(param.symbol) IS_OBJ ownerSymbol.tpe) THEN {
-                calcEquals
-              } ELSE FALSE
-            )
+          } else {
+            // for parameterless @embeddable or @stable case class we just check that the passed in arg
+            // is the our type.
+            localTyper.typedPos(dd.pos)(REF(param.symbol) IS_OBJ ownerSymbol.tpe)
           }
-          newMethod
-        } else {
-          localTyper.typedPos(dd.pos)(REF(param.symbol) IS_OBJ ownerSymbol.tpe)
+        }
+
+        res.setSymbol(dd.symbol)
+        res.setType(dd.tpe)
+        res.setAttachments(dd.attachments)
+        res
+      } getOrElse {
+        // This is a custom equals method which we need to redirect to strictEquals
+        // if active.
+        deriveDefDef(dd) { rhs =>
+          localTyper.typedPos(dd.pos) {
+            q"if ($strictEqualsIsActive) $strictEquals(this.asInstanceOf[Product], ${param.symbol}) else $rhs"
+          }
         }
       }
-      // it would be nice to be able to make this final
-      // but we can only do this for final classes - where the mocking doesnt write its own hashcode and equals
-      // based on identity
-      // i.e.
-      // .copy(mods = mods | Flags.FINAL)
-      // dd.symbol.flags = dd.symbol.flags | Flags.FINAL
-      res.setSymbol(dd.symbol)
-      res.setType(dd.tpe)
-      res.setAttachments(dd.attachments)
-      res
     } catch {
       case ex: Throwable =>
         global.reporter.error(dd.symbol.pos, scala.tools.nsc.util.stackTraceString(ex))
         dd
     }
+
     // for the moment we will use the scala semantics for hashcode
     // it would be better to migrate to optimus so we leave the code for that
     // TODO (OPTIMUS-31928): should be true
     private def useOptimusHashCodeMechanismsForEmbeddable = false
     private def buildHashCode(dd: global.DefDef): DefDef = {
-      val stable = dd.symbol.owner.attachments.get[StableAttachment].get
-      val res = deriveDefDef(dd) { rhs =>
-        if (useOptimusHashCodeMechanismsForEmbeddable || stable.stable) {
-          if (stable.hasParams) {
-            val newMethod = localTyper.typedPos(dd.pos) {
-              val statements = List.newBuilder[Tree]
-              val acc = dd.symbol
-                .newVariable(freshTermName("hashcode$acc")(unit.fresh), dd.pos.focus) setInfo definitions.IntTpe
-              statements += newValDef(acc, Literal(Constant(dd.symbol.fullName.hashCode)))()
-              stable.params foreach { param =>
-                statements += Assign(Ident(acc), Apply(PluginSupport.hashOf, List[Tree](Ident(acc), Ident(param))))
+      dd.symbol.owner.attachments.get[StableAttachment].map { stable =>
+        val res = deriveDefDef(dd) { rhs =>
+          if (useOptimusHashCodeMechanismsForEmbeddable || stable.stable) {
+            if (stable.hasParams) {
+              val newMethod = localTyper.typedPos(dd.pos) {
+                val statements = List.newBuilder[Tree]
+                val acc = dd.symbol
+                  .newVariable(freshTermName("hashcode$acc")(unit.fresh), dd.pos.focus) setInfo definitions.IntTpe
+                statements += newValDef(acc, Literal(Constant(dd.symbol.fullName.hashCode)))()
+                stable.params foreach { param =>
+                  statements += Assign(Ident(acc), Apply(PluginSupport.hashOf, List[Tree](Ident(acc), Ident(param))))
+                }
+                val calcHashcode =
+                  Block(
+                    statements.result(),
+                    Assign(REF(stable.hashcode), Apply(PluginSupport.avoidZero, List(Ident(acc)))))
+
+                BLOCK(
+                  IF(REF(stable.hashcode) INT_== LIT(0)) THEN {
+                    calcHashcode
+                  } ENDIF,
+                  REF(stable.hashcode)
+                )
               }
-              val calcHashcode =
-                Block(
-                  statements.result(),
-                  Assign(REF(stable.hashcode), Apply(PluginSupport.avoidZero, List(Ident(acc)))))
-
-              BLOCK(
-                IF(REF(stable.hashcode) INT_== LIT(0)) THEN {
-                  calcHashcode
-                } ENDIF,
-                REF(stable.hashcode)
-              )
+              newMethod
+            } else {
+              localTyper.typedPos(dd.pos)(Literal(Constant(dd.symbol.fullName.hashCode)))
             }
-            newMethod
-          } else {
-            localTyper.typedPos(dd.pos)(Literal(Constant(dd.symbol.fullName.hashCode)))
+          }
+          // TODO (OPTIMUS-31928): should be deleted. We should always use optimus semantics
+          else {
+            if (stable.hasParams) {
+              val newMethod = localTyper.typedPos(dd.pos) {
+                val calcHashcode =
+                  Block(
+                    List(Assign(REF(stable.hashcode), rhs)),
+                    Assign(REF(stable.hashcodeValid), Literal(Constant(true))))
+
+                BLOCK(
+                  IF(NOT(REF(stable.hashcodeValid))) THEN {
+                    calcHashcode
+                  } ENDIF,
+                  REF(stable.hashcode)
+                )
+              }
+              newMethod
+            } else {
+              rhs
+            }
           }
         }
-        // TODO (OPTIMUS-31928): should be deleted. We should always use optimus semantics
-        else {
-          if (stable.hasParams) {
-            val newMethod = localTyper.typedPos(dd.pos) {
-              val calcHashcode =
-                Block(
-                  List(Assign(REF(stable.hashcode), rhs)),
-                  Assign(REF(stable.hashcodeValid), Literal(Constant(true))))
-
-              BLOCK(
-                IF(NOT(REF(stable.hashcodeValid))) THEN {
-                  calcHashcode
-                } ENDIF,
-                REF(stable.hashcode)
-              )
-            }
-            newMethod
-          } else {
-            rhs
-          }
-        }
-      }
-      // it would be nice to be able to make this final
-      // but we can only do this for final classes - where the mocking doesnt write its own hashcode and equals
-      // based on identity
-      // i.e.
-      // .copy(mods = mods | Flags.FINAL)
-      // dd.symbol.flags = dd.symbol.flags | Flags.FINAL
-      res.setSymbol(dd.symbol)
-      res.setType(dd.tpe)
-      res.setAttachments(dd.attachments)
-      res
+        // it would be nice to be able to make this final
+        // but we can only do this for final classes - where the mocking doesnt write its own hashcode and equals
+        // based on identity
+        // i.e.
+        // .copy(mods = mods | Flags.FINAL)
+        // dd.symbol.flags = dd.symbol.flags | Flags.FINAL
+        res.setSymbol(dd.symbol)
+        res.setType(dd.tpe)
+        res.setAttachments(dd.attachments)
+        res
+      } getOrElse dd
     }
 
     private def mkReadResolve(cd: ClassDef): Tree = {

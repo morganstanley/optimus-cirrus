@@ -13,13 +13,14 @@ package optimus.platform.dal.pubsub
 
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.core.ChainedNodeID
+import optimus.core.CoreAPI.asyncResult
 import optimus.dsi.notification.NotificationEntry
+import optimus.dsi.notification.NotificationEntry.ReferenceOnlyNotificationEntry
 import optimus.dsi.pubsub.CustomThreadGroup
 import optimus.dsi.pubsub.DataNotificationMessage
 import optimus.dsi.pubsub.GlobalEvent
@@ -27,16 +28,37 @@ import optimus.dsi.pubsub.NotificationMessage
 import optimus.dsi.pubsub.SowNotificationMessage
 import optimus.dsi.pubsub.StreamErrorMessage
 import optimus.dsi.pubsub.StreamEvent
+import optimus.dsi.pubsub.Subscription
 import optimus.graph.DiagnosticSettings
 import optimus.platform.AsyncImplicits.collToAsyncMarker
 import optimus.platform._
 import optimus.platform.dal.DALPubSub.NotificationStreamCallback
 import optimus.platform.dal.EntitySerializer
+import optimus.platform.dal.config.DalAsyncBatchingConfig
+import optimus.platform.dal.pubsub.NotificationMessageHandler.FilteredStreamEvent
 import optimus.platform.temporalSurface.DataFreeTemporalSurfaceMatchers
 import optimus.platform.temporalSurface.impl.FlatTemporalContext
 import optimus.platform.dsi.DalPubSubClientCrumbSource
+import optimus.platform.dsi.bitemporal.DSIQueryTemporality
+import optimus.platform.dsi.bitemporal.Result
+import optimus.platform.dsi.bitemporal.Select
+import optimus.platform.dsi.bitemporal.SelectResult
 import optimus.platform.storable.Entity
 import optimus.platform.storable.PersistentEntity
+import optimus.platform.dsi.Feature
+import optimus.platform.dsi.bitemporal.DSI
+import optimus.platform.dsi.bitemporal.EntityQuery
+import optimus.platform.dsi.bitemporal.ErrorResult
+import optimus.platform.dsi.bitemporal.PubSubException
+import optimus.platform.dsi.bitemporal.ReferenceQuery
+import optimus.platform.dsi.bitemporal.VersionedReferenceQuery
+import optimus.platform.storable.EntityReference
+import optimus.platform.storable.VersionedReference
+import optimus.utils.CollectionUtils._
+
+import java.util
+import scala.jdk.CollectionConverters._
+import scala.concurrent.duration.DurationInt
 
 object NotificationMessageHandler {
   val log: Logger = getLogger(this)
@@ -45,6 +67,7 @@ object NotificationMessageHandler {
   private val filterEmptyDataMessage =
     DiagnosticSettings.getBoolProperty("optimus.platform.dal.pubsub.filterEmptyDataMessage", true)
   val msgHandlerThreadGroup = new CustomThreadGroup("NotificationMessageHandler")
+  val rawEventsHandlerThreadGroup = new CustomThreadGroup("RawEventsHandler")
   private val temporalSurfaceTag = Some("NotificationMessageHandler")
 
   @node
@@ -117,16 +140,184 @@ object NotificationMessageHandler {
   }
 }
 
+final case class VrefQueryHelper(readDSI: DSI) {
+  val isClientVrefEnabled: Boolean = Feature.VersionedReferenceQuery.enabled
+  val isServerVrefEnabled: Boolean = readDSI.serverFeatures().supports(Feature.VersionedReferenceQuery)
+  val isVrefQuerySupported = isClientVrefEnabled && isServerVrefEnabled
+  def getEntityQuery(
+      versionedRef: VersionedReference,
+      ref: EntityReference,
+      validTimeInterval: ValidTimeInterval,
+      txTimeInterval: TimeInterval,
+      cn: String,
+      entitledOnly: Boolean): EntityQuery = if (isVrefQuerySupported)
+    VersionedReferenceQuery(
+      versionedRef,
+      validTimeInterval,
+      txTimeInterval,
+      cn,
+      entitledOnly
+    )
+  else
+    ReferenceQuery(
+      ref,
+      entitledOnly,
+      Some(cn)
+    )
+}
+
 sealed trait NotificationMessageHandler {
   import NotificationMessageHandler._
 
+  val isPubSubReferenceNotificationEnabled: Boolean = Feature.PubSubReferenceNotification.enabled
+
+  val maxLatencyForRawEventsQueue =
+    DiagnosticSettings.getLongProperty("optimus.dal.pubsub.maxLatencyForRawEventsQueue", 5.seconds.toMillis)
+
+  lazy val vrefQueryHelper: VrefQueryHelper =
+    VrefQueryHelper(readDSI.getOrElse(throw new Exception("DSI is missing.")))
+
+  def serverStreamId: String
   val clientStreamId: Int
   val notificationStreamCallback: NotificationStreamCallback
   protected val closeStream: () => Unit
+  protected val removeSubscription: (Set[Subscription.Id]) => Unit
+  val readDSI: Option[DSI] = None
+
+  protected def putRawEvents(event: StreamEvent): Unit
 
   protected val clientStreamLogHeader = s"ClientStreamId: $clientStreamId -"
 
   def shutdown(): Unit
+
+  def collectReferenceOnlyNotificationEntry(
+      msgs: Seq[StreamEvent]): Seq[(Subscription, ReferenceOnlyNotificationEntry)] = {
+    msgs.flatMap {
+      case dm: DataNotificationMessage =>
+        dm.fullData.toSeq.flatMap { case (subscription, notificationEntries) =>
+          notificationEntries.collect { case referenceOnlyNE: ReferenceOnlyNotificationEntry =>
+            (subscription, referenceOnlyNE)
+          }
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  @entersGraph
+  def loadEntities(notificationEntrySeq: Seq[(Subscription, ReferenceOnlyNotificationEntry)])
+      : Map[ReferenceOnlyNotificationEntry, Result] = {
+    if (notificationEntrySeq.size > 0) {
+      val results =
+        asyncResult {
+          val cmdSeq = notificationEntrySeq.map { case (subscription, notificationEntry) =>
+            Select(
+              vrefQueryHelper.getEntityQuery(
+                notificationEntry.slotRef.vref,
+                notificationEntry.segment.data.entityRef,
+                notificationEntry.segment.vtInterval,
+                TimeInterval(notificationEntry.txTime),
+                notificationEntry.segment.data.className,
+                subscription.entitledOnly
+              ),
+              DSIQueryTemporality.At(notificationEntry.segment.vtInterval.from, notificationEntry.txTime)
+            )
+          }
+
+          readDSI
+            .getOrElse(throw new Exception("DSI is missing."))
+            .executeReadOnlyCommands(cmdSeq.toSeq)
+        } match {
+          case NodeSuccess(value) =>
+            value
+          case NodeFailure(ex) =>
+            // If it reaches here, it means either DSI is missing, which should not be the case or DAL read side has issues, for which we are sending a StreamErrorMessage.
+            safelyDeliverStreamErrorMessage(new PubSubException(serverStreamId, ex.getMessage))
+            Seq()
+        }
+      notificationEntrySeq.map { case (_, notificationEntry) => notificationEntry }.zip(results).toMap
+    } else Map()
+  }
+
+  def replaceReferenceOnlyNotifications(
+      msgs: Seq[StreamEvent],
+      notificationEntryMap: Map[ReferenceOnlyNotificationEntry, Result]): Seq[StreamEvent] = {
+    if (notificationEntryMap.nonEmpty) {
+      msgs map { msg =>
+        msg match {
+          case dm: DataNotificationMessage =>
+            val newData = dm.fullData.flatMap {
+              case (sub, data) => {
+                try {
+                  val notificationEntries = data.flatMap {
+                    case referenceOnlyNE: ReferenceOnlyNotificationEntry =>
+                      // if it is not a SelectResult, ie if it is an ErrorResult
+                      // or if it isEmpty (in case of an unentitled read for a subscription where entitled only is true),
+                      // exception will be generated, which will be caught and subscription will be closed
+                      val dalEntity = notificationEntryMap
+                        .getOrElse(
+                          referenceOnlyNE,
+                          throw new PubSubException(
+                            serverStreamId,
+                            s"Got unexpected error for referenceOnlyNE - ${referenceOnlyNE}")) match {
+                        case SelectResult(value) => value
+                        case ErrorResult(error, _) =>
+                          throw new PubSubException(
+                            serverStreamId,
+                            s"Got unexpected error for referenceOnlyNE ${error.getMessage}")
+                      }
+
+                      // throwing Exception to give meaningful message at the client side, in cases of dal read failure
+                      if (dalEntity.size == 0 && !sub.entitledOnly)
+                        throw new PubSubException(
+                          serverStreamId,
+                          s"Couldn't load the entity from dal for referenceOnlyNE - ${referenceOnlyNE}")
+
+                      // convert to NotificationEntryImpl by loading data from DAL
+                      dalEntity.singleOption.map(e => referenceOnlyNE.toEntry(e.serialized))
+                    case x: NotificationEntry => Some(x)
+                  }
+                  Some(sub, notificationEntries)
+                } catch {
+                  case ex: Exception =>
+                    safelyDeliverStreamErrorMessage(new PubSubException(serverStreamId, ex.getMessage))
+                    log.warn(
+                      s"$clientStreamLogHeader Closing subscription - ${sub.subId} due to post check failure on message")
+                    // close Subscription
+                    removeSubscription(Set(sub.subId))
+                    None
+                }
+              }
+            }
+            DataNotificationMessage(dm.tt, dm.writeReqId, newData)
+
+          case se => se
+        }
+      }
+    } else msgs
+  }
+
+  def handleReferenceOnlyNotifications(streamEventMsgs: Seq[StreamEvent]): Unit = {
+
+    // call handleStreamEvent after loading data from DAL for ReferenceOnlyNotificationEntry
+    val (timeTaken, streamEvents) =
+      AdvancedUtils.timed {
+        // checks for all the ReferenceOnlyNotificationEntries present in the batch, stores them in notificationEntrySeq along with Subscription as a tuple
+        val referenceOnlyNotificationEntrySeq = collectReferenceOnlyNotificationEntry(streamEventMsgs)
+
+        // for all the referenceOnlyNotificationEntrySeq entries, DAL read command is called to fetch the entities in a batch and store them in a map notificationEntryMap
+        val notificationEntryMap = loadEntities(referenceOnlyNotificationEntrySeq)
+
+        // prepare final streamEvents by replacing all the ReferenceOnlyNotificationEntry objects to NotificationEntryImpl objects
+        replaceReferenceOnlyNotifications(streamEventMsgs, notificationEntryMap)
+      }
+
+    val timeInMillis = TimeUnit.NANOSECONDS.toMillis(timeTaken)
+    if (timeInMillis >= maxLatencyForRawEventsQueue)
+      log.warn(s"$clientStreamLogHeader handle reference-only notification took ${timeInMillis} ms.")
+    streamEvents foreach { streamEvent =>
+      handleStreamEvent(new FilteredStreamEvent(streamEvent))
+    }
+  }
 
   final def handleMessages(msgs: Seq[NotificationMessage]): Unit = {
     def filter(s: StreamEvent): Option[StreamEvent] = if (disableVtFilter) Some(s)
@@ -145,12 +336,17 @@ sealed trait NotificationMessageHandler {
       case s: StreamEvent =>
         filter(s) foreach {
           case dm: DataNotificationMessage if filterEmptyDataMessage && dm.fullData.isEmpty =>
-            log.info(s"Filtering out empty data notification message at ${dm.tt}")
-          case fs => handleStreamEvent(new FilteredStreamEvent(fs))
+            log.info(s"$clientStreamLogHeader Filtering out empty data notification message at ${dm.tt}")
+          case fs =>
+            if (isPubSubReferenceNotificationEnabled)
+              putRawEvents(fs)
+            else
+              handleStreamEvent(new FilteredStreamEvent(fs))
         }
     }
   }
   protected def handleStreamEvent(event: FilteredStreamEvent): Unit
+
   private def handleGlobalEvent(event: GlobalEvent): Unit =
     invokeCallbackSafely[GlobalEvent](event, ev => notificationStreamCallback.notifyGlobalEvent(clientStreamId, ev))
 
@@ -159,7 +355,7 @@ sealed trait NotificationMessageHandler {
       notificationStreamCallback.notifyStreamEvent(clientStreamId, StreamErrorMessage(th))
     } catch {
       case ex: Exception =>
-        log.error("Error while delivering StreamErrorMessage", ex)
+        log.error(s"$clientStreamLogHeader Error while delivering StreamErrorMessage", ex)
     }
   }
 
@@ -185,26 +381,36 @@ object AsyncNotificationMessageHandler {
   case object StoppingStatus extends Status
   case object CompletedStatus extends Status
   case object FailedStatus extends Status
+
+  def defaultBatchSize = DalAsyncBatchingConfig.maxBatchSize
+
+  sealed trait Task
+  final case class StreamEventTask(event: FilteredStreamEvent, createTime: Long = System.currentTimeMillis())
+      extends Task
+  final case class StopTask(createTime: Long) extends Task
 }
 // This implementation invokes client notification callback in a separate thread.
 class AsyncNotificationMessageHandler(
-    val serverStreamId: String,
+    override val serverStreamId: String,
     override val clientStreamId: Int,
     override val notificationStreamCallback: NotificationStreamCallback,
-    override protected val closeStream: () => Unit)
-    extends NotificationMessageHandler {
+    override protected val closeStream: () => Unit,
+    override val readDSI: Option[DSI] = None,
+    override protected val removeSubscription: (Set[Subscription.Id]) => Unit = (_) => ()
+) extends NotificationMessageHandler {
   import AsyncNotificationMessageHandler._
   import NotificationMessageHandler._
 
-  sealed trait Task
-  case class StreamEventTask(event: FilteredStreamEvent) extends Task
-  case object StopTask extends Task
-
-  @volatile
-  private[this] var status: Status = InitializingStatus
   private[this] val taskQueue = new LinkedBlockingQueue[Task]()
-  @volatile
-  private[this] var stoppingDeadline: Long = -1
+  private[this] val rawEventsQueue = new LinkedBlockingQueue[Task]
+
+  override protected def putRawEvents(event: StreamEvent): Unit = {
+    rawEventsQueue.put(StreamEventTask(new FilteredStreamEvent(event)))
+  }
+
+  private val taskThreadName = "Task"
+
+  private val rawEventsThreadName = "RawEvents"
 
   private def publishCrumb(evt: StreamEvent): Unit = evt match {
     case dm: DataNotificationMessage =>
@@ -227,127 +433,234 @@ class AsyncNotificationMessageHandler(
     case _ =>
   }
 
-  private[this] val msgHandlerThread = new Thread(msgHandlerThreadGroup, s"PubSubStream-$clientStreamId") {
+  class StatusHolder {
+    @volatile var status: Status = InitializingStatus
+    @volatile var stoppingDeadline: Long = -1
+
+    def updateStatus(to: Status, from: Status*) = {
+      if (from.contains(status)) {
+        synchronized {
+          if (from.contains(status)) {
+            status = to
+            true
+          } else false
+        }
+      } else false
+    }
+
+  }
+
+  abstract class StatusControlThread(threadGroup: ThreadGroup, threadName: String)
+      extends Thread(threadGroup, threadName) {
+    val threadPurpose: String
+
+    val statusHolder: StatusHolder
 
     override def run(): Unit = {
       try {
-        try {
-          log.info(s"$clientStreamLogHeader Message handler thread started..")
-          notifyMsgHandlerThreadSetup()
-          notificationStreamCallback.setupThread(clientStreamId)
-          log.info(s"$clientStreamLogHeader Message handler thread setup is successful.")
-        } catch {
-          case ex: Exception =>
-            // Don't rethrow. Otherwise, EndOfStreamMessage won't be delivered.
-            val enteringErrorStatus = updateStatus(ErrorStatus, InitializingStatus)
-
-            log.error(s"$clientStreamLogHeader Uncaught exception occurred while invoking thread setup callback", ex)
-            safelyDeliverStreamErrorMessage(ex)
-
-            if (enteringErrorStatus) closeStream()
-        }
-
-        updateStatus(ReadyStatus, InitializingStatus)
-
-        while (
-          status match {
-            case ReadyStatus | ErrorStatus => true
-            case StoppingStatus            => val d = stoppingDeadline; d < 0 || d >= System.nanoTime()
-            case _                         => false
-          }
-        ) {
-          try {
-            Option(taskQueue.poll(10000, TimeUnit.MILLISECONDS)).foreach({
-              case StreamEventTask(event) =>
-                try {
-                  event.getFilteredEvent foreach { evt =>
-                    publishCrumb(evt)
-                    notificationStreamCallback.notifyStreamEvent(clientStreamId, evt)
-                  }
-                } catch {
-                  case ex: Exception =>
-                    // Don't rethrow. Otherwise, EndOfStreamMessage won't be delivered.
-                    val enteringErrorStatus = updateStatus(ErrorStatus, ReadyStatus)
-
-                    log.error(
-                      s"$clientStreamLogHeader Uncaught exception occurred while invoking stream notify callback for stream event: $event.",
-                      ex)
-                    safelyDeliverStreamErrorMessage(ex)
-
-                    // Check status to avoid endless looping if a user failed to handle EndOfStreamMessage.
-                    if (enteringErrorStatus) closeStream()
-                }
-              case StopTask =>
-                // Consume the interruption flag avoiding it's caught by code in 'finally' block.
-                Thread.interrupted()
-                updateStatus(CompletedStatus, ReadyStatus, StoppingStatus)
-
-                if (updateStatus(FailedStatus, ErrorStatus)) {
-                  // It's not possible to reach here unless there is a programmatic mistake.
-                  log.error("Encountered StopTask with ErrorStatus")
-                }
-            })
-          } catch { case _: InterruptedException => }
-        }
+        setupMessageHandlerThread(threadPurpose)
+        while (checkThreadStatus(statusHolder.status, statusHolder.stoppingDeadline)) { runThread() }
       } catch {
         // In case that a default handler wants to terminate JVM for some special types of Errors, it shall be
         // able to get the error. The handler at
         // optimus.platform.dal.pubsub.NotificationMessageHandler#msgHandlerThreadGroup will log uncaught Throwables.
         case ex: Exception =>
           log.error(
-            "{} Uncaught exception in PubSub message handler thread, current status: {}",
-            clientStreamLogHeader,
-            status,
+            s"${clientStreamLogHeader} Uncaught exception in PubSub ${threadPurpose} message handler thread, current status: ${statusHolder.status}",
             ex)
       } finally {
-        // Since the control flow may get here during handling an Error, further Errors may be raised anytime.
-        updateStatus(FailedStatus, InitializingStatus, ReadyStatus, ErrorStatus, StoppingStatus)
-
-        try {
-          if (status == FailedStatus) {
-            // The control flow may get here only when shutting down is timed out, or when it's failed to close a stream
-            // during handling exceptions, or when an Error is thrown. It's generally not recoverable.
-            // EndOfStreamMessage cannot be delivered in this case, because we don't know how long the callback will
-            // take to handle it, or whether a new Error would be thrown during handling it.
-            log.error(
-              "{} Failed to shutdown notification message handler gracefully. " +
-                "EndOfStreamMessage may not reach the callback.",
-              clientStreamLogHeader)
-          }
-
-          log.info(s"$clientStreamLogHeader Message handler thread is stopping..")
-          notifyMsgHandlerThreadTeardown()
-          notificationStreamCallback.teardownThread(clientStreamId)
-          log.info(s"$clientStreamLogHeader Message handler thread teardown successful..")
-        } catch {
-          // Don't throw it if it's an Exception so that it won't override the original Error. The handler at
-          // optimus.platform.dal.pubsub.NotificationMessageHandler#msgHandlerThreadGroup will log uncaught Throwables.
-          case ex: Exception =>
-            log.error("{} Error while notifying stream closing", clientStreamLogHeader, ex)
-        }
+        closeMessageHandlerThread(threadPurpose)
       }
+    }
+
+    def runThread(): Unit
+
+    def setupMessageHandlerThread(threadName: String): Unit = {
+      try {
+        log.info(s"$clientStreamLogHeader $threadName Message handler thread started..")
+        notifyMsgHandlerThreadSetup()
+        if (threadName.equals(rawEventsThreadName) && !EvaluationContext.isInitialised)
+          EvaluationContext.initializeWithoutRuntime()
+        notificationStreamCallback.setupThread(clientStreamId)
+        log.info(s"$clientStreamLogHeader $threadName Message handler thread setup is successful.")
+      } catch {
+        case ex: Exception =>
+          // Don't rethrow. Otherwise, EndOfStreamMessage won't be delivered.
+          val enteringErrorStatus = statusHolder.updateStatus(ErrorStatus, InitializingStatus)
+
+          log.error(s"$clientStreamLogHeader Uncaught exception occurred while invoking thread setup callback", ex)
+          safelyDeliverStreamErrorMessage(ex)
+
+          if (enteringErrorStatus) closeStream()
+      }
+
+      statusHolder.updateStatus(ReadyStatus, InitializingStatus)
+    }
+
+    def closeMessageHandlerThread(threadName: String): Unit = {
+      // Since the control flow may get here during handling an Error, further Errors may be raised anytime.
+      statusHolder.updateStatus(FailedStatus, InitializingStatus, ReadyStatus, ErrorStatus, StoppingStatus)
+
+      try {
+        if (statusHolder.status == FailedStatus) {
+          // The control flow may get here only when shutting down is timed out, or when it's failed to close a stream
+          // during handling exceptions, or when an Error is thrown. It's generally not recoverable.
+          // EndOfStreamMessage cannot be delivered in this case, because we don't know how long the callback will
+          // take to handle it, or whether a new Error would be thrown during handling it.
+          log.error(
+            s"{} Failed to shutdown ${threadName} notification message handler gracefully. " +
+              "EndOfStreamMessage may not reach the callback.",
+            clientStreamLogHeader
+          )
+        }
+
+        log.info(s"$clientStreamLogHeader ${threadName} Message handler thread is stopping..")
+        notifyMsgHandlerThreadTeardown()
+        notificationStreamCallback.teardownThread(clientStreamId)
+        log.info(s"$clientStreamLogHeader ${threadName} Message handler thread teardown successful..")
+      } catch {
+        // Don't throw it if it's an Exception so that it won't override the original Error. The handler at
+        // optimus.platform.dal.pubsub.NotificationMessageHandler#msgHandlerThreadGroup will log uncaught Throwables.
+        case ex: Exception =>
+          log.error("{} Error while notifying stream closing", clientStreamLogHeader, ex)
+      }
+    }
+
+    def checkThreadStatus(status: Status, stoppingDeadline: Long) = {
+      if (ReadyStatus != status && ErrorStatus != status)
+        log.info(s"$threadName status = $status stoppingDeadline = $stoppingDeadline now = ${System.nanoTime()}")
+      status match {
+        case ReadyStatus | ErrorStatus => true
+        case StoppingStatus            => val d = stoppingDeadline; d < 0 || d >= System.nanoTime()
+        case _                         => false
+      }
+    }
+
+    def handleStopTask() = {
+      statusHolder.updateStatus(CompletedStatus, ReadyStatus, StoppingStatus)
+
+      if (statusHolder.updateStatus(FailedStatus, ErrorStatus)) {
+        // It's not possible to reach here unless there is a programmatic mistake.
+        log.error(s"$clientStreamLogHeader Encountered StopTask for ${threadPurpose} thread with ErrorStatus")
+      }
+    }
+
+  }
+
+  private[this] val msgHandlerThread = new StatusControlThread(msgHandlerThreadGroup, s"PubSubStream-$clientStreamId") {
+
+    override val statusHolder: StatusHolder = new StatusHolder()
+    override val threadPurpose = taskThreadName
+    override def runThread(): Unit = {
+      try {
+        Option(taskQueue.poll(10000, TimeUnit.MILLISECONDS)).foreach({
+          case StreamEventTask(event, createTime) =>
+            try {
+              event.getFilteredEvent foreach { evt =>
+                publishCrumb(evt)
+                notificationStreamCallback.notifyStreamEvent(clientStreamId, evt)
+              }
+            } catch {
+              case ex: Exception =>
+                // Don't rethrow. Otherwise, EndOfStreamMessage won't be delivered.
+                val enteringErrorStatus = statusHolder.updateStatus(ErrorStatus, ReadyStatus)
+
+                log.error(
+                  s"$clientStreamLogHeader Uncaught exception occurred while invoking stream notify callback for stream event: $event.",
+                  ex)
+                safelyDeliverStreamErrorMessage(ex)
+
+                // Check status to avoid endless looping if a user failed to handle EndOfStreamMessage.
+                if (enteringErrorStatus) closeStream()
+            }
+          case StopTask(createTime) =>
+            // Consume the interruption flag avoiding it's caught by code in 'finally' block.
+            Thread.interrupted()
+            handleStopTask()
+        })
+      } catch { case _: InterruptedException => }
     }
   }
 
   msgHandlerThread.setDaemon(true)
   msgHandlerThread.start()
 
-  override protected def handleStreamEvent(event: FilteredStreamEvent): Unit = taskQueue.put(StreamEventTask(event))
-  private def updateStatus(to: Status, from: Status*) = {
-    if (from.contains(status)) {
-      synchronized {
-        if (from.contains(status)) {
-          status = to
-          true
-        } else false
+  private[this] val rawEventsHandlerThread =
+    new StatusControlThread(rawEventsHandlerThreadGroup, s"PubSubRawEvents-$clientStreamId") {
+      override val statusHolder: StatusHolder = new StatusHolder()
+      override val threadPurpose = rawEventsThreadName
+      override def runThread(): Unit = {
+        try {
+          // read from rawEventsQueue and call handleStreamEvent to put in TaskQueue
+          val streamEventTasks = new util.ArrayList[Task]()
+          // getFromQueue
+          // Block until at least one message in queue
+          val streamEventTask = rawEventsQueue.take()
+          streamEventTasks.add(streamEventTask)
+          val eventFetchTime = System.currentTimeMillis()
+
+          val eventCreateTime = streamEventTask match {
+            case StreamEventTask(event, createTime) => createTime
+            case StopTask(createTime)               => createTime
+          }
+
+          val queueLatency = eventFetchTime - eventCreateTime
+
+          if (queueLatency >= maxLatencyForRawEventsQueue)
+            log.warn(
+              s"$clientStreamLogHeader rawEventsQueue latency: ${queueLatency} ms, exceeds the maxLatency: ${maxLatencyForRawEventsQueue} ms")
+
+          // Try to drain as many messages upto a max defined
+          rawEventsQueue.drainTo(streamEventTasks, defaultBatchSize)
+
+          val (streamEventTsks, stopTask) = streamEventTasks.asScala.toSeq.partition(_.isInstanceOf[StreamEventTask])
+
+          val streamEventMsgs = streamEventTsks.flatMap {
+            case StreamEventTask(event, createTime) =>
+              event.getFilteredEvent
+            case _ => None
+          }
+
+          val stopTsk = stopTask.flatMap {
+            case task @ StopTask(createTime) =>
+              Some(task)
+            case _ => None
+          }.singleOption
+          handleReferenceOnlyNotifications(streamEventMsgs)
+          stopTsk.foreach { task =>
+            Thread.interrupted()
+            handleStopTask()
+            taskQueue.put(task)
+          }
+        } catch { case _: InterruptedException => }
       }
-    } else false
+    }
+
+  if (isPubSubReferenceNotificationEnabled) {
+    rawEventsHandlerThread.setDaemon(true)
+    rawEventsHandlerThread.start()
   }
+
+  override protected def handleStreamEvent(event: FilteredStreamEvent): Unit =
+    taskQueue.put(StreamEventTask(event))
+
   override def shutdown(): Unit = {
     // This method is supposed to be called from a synchronized block. Don't block the control flow here.
-    if (updateStatus(StoppingStatus, InitializingStatus, ReadyStatus, ErrorStatus)) {
-      stoppingDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(30000)
-      taskQueue.put(StopTask)
+    val rawEventStatus = rawEventsHandlerThread.statusHolder
+    val msgEventStatus = msgHandlerThread.statusHolder
+    if (
+      rawEventStatus.updateStatus(StoppingStatus, InitializingStatus, ReadyStatus, ErrorStatus) && msgEventStatus
+        .updateStatus(StoppingStatus, InitializingStatus, ReadyStatus, ErrorStatus)
+    ) {
+      val stoppingDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(30000)
+      rawEventStatus.stoppingDeadline = stoppingDeadline
+      msgEventStatus.stoppingDeadline = stoppingDeadline
+      val stopTaskCreateTime = System.currentTimeMillis()
+      if (isPubSubReferenceNotificationEnabled) {
+        rawEventsQueue.put(StopTask(stopTaskCreateTime))
+      } else {
+        taskQueue.put(StopTask(stopTaskCreateTime))
+      }
     }
   }
 
@@ -358,10 +671,13 @@ class AsyncNotificationMessageHandler(
 
 // For unit tests, this simply invokes client notification callback in the same thread.
 class SyncNotificationMessageHandler(
+    override val serverStreamId: String,
     override val clientStreamId: Int,
     override val notificationStreamCallback: NotificationStreamCallback,
-    override protected val closeStream: () => Unit)
-    extends NotificationMessageHandler {
+    override protected val closeStream: () => Unit,
+    override val readDSI: Option[DSI] = None,
+    override protected val removeSubscription: (Set[Subscription.Id]) => Unit = (_) => ()
+) extends NotificationMessageHandler {
   import NotificationMessageHandler._
 
   override def shutdown(): Unit = {}
@@ -370,4 +686,7 @@ class SyncNotificationMessageHandler(
       invokeCallbackSafely[StreamEvent](evt, ev => notificationStreamCallback.notifyStreamEvent(clientStreamId, ev))
     }
   }
+  override protected def putRawEvents(event: StreamEvent): Unit =
+    handleReferenceOnlyNotifications(Seq(event))
+
 }

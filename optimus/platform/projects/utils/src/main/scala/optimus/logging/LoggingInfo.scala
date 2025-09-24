@@ -18,6 +18,8 @@ import optimus.platform.util.Log
 import scala.collection.mutable
 import scala.io.Source
 import optimus.scalacompat.collection._
+import optimus.utils.TreadmillTools
+
 import scala.util.Try
 import scala.util.Success
 import scala.util.Failure
@@ -29,8 +31,8 @@ object Pid extends Log {
   private def complain(e: Throwable) = {
     log.warn(
       "Unable to resolve current process id (pid) for troubleshooting or monitoring. Please fix immediately. Exception was {} '{}'.",
-      e.getClass().getCanonicalName(),
-      e.getMessage()
+      e.getClass.getCanonicalName,
+      e.getMessage
     )
     None
   }
@@ -52,17 +54,16 @@ object Pid extends Log {
       case NonFatal(e) => complain(e)
     }
 
-  def pidOrZero(): Long = pid.getOrElse(0);
+  def pidOrZero(): Long = pid.getOrElse(0)
 }
 
 object LoggingInfo {
   def getLogFile: String = {
-    org.slf4j.LoggerFactory.getILoggerFactory() match {
+    org.slf4j.LoggerFactory.getILoggerFactory match {
       case lc: ch.qos.logback.classic.LoggerContext =>
         val loggers = lc.getLoggerList.asScala
         loggers.flatMap(getLogFiles(_)).mkString(",")
-      case x =>
-        "unknown_context"
+      case _ => "unknown_context"
     }
   }
 
@@ -71,7 +72,7 @@ object LoggingInfo {
     val files = appenders.flatMap {
       case a: ch.qos.logback.core.spi.AppenderAttachable[_] => getLogFiles(a)
       case a: ch.qos.logback.core.FileAppender[_]           => Seq(a.getFile)
-      case a: ch.qos.logback.core.ConsoleAppender[_]        => Seq("console")
+      case _: ch.qos.logback.core.ConsoleAppender[_]        => Seq("console")
       case a                                                => Seq(a.toString)
     }
     files.toSeq
@@ -95,16 +96,16 @@ object LoggingInfo {
   lazy val pid: Long = Pid.pidOrZero()
   lazy val gsfControllerId: Option[String] = Option(System.getenv("GSF_CONTROLLER_ID"))
 
-  lazy val appName = Option(System.getProperty("optimus.ui.appname", System.getProperty("APP_NAME")))
-  lazy val appVersion = Option(System.getProperty("optimus.ui.appver")).getOrElse("")
-  lazy val os = Option(System.getProperty("os.name")).getOrElse("")
-  lazy val tmId = sys.env.getOrElse("TREADMILL_INSTANCEID", "")
-  lazy val isWindows = os.toLowerCase.contains("windows")
+  lazy val appName: Option[String] = Option(System.getProperty("optimus.ui.appname", System.getProperty("APP_NAME")))
+  lazy val appVersion: String = Option(System.getProperty("optimus.ui.appver")).getOrElse("")
+  lazy val os: String = Option(System.getProperty("os.name")).getOrElse("")
+  lazy val tmId: String = TreadmillTools.treadmillInstance().getOrElse("")
+  lazy val isWindows: Boolean = Properties.isWin
 }
 
 object HardwareInfo {
   private var id = -1
-  lazy val allCpuInfo: Try[Map[Int, Map[String, String]]] = Try {
+  private lazy val allCpuInfo: Try[Map[Int, Map[String, String]]] = Try {
     val cpus = mutable.HashMap.empty[Int, mutable.HashMap[String, String]]
     readInfo("/proc/cpuinfo") { (k, v) =>
       if (k == "processor") {
@@ -128,12 +129,10 @@ object HardwareInfo {
    * Intel sandybridge architecture detection based on cpu_family and cpu model according to:
    * https://en.wikichip.org/wiki/intel/cpuid
    */
-  lazy val isSandyBridge =
+  lazy val isSandyBridge: Boolean =
     HardwareInfo.cpuInfo.getOrElse("model_name", "").contains("Intel") &&
-      HardwareInfo.cpuInfo.get("cpu_family") == Some("6") &&
-      (HardwareInfo.cpuInfo.get("model") == Some("45") || HardwareInfo.cpuInfo.get("model") == Some(
-        "42"
-      ))
+      HardwareInfo.cpuInfo.get("cpu_family").contains("6") &&
+      (HardwareInfo.cpuInfo.get("model").contains("45") || HardwareInfo.cpuInfo.get("model").contains("42"))
 
   lazy val memInfo: Map[String, String] =
     if (Properties.isWin) Map("exception" -> "windows")

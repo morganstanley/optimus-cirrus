@@ -12,13 +12,14 @@
 package optimus.platform.relational.reactive.filter
 
 import optimus.utils.datetime.ZoneIds
-import java.time._
 
+import java.time._
 import net.iharder.base64.Base64
 import optimus.platform.pickling._
 import optimus.platform.storable.{Entity, EntityImpl, EntityReference, ModuleEntityToken}
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.Dsi._
+import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.relational.reactive.{
   FilterClassOption,
   MemberProperty,
@@ -26,7 +27,6 @@ import optimus.platform.relational.reactive.{
   ValueProperty
 }
 import optimus.utils.datetime.LocalDateOps
-
 import optimus.scalacompat.collection.IterableLike
 
 sealed trait Condition {
@@ -342,30 +342,28 @@ final case class PropertyCondition(
 
     final class ArrayWriteContext(val valuePrefix: String, val parent: WriteContextStack, val currentLevel: Int)
         extends WriteContextStack {
-      import scala.collection.mutable.ArrayBuffer
-
-      private[this] val buf = ArrayBuffer[Any]()
+      private[this] val buf = PickleSeq.newBuilder[Any]
       private var tpe: FieldProto.Type = _
       private var valueType: String = _
 
       def getResult(): String = {
+        val res = buf.result()
         if (operator == BinaryOperator.EQ) {
-          if (!buf.isEmpty) { // For Some(_)
-            s"""$valuePrefix.children[type = "$tpe"].${valueType} $op ${buf.result().mkString(",")}"""
+          if (!res.isEmpty) { // For Some(_)
+            s"""$valuePrefix.children[type = "$tpe"].${valueType} $op ${res.mkString(",")}"""
           } else { // For None
             s"""$valuePrefix.children is null"""
           }
         } else if (operator == BinaryOperator.NE) {
-          if (!buf.isEmpty) { // For Some(_)
-            s"""($valuePrefix.children[type = "$tpe"].${valueType} $op ${buf.result().mkString(",")} OR """ +
+          if (!res.isEmpty) { // For Some(_)
+            s"""($valuePrefix.children[type = "$tpe"].${valueType} $op ${res.mkString(",")} OR """ +
               s"""$valuePrefix.children is null)"""
           } else { // For None
             s"""$valuePrefix.children is not null"""
           }
         } else if (operator == BinaryOperator.IN) {
-          s"""$valuePrefix.children[type = "$tpe" AND associated_key = "$name"].${valueType} ${op} (${buf
-              .result()
-              .mkString(",")})"""
+          s"""$valuePrefix.children[type = "$tpe" AND associated_key = "$name"].${valueType} ${op} (${res.mkString(
+              ",")})"""
         } else
           throw new UnsupportedOperationException
       }

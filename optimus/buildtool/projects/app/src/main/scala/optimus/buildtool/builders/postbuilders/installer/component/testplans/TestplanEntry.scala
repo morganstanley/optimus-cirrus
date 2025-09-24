@@ -16,8 +16,6 @@ import optimus.buildtool.config.ModuleId
 import optimus.buildtool.runconf.ModuleScopedName
 import org.apache.commons.text.StringSubstitutor
 
-import scala.collection.immutable.Seq
-
 final case class TestplanTask(module: ModuleId, testName: String) {
   def moduleScoped: ModuleScopedName = ModuleScopedName(module, testName)
 

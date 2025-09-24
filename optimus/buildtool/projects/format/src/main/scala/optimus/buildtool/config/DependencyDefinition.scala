@@ -15,7 +15,6 @@ import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.files.Asset
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.collection.immutable.Seq
 
 final case class Variant(name: String, reason: String, configurationOnly: Boolean = false)
 final case class Exclude(
@@ -46,13 +45,79 @@ final case class DependencyId(
   override def elements: Seq[String] = Seq(group, name) ++ variant ++ configuration ++ keySuffix
 }
 
+final case class PublicationSettings(
+    name: Option[String] = None,
+    tpe: Option[String] = None,
+    ext: Option[String] = None,
+    classifier: Option[String] = None
+) {
+  def withClassifier(classifier: Option[String]): PublicationSettings = this.copy(classifier = classifier)
+  def fingerprint: String = {
+    List(
+      name.map(name => s":name=$name"),
+      tpe.map(tpe => s":tpe=$tpe"),
+      ext.map(ext => s":ext=$ext"),
+      classifier.map(classifier => s":classifier=$classifier")
+    ).flatten.mkString(":publicationSettings(", "", ")")
+  }
+}
+
+object DependencyDefinition {
+  def apply(
+      group: String,
+      name: String,
+      version: String,
+      kind: Kind,
+      configuration: String = DefaultConfiguration,
+      publicationSettings: PublicationSettings = PublicationSettings(),
+      excludes: Seq[Exclude] = Nil,
+      variant: Option[Variant] = None,
+      resolvers: Seq[String] = Nil,
+      transitive: Boolean = true,
+      force: Boolean = false,
+      line: Int = 0,
+      keySuffix: String = "",
+      containsMacros: Boolean = false,
+      isScalacPlugin: Boolean = false,
+      ivyArtifacts: Seq[IvyArtifact] = Nil,
+      isMaven: Boolean = false,
+      isAgent: Boolean = false,
+      isExtraLib: Boolean = false // for metadata generation only
+  ): DependencyDefinition = {
+    new DependencyDefinition(
+      group = group,
+      name = name,
+      version = version,
+      kind = kind,
+      configuration = configuration,
+      publicationSettings = publicationSettings,
+      excludes = excludes,
+      variant = variant,
+      resolvers = resolvers,
+      transitive = transitive,
+      force = force,
+      line = line,
+      keySuffix = keySuffix,
+      containsMacros = containsMacros,
+      isScalacPlugin = isScalacPlugin,
+      ivyArtifacts = ivyArtifacts,
+      isMaven = isMaven,
+      isAgent = isAgent,
+      isExtraLib = isExtraLib
+    )
+  }
+
+  val ScalaId = DependencyId("ossscala", "scala")
+  val DefaultConfiguration = "runtime"
+
+}
 final case class DependencyDefinition(
     group: String,
     name: String,
     version: String,
     kind: Kind,
     configuration: String = DefaultConfiguration,
-    classifier: Option[String] = None,
+    publicationSettings: PublicationSettings = PublicationSettings(),
     excludes: Seq[Exclude] = Nil,
     variant: Option[Variant] = None,
     resolvers: Seq[String] = Nil,
@@ -71,6 +136,9 @@ final case class DependencyDefinition(
   def noVersion: Boolean = version.isEmpty
 
   def key: String = path.mkString(".")
+
+  def withClassifier(classifier: Option[String]): DependencyDefinition =
+    this.copy(publicationSettings = publicationSettings.withClassifier(classifier))
 
   override def id: DependencyId =
     DependencyId(
@@ -100,10 +168,53 @@ final case class DependencyDefinition(
   def isScalaSdk: Boolean = id == DependencyDefinition.ScalaId
 
   @transient
-  private[this] val fingerprintSuffix =
-    s"-dependency-definition:$group:$name:$variant:$version:configuration=$configuration:resolvers=${resolvers
-        .mkString(",")}:ivyArtifacts=${ivyArtifacts.mkString(",")}:excludes=${excludes
-        .mkString(",")}:transitive=$transitive:force=$force:macros=$containsMacros:plugin=$isScalacPlugin"
+  private[this] val fingerprintSuffix = {
+    val builder = new StringBuilder()
+    builder.append("-dependency-definition:")
+    builder.append(s"$group:$name:$version")
+
+    variant.foreach(v => builder.append(s":variant=$v"))
+
+    builder.append(s":isMaven=$isMaven")
+
+    if (configuration != DefaultConfiguration && configuration != "")
+      builder.append(s":configuration=$configuration")
+
+    builder.append(publicationSettings.fingerprint)
+
+    if (excludes.nonEmpty)
+      builder.append(s":excludes=${excludes.mkString(",")}")
+
+    if (resolvers.nonEmpty)
+      builder.append(s":resolvers=${resolvers.mkString(",")}")
+
+    if (!transitive) // Default is true
+      builder.append(":transitive=false")
+
+    if (force) // Default is false
+      builder.append(":force=true")
+
+    if (keySuffix.nonEmpty)
+      builder.append(s":keySuffix=$keySuffix")
+
+    if (containsMacros) // Default is false
+      builder.append(":macros=true")
+
+    if (isScalacPlugin) // Default is false
+      builder.append(":plugin=true")
+
+    if (ivyArtifacts.nonEmpty)
+      builder.append(s":ivyArtifacts=${ivyArtifacts.mkString(",")}")
+
+    if (isAgent) // Default is false
+      builder.append(":isAgent=true")
+
+    if (isExtraLib) // Default is false
+      builder.append(":isExtraLib=true")
+
+    builder.toString
+  }
+
   @transient
   private[this] val fingerprintCache = new ConcurrentHashMap[String, String]()
   def fingerprint(tpe: String): String =
@@ -127,11 +238,6 @@ final case class NativeDependencyDefinition(
     extraPaths: Seq[Asset]
 ) extends OrderedElement[NativeDependencyId] {
   def id: NativeDependencyId = NativeDependencyId(name)
-}
-
-object DependencyDefinition {
-  val ScalaId = DependencyId("ossscala", "scala")
-  val DefaultConfiguration = "runtime"
 }
 
 final case class DependencyDefinitions(
@@ -194,7 +300,7 @@ final case class AfsDependencies(unmappedAfsDeps: Seq[DependencyDefinition], afs
 }
 
 object MavenDependencies {
-  def empty: MavenDependencies = MavenDependencies(Nil, Nil, Nil)
+  def empty: MavenDependencies = MavenDependencies(Nil, Nil, Nil, Nil)
 }
 
 /**
@@ -211,7 +317,8 @@ object MavenDependencies {
 final case class MavenDependencies(
     unmappedMavenDeps: Seq[DependencyDefinition],
     mixedModeMavenDeps: Seq[DependencyDefinition],
-    boms: Seq[DependencyDefinition]
+    boms: Seq[DependencyDefinition],
+    substitutions: Seq[Substitution] = Nil
 ) {
   val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixedModeMavenDeps
 }

@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 
 // Functions related to reading and writing the mapping files (current-mapping.json, classpath-mapping.txt) that maps from the OBT produced jars to the scope IDs.

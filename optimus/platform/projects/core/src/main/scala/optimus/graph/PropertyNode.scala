@@ -37,7 +37,7 @@ trait TweakableKey {
   def trackKey: TweakableKey
 }
 
-final case class ExtractorTweakableKey(keyValue: AnyRef, info: NodeTaskInfo) extends TweakableKey {
+final case class ExtractorTweakableKey(keyValue: Any, info: NodeTaskInfo) extends TweakableKey {
   override def propertyInfo: NodeTaskInfo = info
   override def tidyKey: TweakableKey = this
   override def trackKey: TweakableKey = this
@@ -117,7 +117,7 @@ object PropertyNode {
   private[optimus] type CovariantPropertyNode[+A] = Node[A] with NodeKey[A]
 }
 
-abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with TweakableKey {
+abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with TweakableKey with FormattableNode {
   initTrackingValue() // [SEE_INIT_CLONE_RESET_DESERIALIZE]
   override def tidyKey: PropertyNode[T] = asKeyIn(ScenarioStack.constant)
 

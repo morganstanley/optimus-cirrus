@@ -11,24 +11,22 @@
  */
 package optimus.buildtool.utils
 
-import optimus.core.needsPlugin
+import optimus.core.needsPluginAlwaysAutoAsyncArgs
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
-import scala.collection.immutable.Seq
-
 object AsyncUtils {
 
-  @alwaysAutoAsyncArgs def asyncTry[A](tryF: => A): AsyncTryer[A] = needsPlugin
+  @alwaysAutoAsyncArgs def asyncTry[A](tryF: => A): AsyncTryer[A] = needsPluginAlwaysAutoAsyncArgs
   @async def asyncTry[A](tryF: AsyncFunction0[A]): AsyncTryer[A] = new AsyncTryer[A](tryF)
   class AsyncTryer[A](tryF: AsyncFunction0[A], finallyFs: Seq[AsyncFunction0[Any]] = Nil) {
 
-    @alwaysAutoAsyncArgs def thenFinally[B](finallyF: => B): AsyncTryer[A] = needsPlugin
+    @alwaysAutoAsyncArgs def thenFinally[B](finallyF: => B): AsyncTryer[A] = needsPluginAlwaysAutoAsyncArgs
     @async def thenFinally[B](finallyF: AsyncFunction0[B]): AsyncTryer[A] = {
       new AsyncTryer[A](tryF, finallyFs :+ finallyF)
     }
 
-    @alwaysAutoAsyncArgs def asyncFinally[B](finallyF: => B): A = needsPlugin
+    @alwaysAutoAsyncArgs def asyncFinally[B](finallyF: => B): A = needsPluginAlwaysAutoAsyncArgs
     @async def asyncFinally[B](finallyF: AsyncFunction0[B]): A = thenFinally(finallyF).run()
 
     @async def run(): A = {

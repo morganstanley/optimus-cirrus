@@ -17,7 +17,7 @@ import optimus.platform.dsi.protobufutils.DalBrokerClient
  * Exception thrown when DAL client fails to get response for request and under certain cases the request is retry-able
  * The client field can be used to shutdown the DAL client on which this exception occurred.
  */
-class DALRetryableActionException(message: String, cause: Throwable, val client: Option[DalBrokerClient])
+class DALRetryableActionException(message: String, cause: Throwable, @transient val client: Option[DalBrokerClient])
     extends DSIException(message, cause) {
   def this(msg: String, client: Option[DalBrokerClient]) = this(msg, null, client)
 }
@@ -26,7 +26,7 @@ class DALRetryableActionException(message: String, cause: Throwable, val client:
  * Exception thrown when DAL client fails to send request or get response for request where the request is not
  * retry-able
  */
-class DALNonRetryableActionException(message: String, cause: Throwable, val client: Option[DalBrokerClient])
+class DALNonRetryableActionException(message: String, cause: Throwable, @transient val client: Option[DalBrokerClient])
     extends DSIException(message, cause) {
   def this(msg: String, client: Option[DalBrokerClient]) = this(msg, null, client)
 }

@@ -173,19 +173,7 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
           alarm(OptimusErrors.ALL_EMBEDDABLE_CTOR_MUST_BE_NODE_IF_ONE_IS_NODE, ctor.pos, ctor)
       }
       if (isRegularClass) {
-        if (cls.mods.isCase && ctor == ctors.head) {
-          // [1] if the case class constructor is private, generate the apply method (as private too) so that scalac doesn't
-          // autogenerate one (that is annoyingly always public)
-          if (!ctor.mods.isPublic && isEmbeddableOrStable) {
-            // unfortunately as of 2.11.11 scalac always generates the default args for apply, so if the ctor has
-            // default args we can't do this trick
-            // TODO (OPTIMUS-17433): Remove this limitation when scalac supports it
-            if (ctor.vparamss.exists(_.exists(_.rhs != EmptyTree)))
-              alarm(OptimusErrors.EMBEDDABLE_PRIVATE_CTOR_DEFAULTS, ctor.pos, ctor)
-
-            applyMethod :: Nil
-          } else Nil
-        } else Nil
+        Nil
       } else if (isEvent) {
         uniqueInstanceMethod :: Nil
       } else
@@ -304,7 +292,7 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
     def genGetter(func: Select, getterName: TermName): List[DefDef] = genTypedGetter(func, getterName, null)
     def genTypedGetter(func: Select, getterName: TermName, rtpe: Tree): List[DefDef] = {
       val funcName = if (rtpe ne null) TermName("" + getterName + "Typed") else getterName
-      val rtpeQ = if (rtpe ne null) AppliedTypeTree(NodeType, List(rtpe)) else null
+      val rtpeQ = if (rtpe ne null) AppliedTypeTree(NodeFutureType, List(rtpe)) else null
       List(
         genTypedGetter(func, funcName, syncAnnotation = true, rtpe),
         genTypedGetter(

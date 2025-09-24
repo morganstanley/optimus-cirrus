@@ -20,7 +20,6 @@ import spray.json.JsString
 import spray.json.JsValue
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 /**
  * Warnings configuration

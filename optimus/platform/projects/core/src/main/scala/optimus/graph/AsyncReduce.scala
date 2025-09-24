@@ -18,6 +18,7 @@ import optimus.platform.annotations.scenarioIndependentTransparent
 import optimus.platform._
 import optimus.platform.PluginHelpers.toNodeFactory
 
+import scala.collection.BuildFrom
 import scala.collection.mutable
 
 trait AsyncReduce[A, CC <: Iterable[A]] {
@@ -101,6 +102,53 @@ trait AsyncReduce[A, CC <: Iterable[A]] {
       override protected def sequenceExecutionInfo: SequenceNodeTaskInfo = NodeTaskInfo.AssociativeReduce
     }
     cm
+  }
+
+  @nodeSync
+  @nodeSyncLift
+  @scenarioIndependentTransparent
+  def commutativeMapReduce[K, V, That](@nodeLift mapper: A => Iterable[(K, V)])(@nodeLift reducer: (V, V) => V)(implicit
+      cbf: BuildFrom[CC, (K, V), That]): Option[That] =
+    commutativeMapReduce$withNode(toNodeFactory(mapper))(toNodeFactory(reducer))
+  def commutativeMapReduce$withNode[K, V, That](mapper: A => Node[Iterable[(K, V)]])(reducer: (V, V) => Node[V])(
+      implicit cbf: BuildFrom[CC, (K, V), That]): Option[That] =
+    commutativeMapReduce$newNode(mapper)(reducer).get
+  def commutativeMapReduce$queued[K, V, That](mapper: A => Node[Iterable[(K, V)]])(reducer: (V, V) => Node[V])(implicit
+      cbf: BuildFrom[CC, (K, V), That]): NodeFuture[Option[That]] =
+    commutativeMapReduce$newNode(mapper)(reducer).enqueue
+  def commutativeMapReduce$newNode[K, V, That](mapper: A => Node[Iterable[(K, V)]])(reducer: (V, V) => Node[V])(implicit
+      cbf: BuildFrom[CC, (K, V), That]): Node[Option[That]] = {
+    if (c.isEmpty) new AlreadyCompletedNode(None)
+    else {
+      val cm =
+        new CommutativeAggregatorNode[Iterable[(K, V)], Option[That]](workMarker, maxConcurrency, -1) {
+          private[this] val reductionQueue = mutable.Queue.empty[(K, V, V)]
+          private[this] val accumulator = mutable.HashMap.empty[K, V]
+          private[this] val iterator: Iterator[A] = c.iterator
+
+          override def hasNextIteration: Boolean = iterator.hasNext || reductionQueue.nonEmpty
+
+          override def nextIteration: Iteration = {
+            val node: Node[Iterable[(K, V)]] = if (reductionQueue.nonEmpty) {
+              val (k, v1, v2) = reductionQueue.dequeue()
+              reducer(v1, v2).map(v => Seq(k -> v))
+            } else { mapper(iterator.next()) }
+            new Iteration(node)
+          }
+
+          private def processKV(k: K, v: V): Unit = accumulator.updateWith(k) {
+            case Some(v2) => reductionQueue.enqueue((k, v, v2)); None
+            case None     => Some(v)
+          }
+
+          override def consumeIteration(i: Iteration): Unit = i.node.result.foreach { case (k, v) => processKV(k, v) }
+
+          override def getFinalResult: Option[That] = Some(accumulator to cbf.toFactory(c))
+
+          override protected def sequenceExecutionInfo: SequenceNodeTaskInfo = NodeTaskInfo.CommutativeMapReduce
+        }
+      cm
+    }
   }
 
   @nodeSync

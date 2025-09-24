@@ -24,6 +24,7 @@ object RunConfSupport {
     val TestDefaults = "TestDefaults"
 
     val allDefaultTemplates = Set(RunConfDefaults, ApplicationDefaults, TestDefaults)
+    val allDefaultTemplatesByLowercase: Map[String, String] = allDefaultTemplates.map(n => n.toLowerCase -> n).toMap
 
     object scopeKey {
       val sysProps = "sys"

@@ -12,8 +12,6 @@
 package optimus.graph;
 
 import static optimus.graph.WaitingChainWriter.writeWaitingChain;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +32,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import msjava.slf4jutils.scalalog.package$;
+import optimus.EntityAgent;
 import optimus.breadcrumbs.crumbs.RequestsStallInfo;
 import optimus.core.ArrayListWithMarker;
 import optimus.core.IndexedArrayList;
@@ -60,11 +58,11 @@ import scala.Tuple3;
 
 public class OGScheduler extends Scheduler {
   static final String schedulerVersion = "OGScheduler_v15.4";
-  public static final Logger log = package$.MODULE$.getLogger("optimus.graph").javaLogger();
+  public static final Logger log = optimus.core.package$.MODULE$.log().javaLogger();
 
   private static final ExecutorService virtualExecutorService;
   public static final String ogThreadNamePrefix = "og.worker-";
-  private static final long ONE_SECOND_IN_NANOSECONDS = 1000000000;
+  private static final long ONE_SECOND_IN_NANOSECONDS = 1_000_000_000;
 
   private static long deadlockDetectionTimeout;
   private static long stallPrintInterval;
@@ -82,24 +80,13 @@ public class OGScheduler extends Scheduler {
 
   static {
     AgentInfo.agentInfo(); // fail fast if entityagent is not present
-    OGTrace.nanoTime(); // This is to avoid deadlock where OGScheduler -> NodeTask -> OGTrace, now
-    // OGScheduler -> OGTrace
+    // This is to avoid deadlock OGScheduler -> NodeTask -> OGTrace, now OGScheduler -> OGTrace
+    OGTrace.nanoTime();
     readSettingsForTestingPurposes();
 
-    ExecutorService executorService = null;
-    if (Settings.useVirtualThreads) {
-      // Replace with direct Executors.newVirtualThreadPerTaskExecutor() on Java21
-      var mt = MethodType.methodType(ExecutorService.class);
-      try {
-        var mh =
-            MethodHandles.lookup()
-                .findStatic(Executors.class, "newVirtualThreadPerTaskExecutor", mt);
-        executorService = (ExecutorService) mh.invoke();
-      } catch (Throwable e) {
-        log.warn("Couldn't get virtual thread executor", e);
-      }
-    }
-    virtualExecutorService = executorService;
+    EntityAgent.retransform(ReentrantLock.class);
+    virtualExecutorService =
+        Settings.useVirtualThreads ? Executors.newVirtualThreadPerTaskExecutor() : null;
   }
 
   /**
@@ -125,14 +112,14 @@ public class OGScheduler extends Scheduler {
     int awaitedTaskEndOfChainID; // Display task instance at the end of chain of an awaited task in
     // blocking wait
 
-    NodeTask awaitedTask; // Task thread is waiting for to complete OR updated to atask to process
+    NodeTask awaitedTask; // Task thread is waiting for to complete OR updated to task to process
 
     public Option<NodeTask> lastTask() {
       var at = this.awaitedTask;
       if (Objects.isNull(at)) return None$.empty();
       var chain = at.visitForwardChain();
       if (chain.isEmpty()) return None$.empty();
-      else return new Some<>(chain.get(chain.size() - 1));
+      else return new Some<>(chain.getLast());
     }
 
     // 'meanwhile'
@@ -200,6 +187,7 @@ public class OGScheduler extends Scheduler {
         sb.append(name);
         if (count == 0) sb.appendln(" [] ");
         else {
+          sb.append(" ").append(count);
           sb.startBlock();
           foreach(c -> c.writePrettyString(sb, showEmptyQueues, nodeLimit));
           sb.endBlock();
@@ -364,7 +352,7 @@ public class OGScheduler extends Scheduler {
 
   private void setActualIdealThreadCount(int actualIdealCount) {
     _idealCount = actualIdealCount;
-    log.info("Setting ideal thread count to " + actualIdealCount);
+    log.info("Setting ideal thread count to {}", actualIdealCount);
     // Set _idlePoolCount to _idealCount * 2 to avoid thread leaking when we spin up extra thread to
     // unblock sync stacks
     _idlePoolCount = _idealCount * 2;
@@ -380,7 +368,19 @@ public class OGScheduler extends Scheduler {
   public void shutdown() {
     synchronized (_lock) {
       _schedulerShutdown = true;
-
+      if (!_queue.isEmpty() || !_qqueue.isEmpty()) {
+        log.warn(
+            "Scheduler shutting down but has some tasks! queue: {}, qqueue: {}",
+            _queue.size(),
+            _qqueue.size());
+      }
+      _workers.foreach(
+          worker -> {
+            if (!worker.queue.isEmpty()) {
+              log.warn(
+                  "Scheduler shutting down but worker's queue has {} tasks!", worker.queue.size());
+            }
+          });
       // shutdown currently idle threads quickly
       Context idle;
       while ((idle = _idlePool.pop()) != null) {
@@ -434,8 +434,8 @@ public class OGScheduler extends Scheduler {
           if (_spinningThreadID == ctx.threadID) continue;
           OGTrace.observer.graphExit(ec.prfCtx);
           OGLocalTables.releaseProfilingContext(ec);
-          // Idle and could be replaced by just LockSupport.park() (but provides a great place to
-          // put breakpoint)
+          // Idle and could be replaced by just LockSupport.park() (but provides a great place
+          // to put breakpoint)
           while (ctx.parked) {
             LockSupport.parkNanos(ONE_SECOND_IN_NANOSECONDS);
           }
@@ -992,8 +992,14 @@ public class OGScheduler extends Scheduler {
       }
 
       statsDumped = tryPrintStall(statsDumped, time, startTime, ctx);
-      // Logically .park(), place breakpoint after this line on stall
-      LockSupport.parkNanos(ONE_SECOND_IN_NANOSECONDS);
+
+      if (DiagnosticSettings.schedulerRecoveryInWait)
+        LockSupport.parkNanos(ONE_SECOND_IN_NANOSECONDS);
+      else
+        while (ctx.parked) {
+          // Debugging? parkNanos(ONE_SECOND_IN_NANOSECONDS) or see OGTraceReaderLive.liveCatchUp
+          LockSupport.park();
+        }
     }
 
     OGTrace.observer.graphExitWait(ctx.schedulerContext.prfCtx);
@@ -1035,7 +1041,7 @@ public class OGScheduler extends Scheduler {
   private NodeTask lastTaskInWaitingChain(Context ctx) {
     if (ctx.awaitedTask != null) {
       ArrayListWithMarker<NodeTask> forwardChain = ctx.awaitedTask.visitForwardChain(1000);
-      return forwardChain.get(forwardChain.size() - 1);
+      return forwardChain.getLast();
     } else return null;
   }
 
@@ -1145,11 +1151,14 @@ public class OGScheduler extends Scheduler {
 
       // This is the last working thread and couldn't find any work, run `OnStalledCallbacks`
       if (isStalling(ctx)) {
-        if (runOnStalledCallbacks()) {
+        while (runOnStalledCallbacks()) {
           // runOnStalledCallbacks could have scheduled nodes so we need to re-check the queues
           if ((ntsk = _qqueue.scanToFindWork(ctx.threadID, ctx.awaitedCausalityID)) != null)
             return ntsk;
           if ((ntsk = findWorkFromLowPriorityQueue(ctx)) != null) return ntsk;
+          // Something was placed on the queue and we could not pick it up (sync stack issue)
+          // instead of deadlocking we can try and run the next callback
+          // this should never occur in the virtual thread case
         }
 
         // runOnStalledCallbacks() could have awakened one of the threads in which case we are no
@@ -1171,8 +1180,7 @@ public class OGScheduler extends Scheduler {
             // or establish a dependency between the wait and these nodes [SEE_WAIT_FOR_TRACKED]
             _evalAsyncTrackedNodes.foreach(tracked -> detectCycles(tracked.task));
             // detectCycles can break cycles and generate tasks need to check quick queue (but not
-            // low priority queue
-            // because detectCycles won't put work there)
+            // low priority queue because detectCycles won't put work there)
             if ((ntsk = _qqueue.scanToFindWork(ctx.threadID, ctx.awaitedCausalityID)) != null)
               return ntsk;
           }
@@ -1484,8 +1492,7 @@ public class OGScheduler extends Scheduler {
           && (cb.priority() == priority || !newWorkAdded)) {
         _onStalledCallbacks.poll(); // Remove from queue
         if (!newWorkAdded)
-          priority =
-              cb.priority(); // Update (to a higher priority) until at least some nodes were added
+          priority = cb.priority(); // Update (to a higher priority) until at least 1 node was added
         try {
           cb.onGraphStalled(OGScheduler.this, outstandingTasks);
         } catch (Throwable t) {
@@ -1507,8 +1514,7 @@ public class OGScheduler extends Scheduler {
     }
 
     if (Settings.schedulerDiagnoseBatchers && !_onStalledCallbacks.isEmpty())
-      log.info(
-          "Not all callbacks were raised, this is a recent change and is not an issue in itself");
+      log.info("Not all callbacks were raised, this is not an issue in itself");
 
     // Process any pending additions
     if (_onStalledCallbacksPending != null) _onStalledCallbacks.addAll(_onStalledCallbacksPending);
@@ -1982,54 +1988,9 @@ public class OGScheduler extends Scheduler {
    * depends on. We don't hold on to the randomly selected end of chain node task itself because it
    * might hold on to arbitrary memory.
    */
-  public static final class AwaitedTasks {
-
-    private final NodeTask task;
-    private final NodeTaskInfo endOfChainTaskInfo;
-    private final SchedulerPlugin endOfChainPlugin;
-    private final PluginType endOfChainPluginType;
-
-    // TODO(OPTIMUS-68964) Convert to Record once Scala 2.13 is available
-    public AwaitedTasks(
-        NodeTask task,
-        NodeTaskInfo endOfChainTaskInfo,
-        SchedulerPlugin endOfChainPlugin,
-        PluginType endOfChainPluginType) {
-      this.task = task;
-      this.endOfChainTaskInfo = endOfChainTaskInfo;
-      this.endOfChainPlugin = endOfChainPlugin;
-      this.endOfChainPluginType = endOfChainPluginType;
-    }
-
-    public NodeTask task() {
-      return task;
-    }
-
-    public NodeTaskInfo endOfChainTaskInfo() {
-      return endOfChainTaskInfo;
-    }
-
-    public SchedulerPlugin endOfChainPlugin() {
-      return endOfChainPlugin;
-    }
-
-    public PluginType endOfChainPluginType() {
-      return endOfChainPluginType;
-    }
-
-    public int hashCode() {
-      return Objects.hash(task, endOfChainTaskInfo, endOfChainPlugin, endOfChainPluginType);
-    }
-
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      else if (!(o instanceof AwaitedTasks that)) return false;
-      else {
-        return Objects.equals(task, that.task)
-            && Objects.equals(endOfChainTaskInfo, that.endOfChainTaskInfo)
-            && Objects.equals(endOfChainPlugin, that.endOfChainPlugin)
-            && Objects.equals(endOfChainPluginType, that.endOfChainPluginType);
-      }
-    }
-  }
+  public record AwaitedTasks(
+      NodeTask task,
+      NodeTaskInfo endOfChainTaskInfo,
+      SchedulerPlugin endOfChainPlugin,
+      PluginType endOfChainPluginType) {}
 }

@@ -17,17 +17,63 @@ import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.OrderedElement
 import optimus.buildtool.dependencies.DependencySetId
 import optimus.buildtool.dependencies.VariantSetId
+import optimus.buildtool.utils.OptimusBuildToolProperties
 
 import scala.annotation.tailrec
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 
 object OrderingUtils {
-  private val shouldReportWarnings =
-    sys.props.get("optimus.buildtool.format.ordering.warnings").exists(_.toBoolean)
+  private val shouldReportWarnings: Boolean = OptimusBuildToolProperties.getOrFalse("format.ordering.warnings")
 
   private val versionRegex = "\\d+(?:[_.-]\\d+)*".r
+  private val releaseOrMilestoneRegex = "-(m|rc)\\d+".r
   private val separators = Array('.', '-', '_')
+
+  @tailrec
+  private def compareParts0(x: String, y: String): Int =
+    (x.headOption, y.headOption) match {
+      case (Some(c1), Some(c2)) if c1.isDigit && c2.isDigit => // both are digits, we should now compare versions
+        val match1 = versionRegex.findFirstIn(x).get // this is safe because both contain digits
+        val match2 = versionRegex.findFirstIn(y).get
+
+        val parts1 = match1.split(separators)
+        val parts2 = match2.split(separators)
+
+        val comparisonResult = (parts1 zip parts2).find { case (xs, ys) => xs != ys } match {
+          case Some((x, y)) => x.toInt compare y.toInt
+          case None         => parts1.length compare parts2.length
+        }
+
+        if (comparisonResult == 0) compareParts0(x.drop(match1.length max 1), y.drop(match2.length max 1))
+        else comparisonResult
+
+      case _ if releaseOrMilestoneRegex.matches(x) || releaseOrMilestoneRegex.matches(y) => // -rc1 | -m1
+        val match1 = releaseOrMilestoneRegex.findFirstIn(x)
+        val match2 = releaseOrMilestoneRegex.findFirstIn(y)
+        (match1, match2) match {
+          case (Some(v1), Some(v2)) => compareParts0(v1.tail, v2.tail)
+          case (Some(_), None)      => -1
+          case (None, Some(_))      => 1
+          case _                    => 0
+        }
+
+      case (Some(c1), Some(c2)) =>
+        val comparisonResult = c1 compare c2
+        if (comparisonResult == 0) compareParts0(x.tail, y.tail) else comparisonResult
+      case _ => x compare y
+    }
+
+  private def compareParts(x: Iterable[String], y: Iterable[String]): Int = {
+    (x zip y).find { case (xe, ye) => xe.toLowerCase != ye.toLowerCase } match {
+      case Some((x, y)) => compareParts0(x.toLowerCase, y.toLowerCase)
+      case None         => x sizeCompare y
+    }
+  }
+
+  val versionOrdering: Ordering[String] = new Ordering[String] {
+    override def compare(x: String, y: String): Int =
+      compareParts(x.split('.'), y.split('.'))
+  }
 
   final case class NestedDefinitions[T](loaded: T, groupName: String, keyName: String, line: Int)
       extends OrderedElement[DependencyId] {
@@ -41,39 +87,8 @@ object OrderingUtils {
   class PathOrdering[A <: Id] extends NamedOrdering[A] {
 
     def name(a: A): String = a.properPath
-
-    @tailrec
-    private def compareParts(x: String, y: String): Int =
-      (x.headOption, y.headOption) match {
-        case (Some(c1), Some(c2)) if c1.isDigit && c2.isDigit => // both are digits, we should now compare versions
-          val match1 = versionRegex.findFirstIn(x).get // this is safe because both contain digits
-          val match2 = versionRegex.findFirstIn(y).get
-
-          val parts1 = match1.split(separators)
-          val parts2 = match2.split(separators)
-
-          val comparisonResult = (parts1 zip parts2).find { case (xs, ys) => xs != ys } match {
-            case Some((x, y)) => x.toInt compare y.toInt
-            case None         => parts1.length compare parts2.length
-          }
-
-          if (comparisonResult == 0) compareParts(x.drop(match1.length max 1), y.drop(match2.length max 1))
-          else comparisonResult
-        case (Some(c1), Some(c2)) =>
-          val comparisonResult = c1 compare c2
-          if (comparisonResult == 0) compareParts(x.tail, y.tail) else comparisonResult
-        case _ => x compare y
-      }
-
-    override def compare(x: A, y: A): Int = {
-      val common = x.elements.zip(y.elements)
-      common.find { case (xe, ye) => xe.toLowerCase != ye.toLowerCase } match {
-        case Some((xe, ye)) =>
-          compareParts(xe.toLowerCase, ye.toLowerCase)
-        case None =>
-          x.elements.length.compare(y.elements.length)
-      }
-    }
+    override def compare(x: A, y: A): Int =
+      compareParts(x.elements, y.elements)
   }
 
   implicit def pathOrdering[A <: Id]: PathOrdering[A] = new PathOrdering[A]()

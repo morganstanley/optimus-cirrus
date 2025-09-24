@@ -78,6 +78,8 @@ object ErrorResultSerializer
       case ErrorResultProto.Type.SESSION_ESTABLISHMENT   => new SessionEstablishmentException(proto.getMessage)
       case ErrorResultProto.Type.INCOMPLETE_WRITE_REQUEST =>
         new IncompleteWriteRequestException(versioningRedirectionInfo)
+      case ErrorResultProto.Type.PUBSUB_ENTITLEMENT_ERROR =>
+        new PubSubEntitlementException(pubSubStreamId, proto.getPubSubSubId, proto.getMessage)
       // EntityReference gD4L1l0/1tbWdrwu/ZJCUw== fails here on deserializing effectDocs.
       case ErrorResultProto.Type.CREATE_PUBSUB_STREAM_ERROR =>
         new PubSubStreamCreationException(pubSubStreamId, proto.getMessage)
@@ -131,6 +133,10 @@ object ErrorResultSerializer
         ErrorResultProto.Type.OUTDATED_VERSION
       case _: NonLeaderBrokerException => ErrorResultProto.Type.NOT_LEAD_BROKER
       case _: NonReaderBrokerException => ErrorResultProto.Type.NOT_READER_BROKER
+      case e: PubSubEntitlementException =>
+        builder.setPubsubStreamUuid(e.streamId)
+        builder.setPubSubSubId(e.subId)
+        ErrorResultProto.Type.PUBSUB_ENTITLEMENT_ERROR
       case e: DuplicateStoredKeyException =>
         builder.setEntityReference(toProto(e.ref))
         e.inputEntityRef.foreach(r => builder.setExistingEntityReference(toProto(r)))
@@ -218,6 +224,7 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
       case CommandProto.Type.CREATE_SLOTS                   => true
       case CommandProto.Type.FILL_SLOT                      => true
       case CommandProto.Type.SYSTEM                         => true
+      case CommandProto.Type.PREPARE_MONO_TEMPORAL          => true
       case _                                                => false
     }
   }
@@ -239,6 +246,11 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
         CommandProto.newBuilder
           .setInvalidateAllCurrentByRefs(toProto(ic))
           .setType(CommandProto.Type.INVALIDATE_ALL_CURRENT_BY_REFS)
+          .build
+      case pm: PrepareMonoTemporal =>
+        CommandProto.newBuilder
+          .setPrepareMonoTemporal(toProto(pm))
+          .setType(CommandProto.Type.PREPARE_MONO_TEMPORAL)
           .build
       case s: SystemCommand => CommandProto.newBuilder.setSystem(toProto(s)).setType(CommandProto.Type.SYSTEM).build
       case r: ResolveKeys =>
@@ -462,6 +474,7 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
       case CommandProto.Type.COMMIT_MESSAGES_STREAM       => fromProto(proto.getCommitMessagesStream)
       case CommandProto.Type.PUBLISH_TRANSACTION          => fromProto(proto.getPublishTransaction)
       case CommandProto.Type.STREAMS_ACLS_COMMAND         => fromProto(proto.getStreamsAclsCommand)
+      case CommandProto.Type.PREPARE_MONO_TEMPORAL        => fromProto(proto.getPrepareMonoTemporal)
     }
   }
 }
@@ -482,6 +495,8 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
         ResultProto.newBuilder
           .setInvalidateAllCurrentResult(toProto(iac))
           .setType(ResultProto.Type.INVALIDATE_ALL_CURRENT)
+      case pm: PrepareMonoTemporalResult =>
+        ResultProto.newBuilder.setPrepareMonoTemporalResult(toProto(pm)).setType(ResultProto.Type.PREPARE_MONO_TEMPORAL)
       case e: ErrorResult => ResultProto.newBuilder.setErrorResult(toProto(e)).setType(ResultProto.Type.ERROR)
       case s: SystemCommandResult =>
         ResultProto.newBuilder.setSystemResult(toProto(s)).setType(ResultProto.Type.SYSTEM)
@@ -664,6 +679,7 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
       case _ => throw new UnsupportedOperationException(s"Unsupported result in ResultProto serialization: $result.")
     }
     result match {
+      case _: AppEventWriteResult => // the stats can be deduced from the Result itself
       case resWithStats: HasResultStats[_] =>
         resWithStats.getResultStats().foreach(stats => resultBuilder.setResultStats(toProto(stats)))
       case _ =>
@@ -745,6 +761,7 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
       case ResultProto.Type.CLOSE_MESSAGES_STREAM        => fromProto(proto.getCloseMessagesStreamResult)
       case ResultProto.Type.MESSAGES_NOTIFICATION        => fromProto(proto.getMessagesNotificationResult)
       case ResultProto.Type.STREAMS_ACLS_COMMAND         => fromProto(proto.getStreamsAclsCommandResult)
+      case ResultProto.Type.PREPARE_MONO_TEMPORAL        => fromProto(proto.getPrepareMonoTemporalResult)
     }
     if (proto.hasResultStats) {
       result match {

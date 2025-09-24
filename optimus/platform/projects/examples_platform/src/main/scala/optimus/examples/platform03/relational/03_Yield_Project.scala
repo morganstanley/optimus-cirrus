@@ -11,10 +11,11 @@
  */
 package optimus.examples.platform03.relational
 
+import optimus.examples.testinfra.PrintlnInterceptor
 import optimus.platform._
 import optimus.platform.relational._
 
-object YieldProject extends LegacyOptimusApp {
+object YieldProject extends LegacyOptimusApp with PrintlnInterceptor {
 
   final case class Holding(val symbol: String, val quantity: Int) {}
 

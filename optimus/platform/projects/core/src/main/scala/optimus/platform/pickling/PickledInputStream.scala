@@ -15,31 +15,14 @@ import optimus.platform.TemporalContext
 import optimus.platform.storable.InlineEntityHolder
 import optimus.platform.storable.StorableReference
 
-/**
- * This interface has 'seek' methods instead of 'read' methods. Eventually 'seek' returns boolean so to enable detection
- * of nonexistent primitive fields:
- *
- * if(in.seekInt("property") { foo = in.intValue } else { foo = 5 // default value }
- */
+// TODO (OPTIMUS-78768): This is really a context for the unpickling, and not a stream. It should be renamed.
 trait PickledInputStream {
   def temporalContext: TemporalContext
-
-  def seek[T](k: String, unpickler: Unpickler[T]): Boolean
-  def seekChar(k: String): Boolean
-  def seekDouble(k: String): Boolean
-  def seekFloat(k: String): Boolean
-  def seekInt(k: String): Boolean
-  def seekLong(k: String): Boolean
-
-  def seekRaw(k: String): Boolean
-
   def inlineEntitiesByRef: InlineEntityHolder = InlineEntityHolder.empty
   def reference: StorableReference
+  def newMutStream: PickledInputStreamMut
+}
 
-  def charValue: Char
-  def doubleValue: Double
-  def floatValue: Float
-  def intValue: Int
-  def longValue: Long
-  def value: Any
+object PickledInputStream {
+  val empty: PickledInputStream = new PickledMapWrapper(Map.empty)
 }

@@ -18,7 +18,6 @@ import optimus.buildtool.config.ParentId
 import optimus.buildtool.config.WorkspaceId
 import optimus.buildtool.runconf.ScopedName
 
-import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.Try
 

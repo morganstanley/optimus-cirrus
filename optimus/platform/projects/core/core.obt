@@ -27,9 +27,9 @@ main {
       optimus.platform.utils
     ]
     libs = [
-      msjava.base,
-      msjava.tools,
-      msjava.zkapi,
+      msjava.rr-base,
+      msjava.rr-tools,
+      msjava.rr-zkapi,
       optimus.async-profiler,
       ossjava.args4j,
       ossjava.caffeine,
@@ -52,6 +52,7 @@ main {
       ossjava.slf4j,
       ossjava.spring,
       ossscala.scala-collection-compat,
+      ossscala.scala-xml,
       ossscala.scala.tools,
       sam.zookeeper
     ]

@@ -18,7 +18,7 @@ import coursier.util.EitherT
 import coursier.util.Monad
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.utils.PathUtils
-import optimus.platform.util.xml.UnsafeXML
+import optimus.platform.util.xml.CustomXmlLoader
 import optimus.platform._
 
 import java.nio.file.FileSystem
@@ -369,7 +369,7 @@ import scala.util.Try
 }
 
 private[resolvers] object MsIvyRepository {
-  private val xmlLoader = UnsafeXML(disallowDoctypeDecl = false)
+  private val xmlLoader = CustomXmlLoader(disallowDoctypeDecl = false)
   def parse(
       ivyPatternStr: String,
       artifactPatternStrs: Seq[String],
@@ -422,6 +422,8 @@ private[resolvers] object MsIvyRepository {
   }
 
   def isClassJar(artifact: CoursierArtifact): Boolean = isClassJar(artifact.attributes.`type`)
+
+  def isSourceJar(artifact: CoursierArtifact): Boolean = artifact.publication.classifier == Classifier.sources
 
   def isClassJar(tpe: Type): Boolean =
     tpe.value == "jar" || tpe.value == "bundle" // (see https://stackoverflow.com/questions/5389691/what-is-the-meaning-of-type-bundle-in-a-maven-dependency)

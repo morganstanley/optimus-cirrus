@@ -11,6 +11,8 @@
  */
 package optimus.graph.diagnostics.kafka
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
@@ -20,16 +22,17 @@ import msjava.zkapi.ZkaAttr
 import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceBySourceLoc
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.{Properties => P}
-import optimus.breadcrumbs.crumbs.Events
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.util.LimitedSizeConcurrentHashMap
+import optimus.core.utils.AppendingGzipOutputStream
 import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.utils.app.StringOptionOptionHandler
-import optimus.utils.MiscUtils.retry
+import optimus.utils.MiscUtils.retryWithExponentialBackoff
 import optimus.utils.OptimusStringUtils
 import optimus.utils.PropertyUtils
 import org.apache.kafka.clients.CommonClientConfigs
@@ -46,8 +49,6 @@ import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.{Option => ArgOption}
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 import java.io.BufferedOutputStream
 import java.io.FileDescriptor
@@ -71,8 +72,6 @@ import java.util.Objects
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
-import java.util.stream
-import java.util.zip.GZIPOutputStream
 import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Try
@@ -92,8 +91,8 @@ class KafkaListenerArgs {
   @ArgOption(name = "--userjaas", usage = "If set, add user jaas configuration ")
   val userjaas = false
 
-  @ArgOption(name = "--parts", usage = "If set, store successive gzipped files in uuid-named subdirectories")
-  val parts = false
+  @ArgOption(name = "--zip", usage = "If set write output zipped, with .gz extension")
+  val zip = false
 
   @ArgOption(
     name = "--publish",
@@ -133,17 +132,11 @@ class KafkaListenerArgs {
       "Continue reading until kafka receipt time exceeds crumb publication end time by this amount, default 1000ms")
   val endSlop = 1000
 
-  @ArgOption(name = "--prefix", usage = "UUID starts with...  Default blank.", aliases = Array("-f"))
-  val prefix: String = ""
-
   @ArgOption(
     name = "--validuuidregex",
     aliases = Array("-u"),
     usage = "Deem uuids as valid if they match this regex, default '.+'")
   val uuidRegexString: String = "\\S+"
-
-  @ArgOption(name = "--waitAfterComplete", usage = "If set, exit ms after observing AppCompleted event")
-  val waitAfterComplete: Int = -1
 
   @ArgOption(name = "--wait", usage = "Exit if no crumbs for this many msec, default Long.MaxValue")
   var quiescenceTimeout: Long = Long.MaxValue // This one does get overwritten
@@ -157,9 +150,6 @@ class KafkaListenerArgs {
 
   @ArgOption(name = "--mergewait", usage = "If queue is not at desired length, wait at most 50 ms (default).")
   val mergeWait = 50
-
-  @ArgOption(name = "--json", usage = "Print as JSON as opposed to Scala Map (default true")
-  val asJson = true
 
   @ArgOption(name = "--quiet", usage = "Don't print anything except progress updates.")
   val quiet = false
@@ -178,9 +168,6 @@ class KafkaListenerArgs {
     name = "--killpastevent",
     usage = "If set, cut of output after an event crumb with event matching this regex.")
   val killPastEventRegexString = "NONONONO"
-
-  @ArgOption(name = "--enrich", usage = "If set, prepend output lines with potentially useful information.")
-  val enrich = false
 
   @ArgOption(name = "--buffer", usage = "Default true.  If set to false, flush output after each line.")
   val bufferOut = true
@@ -209,14 +196,19 @@ class KafkaListenerArgs {
   val maxQueue = 1000000
 
   @ArgOption(
-    name = "--flushactive",
-    usage = "If writing plex files, flush after specified ms, even if active, default 60000")
-  val flushAfterActiveMs: Int = 60000
+    name = "--maxLagMinutes",
+    usage = "Maximum time to allow accumulation in kafka when buffer is full, before dropping.")
+  val maxLagMn = -1
 
-  val closeAfterMsDefault = 60000
+  @ArgOption(
+    name = "--flushactive",
+    usage = "If writing plex files, flush after specified ms, even if active, default 5 minutes")
+  val flushAfterActiveMs: Int = 500 * 1000
+
+  val closeAfterMsDefault = 300 * 1000
   @ArgOption(
     name = "--closeafter",
-    usage = "If writing plex files, close (potentially to be reopened later) after ms of inactivity, default 60000")
+    usage = "If writing plex files, close (potentially to be reopened later) after ms of inactivity, 5 minutes")
   val closeAfterMs: Int = closeAfterMsDefault
 
   @ArgOption(
@@ -228,6 +220,8 @@ class KafkaListenerArgs {
   @ArgOption(name = "--help", aliases = Array("-h"), usage = "Help.")
   val help = false
 
+  @ArgOption(name = "--subdirs", usage = "divide into subdirs")
+  val useSubdirs = false
 }
 
 trait CrumbRecordParser {
@@ -245,13 +239,17 @@ trait CrumbRecordParser {
 
   protected val recordMaxLength: Int = PropertyUtils.get("optimus.crumbplexer.max.record.length", 100000)
 
+  private val mapper = new ObjectMapper()
+  mapper.registerModule(DefaultScalaModule)
+  def toMap(s: String) = mapper.readValue(s, classOf[Map[String, Object]])
+
   protected val parseErrors = new AtomicLong(0)
-  protected def parseRecord(s: ConsumerRecord[String, String]): Try[Map[String, JsValue]] = {
+  protected def parseRecord(s: ConsumerRecord[String, String]): Try[Map[String, Object]] = {
     val value = s.value()
     if (value.length > recordMaxLength)
       Failure(new IllegalArgumentException(s"Record size ${value.length} > $recordMaxLength"))
     else
-      Try(value.parseJson.convertTo[Map[String, JsValue]]).recoverWith { case t: Throwable =>
+      Try(mapper.readValue(value, classOf[Map[String, Object]])).recoverWith { case t: Throwable =>
         parseErrors.incrementAndGet()
         val (lastFailedParseTime, waitMs): (Instant, Long) =
           lastFailedParseTimeAndWaitMs.getOrElse(t.getClass, (Instant.EPOCH, -1))
@@ -278,39 +276,17 @@ trait CrumbRecordParser {
 }
 
 object CrumbPlexerUtils {
-  val partsSuffix: String = ".parts"
-
-  val sizeSuffix = ".size"
-
   val zipSuffix = ".gz"
-
-  private val partsDirLength = 3
-
-  /**
-   *  Convert a root UUID, or a directory/URL based on one, to a sequence of subdirectories followed by
-   *  a .parts directory, e.g.
-   *    http://some.where:8080/idotELGiEe-Dm6PG_-Y8 => http://some.where:8080/ido/tEL/GiE/e-D/m6P/G_-Y8.parts
-   *    idotELGiEe-Dm6PG_-Y8 => ido/tEL/GiE/e-D/m6P/G_-Y8.parts
-   *  Not robust to malformed IDs.
-   */
-  def partsDir(uuid: String): String = {
-    val b = new StringBuilder()
-    var rest = uuid
-    val slash = rest.lastIndexOf('/')
-    if (slash > 0) {
-      b ++= rest.substring(0, slash + 1)
-      rest = rest.substring(slash + 1)
-    }
-    while (rest.size > partsDirLength * 2) {
-      b ++= rest.substring(0, partsDirLength)
-      b += '/'
-      rest = rest.substring(partsDirLength)
-    }
-    b ++= rest
-    b ++= partsSuffix
-    b.toString()
-  }
-
+  val zstdSuffix = ".zst"
+  val sizeSuffix = ".size"
+  private[kafka] val subdirs = 1000
+  private[kafka] def numdir(i: Int) = f"$i%03d"
+  private[kafka] def subdir(uuid: String): String = f"${numdir(Math.abs(uuid.hashCode) % subdirs)}"
+  def pathsToTry(uuid: String): Seq[String] = for {
+    base <- Seq(s"${subdir(uuid)}/$uuid")
+    // Even if nginx has gzip_static, we still need to look at the .gz file to get a size
+    ext <- Seq(zipSuffix, zstdSuffix, "")
+  } yield s"$base$ext"
 }
 
 object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
@@ -352,23 +328,27 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     logger.warn(msg)
     if (publishingCrumbsOurself)
       Breadcrumbs.warn(
+        100 * OnceBySourceLoc thenBackoff,
         ChainedID.root,
         PropertiesCrumb(
           _,
           publishSource,
-          P.logMsg -> msg :: P.logLevel -> "WARN" :: id.emptyOrSome.map(P.publisherId -> _) :: stdProps))
+          P.logMsg -> msg :: P.logLevel -> "WARN" :: id.emptyOrSome.map(P.publisherId -> _) :: stdProps)
+      )
   }
 
   private def info(msg: String, id: String = "") = {
     logger.info(msg)
     if (publishingCrumbsOurself)
       Breadcrumbs.info(
+        100 * OnceBySourceLoc thenBackoff,
         ChainedID.root,
         PropertiesCrumb(
           _,
           publishSource,
           P.logMsg -> msg :: P.logLevel -> "INFO" ::
-            id.emptyOrSome.map(P.publisherId -> _) :: stdProps))
+            id.emptyOrSome.map(P.publisherId -> _) :: stdProps)
+      )
   }
 
   override protected def error(msg: String, id: String = "", t: Throwable): Unit = {
@@ -435,7 +415,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       }.get
 
   private val t1: Long = parseTimeArg(startTimeArg)
-  private var tFinal = parseTimeArg(endTimeArg)
+  private val tFinal = parseTimeArg(endTimeArg)
 
   private val props = new Properties()
   props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, kSecurityProtocol)
@@ -469,7 +449,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private val partitions = zkClient.getReplicaAssignmentForTopics(topics.split(",").toSet).keys.toSeq
 
   private val consumers: Seq[KafkaConsumer[String, String]] =
-    retry(delayMs = 60000, exceptionClasses = List(classOf[NullPointerException])) { () =>
+    retryWithExponentialBackoff(delayMs = 60000, exceptionClasses = List(classOf[NullPointerException])) { () =>
       partitions.map { p =>
         logger.info(s"Creating consumer for partition $p")
         val consumer = new KafkaConsumer[String, String](props)
@@ -504,7 +484,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       override val tEnqueued: Long,
       tCrumb: Long,
       tKafka: Long,
-      crumb: Map[String, JsValue],
+      line: String,
       partition: Int)
       extends QElem
   private class QPing extends QElem { def tEnqueued: Long = -1 }
@@ -514,12 +494,14 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       11,
       (o1: QElem, o2: QElem) => o1.tEnqueued.compare(o2.tEnqueued))
 
-  private def getAs[T: JsonReader](m: Map[String, JsValue], k: String): Option[T] =
-    m.get(k).flatMap(x => Try(x.convertTo[T]).toOption)
+  private def getAs[T](m: Map[String, Object], k: String): Option[T] =
+    m.get(k).flatMap(x => Try(x.asInstanceOf[T]).toOption)
 
+  private val pauseTimeMs = new AtomicLong(0)
   private val totalDropped = new AtomicLong(0)
   private val ignored = new AtomicLong(0)
   private val deduplicated = new AtomicLong(0)
+  private val exceptions = new AtomicLong(0)
   private var printed = 0L
   @volatile private var continue = true
   private val doneLatch = new CountDownLatch(1)
@@ -527,8 +509,8 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
 
   private val dedupCache = Caffeine.newBuilder().maximumSize(nDedupKeys).build[String, Object]()
   private val dummy = new Object
-  def isDuplicate(string2JsValue: Map[String, JsValue]): Boolean = {
-    getAs[String](string2JsValue, "dedupKey") match {
+  def isDuplicate(objects: Map[String, Object]): Boolean = {
+    getAs[String](objects, "dedupKey") match {
       case None => false // if there isn't a dedupKey at all, assume not a duplicate
       case Some(dedupKey) =>
         var ret = true
@@ -548,44 +530,47 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private val threads = consumers.map { consumer =>
     new Thread {
       override def run(): Unit = {
-        var skipping = false
-        var nDropped = 0
+        val maxLagMs = maxLagMn * 60 * 1000L
+        var kafkaAgeMs = 0L
         while (continue) {
           try {
             val consumerRecords = consumer.poll(Duration.ofMillis(1000L))
-            if (queue.size() > maxQueue) {
-              if (!skipping) {
-                warn(s"$poolId $consumer dropping records queue size ${queue.size}")
+            consumerRecords.iterator().asScala.foreach { s: ConsumerRecord[String, String] =>
+              val overflow = queue.size() > maxQueue
+              if (overflow) {
+                val tResume = s.timestamp() + maxLagMs
+                val t0 = System.currentTimeMillis()
+                if (t0 < tResume) {
+                  warn("Pausing consumption due to queue size")
+                  while (queue.size() > maxQueue && System.currentTimeMillis() < tResume) {
+                    Thread.sleep(1000L)
+                    pauseTimeMs.addAndGet(1000L)
+                  }
+                  warn(
+                    s"$poolId $consumer resuming consumption after ${System.currentTimeMillis() - t0}ms, queue=${queue.size}")
+                }
               }
-              skipping = true
-              val n = consumerRecords.count()
-              nDropped += n
-              totalDropped.addAndGet(n)
-            } else {
-              if (skipping) {
-                warn(s"$poolId $consumer dropped $nDropped records due to  queue size")
-                skipping = false
-                nDropped = 0
-              }
-              consumerRecords.iterator().asScala.foreach { s: ConsumerRecord[String, String] =>
+              // If we still have an over flow, don't bother even parsing
+              if (overflow && queue.size() > maxQueue)
+                totalDropped.incrementAndGet()
+              else
                 for (
-                  stringToJsValue <- parseRecord(s);
+                  objects <- parseRecord(s);
                   tKafka = s.timestamp();
-                  uuidFull <- getAs[String](stringToJsValue, "uuid")
+                  uuidFull <- getAs[String](objects, "uuid")
                     .flatMap(uuidRegex.unapplySeq)
                     .flatMap(_.headOption);
-                  tCrumb <- getAs[Long](stringToJsValue, "t") if !isDuplicate(stringToJsValue)
+                  tCrumb <- getAs[Long](objects, "t") if !isDuplicate(objects)
                 ) {
                   val rootUuid = uuidFull.split("#").head
                   if (rootUuid.isEmpty) {
                     badUuids += 1
                   } else if (
-                    rootUuid.startsWith(prefix) &&
-                    !stringToJsValue.contains(P.crumbplexerIgnore.name)
+                    !objects.contains(P.crumbplexerIgnore.name)
                     && (hashPoolSize == 0 || (Math.abs(rootUuid.hashCode) % hashPoolSize) == hashPoolId)
                     && !isBadSeed(rootUuid)
                   ) {
-                    getAs[String](stringToJsValue, "event").filter(killPastEventRegex.unapplySeq(_).isDefined).foreach {
+                    getAs[String](objects, "event").filter(killPastEventRegex.unapplySeq(_).isDefined).foreach {
                       event =>
                         warn(s"$poolId Truncating $rootUuid due to $event event", rootUuid)
                         badSeeds.put(uuidFull, event)
@@ -597,8 +582,17 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                         badSeeds.put(rootUuid, "truncated")
                       }
                     }
+                    val line = s.value
                     val tEnqeued = System.currentTimeMillis()
-                    queue.offer(QCrumb(rootUuid, tEnqeued, tCrumb, tKafka, stringToJsValue, s.partition()))
+                    kafkaAgeMs = tEnqeued - tKafka
+                    queue.offer(
+                      QCrumb(
+                        uuid = rootUuid,
+                        tEnqueued = tEnqeued,
+                        tCrumb = tCrumb,
+                        tKafka = tKafka,
+                        line = line,
+                        partition = s.partition()))
                   } else {
                     ignored.incrementAndGet()
                   }
@@ -607,12 +601,12 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                   )
                     continue = false
                 }
-              }
             }
           } catch {
             case e: Exception =>
               error(s"$poolId $consumer poll failed", "", e)
-              Thread.sleep(10000)
+              exceptions.incrementAndGet()
+              Thread.sleep(1000)
           }
         }
       }
@@ -627,6 +621,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   val plexDirOpt = plexDirName.map(Paths.get(_))
   plexDirOpt.foreach { dir =>
     Files.createDirectories(dir)
+    if (useSubdirs) (0 until subdirs).map(i => Files.createDirectories(dir.resolve(numdir(i))))
     val timer = new Timer
     timer.schedule(
       new TimerTask {
@@ -660,13 +655,6 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
         f.flush()
         fe.tFlushed = t
         nFlushed += 1
-      }
-      if (parts) {
-        val sizePath = path.getParent.resolve(path.getFileName.toString + sizeSuffix)
-        val prevSize = Try(Files.readString(sizePath).toLong).getOrElse(0L)
-        val newSize = prevSize + bytesWritten
-        fe.bytesWritten = 0
-        Files.writeString(sizePath, newSize.toString)
       }
     }
     val t1 = System.currentTimeMillis()
@@ -704,6 +692,8 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       BaseSamplers.setCounter(P.plexerCountDropped, totalDropped.get)
       BaseSamplers.setCounter(P.plexerCountDeduped, deduplicated.get)
       BaseSamplers.setCounter(P.plexerCountParseError, parseErrors.get)
+      BaseSamplers.setCounter(P.plexerCountExceptions, exceptions.get)
+      BaseSamplers.setCounter(P.plexerCountPause, pauseTimeMs.get)
       BaseSamplers.setGauge(P.plexerSnapRootCount, liveRoots)
       BaseSamplers.setGauge(P.plexerSnapQueueSize, queue.size)
       BaseSamplers.setGauge(P.plexerSnapLagClient, dtCrumb)
@@ -711,28 +701,6 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       BaseSamplers.setGauge(P.plexerSnapLagQueue, dtQueue)
       info(
         s"$poolId printed=$printed dropped=$totalDropped ignored=$ignored deduplicated=$deduplicated misparsed=$parseErrors badUuids=$badUuids qs=${queue.size} dtCrumb=$dtCrumb dtKafka=$dtKafka dtQueue=$dtQueue roots=$liveRoots unflushed=$unflushed")
-    }
-  }
-
-  def nextPart(subdir: Path): Path = {
-    var dirStream: stream.Stream[Path] = null
-    try {
-      dirStream = Files.list(subdir)
-      // Existing NUMBER.gz components
-      val parts0: Seq[Int] = dirStream
-        .iterator()
-        .asScala
-        .map(_.getFileName)
-        .filter(_.endsWith(zipSuffix))
-        .flatMap(p => Try(p.getFileName.toString.dropRight(zipSuffix.size).toInt).toOption)
-        .toSeq
-        .sorted
-      val parts: Seq[Int] = if (parts0.isEmpty) Seq(1) else parts0 :+ parts0.last
-      val lines = parts.map(_.toString + zipSuffix)
-      Files.write(subdir.resolve("index"), lines.asJava)
-      subdir.resolve(parts.last.toString + zipSuffix)
-    } finally {
-      if (dirStream ne null) dirStream.close()
     }
   }
 
@@ -754,7 +722,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       val esl: List[QElem] =
         e1 :: es.asScala.toList
       for (e <- esl) e match {
-        case crumb @ QCrumb(uuid, _tEnqueued, tCrumb, _tKafka, m, partition) =>
+        case crumb @ QCrumb(uuid, _tEnqueued, tCrumb, _tKafka, line, partition) =>
           val uuidPath = Paths.get(uuid)
           // In theory, a UUID can be anything.  We just need to make sure it can be treated as a simple file name.
           if (uuidPath.getNameCount != 1 || uuidPath.getName(0).startsWith(".")) {
@@ -770,32 +738,21 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                     uuid,
                     { _ =>
                       logger.debug(s"$poolId $partition $uuid")
-                      if (parts) {
-                        val subdir = plexDir.resolve(partsDir(uuid))
-                        if (!Files.exists(subdir)) {
-                          Files.createDirectories(subdir)
-                        }
-                        val part = nextPart(subdir)
-                        val printStream = new PrintStream(new GZIPOutputStream(Files.newOutputStream(part), true))
-                        FileEntry(uuid, printStream, part, t, t - 1)
-                      } else {
-                        val filePath = plexDir.resolve(uuidPath)
-                        FileEntry(
-                          uuid,
-                          new PrintStream(new FileOutputStream(filePath.toFile, true)),
-                          filePath,
-                          t,
-                          t - 1)
-                      }
+                      val dirPath = if (useSubdirs) plexDir.resolve(subdir(uuid)) else plexDir
+                      val filePath = dirPath.resolve(uuidPath)
+                      val os =
+                        if (zip) new AppendingGzipOutputStream(filePath)
+                        else new FileOutputStream(filePath.toFile, true)
+                      FileEntry(uuid, new PrintStream(os), filePath, t, t - 1)
                     }
                   )
-                  val line = prefix + (if (asJson) m.toJson.toString else m.toString)
                   f.println /* deliberately printing to file */ (line)
                   fe.bytesWritten += line.size
                   fe.tPrinted = t
                   printed += 1
                 } catch {
                   case NonFatal(t) =>
+                    exceptions.incrementAndGet()
                     error(s"Error opening file for $e", uuid, t)
                     totalDropped.incrementAndGet()
                     cleanUp(false)
@@ -804,24 +761,11 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                 }
               case None =>
                 if (!quiet) {
-                  val prefix = if (enrich) {
-                    val flags: Int =
-                      getAs[String](m, "event").flatMap(importantEventRegex.unapplySeq(_)).fold(0)(_ => 1)
-                    s"CRUMB $uuid ${tUTC(tCrumb)} $poolId $flags "
-                  } else ""
                   printed += 1
-                  if (asJson) {
-                    val json = m.toJson
-                    println /* deliberately printing to stdout in CLI app */ (prefix + json.toString)
-                  } else
-                    println /* deliberately printing to stdout in CLI app */ (prefix + m.toString)
+                  println /* deliberately printing to stdout in CLI app */ (line)
                 }
             }
             writeStatus(crumb)
-          }
-          if (waitAfterComplete > 0 && getAs[String](m, "event").contains(Events.AppCompleted.name)) {
-            tFinal = tCrumb + waitAfterComplete
-            quiescenceTimeout = waitAfterComplete
           }
 
         case _: QPing =>

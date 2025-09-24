@@ -14,8 +14,6 @@ package optimus.stratosphere.obt
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
-import scala.collection.immutable.Seq
-
 final case class BspConfig(
     name: String,
     argv: Seq[String],

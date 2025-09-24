@@ -77,9 +77,11 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
     if (patch.passLocalValue) {
       storeLocalValue();
     } else if (patch.storeToField != null) {
+      // TODO (OPTIMUS-76886): This should call the setter provided by FieldInjector instead.
       loadThis();
       swap();
-      mv.visitFieldInsn(PUTFIELD, patch.from.cls, patch.storeToField.name, OBJECT_DESC);
+      mv.visitFieldInsn(
+          PUTFIELD, patch.from.cls, patch.storeToField.name, patch.storeToField.descOrNull);
     }
 
     if (patch.checkAndReturn) {
@@ -140,7 +142,9 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
       dup();
       loadThis();
       swap();
-      mv.visitFieldInsn(PUTFIELD, patch.from.cls, patch.cacheInField.name, patch.cacheInField.type);
+      // TODO (OPTIMUS-76886): This should call the getter provided by FieldInjector instead.
+      mv.visitFieldInsn(
+          PUTFIELD, patch.from.cls, patch.cacheInField.name, patch.cacheInField.descOrNull);
     }
 
     if (patch.suffix == null) return;

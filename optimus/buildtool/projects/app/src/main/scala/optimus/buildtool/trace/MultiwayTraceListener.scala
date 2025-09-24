@@ -20,8 +20,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace.MultiwayTraceListener.MultiwayTaskTrace
 import optimus.platform._
 
-import scala.collection.immutable.Seq
-
 /** allows many trace listeners to listen as one */
 object MultiwayTraceListener {
   def apply(tracers: Seq[ObtTraceListener]): ObtTraceListener = tracers match {
@@ -76,6 +74,9 @@ final case class MultiwayTraceListener private (traceListeners: List[ObtTraceLis
 
   @async override def throttleIfLowMem$NF[T](id: ScopeId)(fn: NodeFunction0[T]): T =
     throttleRecursive(id, fn, traceListeners)
+
+  override def finalizeBuild(success: Boolean): Unit =
+    traceListeners.foreach(_.finalizeBuild(success))
 
   override def endBuild(success: Boolean): Boolean = {
     // note that endBuild can be side-effecting so we need to call them all even if one returns false, so we cannot

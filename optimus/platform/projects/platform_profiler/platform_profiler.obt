@@ -19,7 +19,7 @@ main.compile {
     optimus.platform.utils
   ]
   libs = [
-    msjava.base,
+    msjava.rr-base,
     optimus.async-profiler,
     ossjava.args4j,
     ossjava.guava,

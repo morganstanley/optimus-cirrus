@@ -56,6 +56,9 @@ class OpcodeHandlers implements Opcodes {
     fill(BIPUSH, SIPUSH, new Trivial(0, Type.INT_TYPE));
 
     fill(IALOAD, SALOAD, new Primitive(2, IALOAD));
+    // this overwrites AALOAD assigned above in the middle of the fill
+    opcodes[AALOAD] = Parser::handleObjectArrayLoad;
+
     fill(IASTORE, SASTORE, Parser::handleArrayStore);
 
     fill(IADD, DADD, new Primitive(2, IADD));
@@ -70,6 +73,8 @@ class OpcodeHandlers implements Opcodes {
     fill(IAND, LAND, new Primitive(2, IAND));
     fill(IOR, LOR, new Primitive(2, IOR));
     fill(IXOR, LXOR, new Primitive(2, IXOR));
+
+    opcodes[IINC] = Parser::incVar;
 
     opcodes[POP] = oneFalse;
     opcodes[POP2] = Parser::handlePop2;

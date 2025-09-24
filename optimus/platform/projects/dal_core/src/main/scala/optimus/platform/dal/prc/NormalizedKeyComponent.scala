@@ -24,6 +24,7 @@ import optimus.platform.dsi.bitemporal.LinkageQuery
 import optimus.platform.dsi.bitemporal.Query
 import optimus.platform.dsi.bitemporal.ReferenceQuery
 import optimus.platform.dsi.bitemporal.SerializedKeyQuery
+import optimus.platform.dsi.bitemporal.VersionedReferenceQuery
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.TypedBusinessEventReference
 
@@ -47,7 +48,7 @@ object NormalizedCacheableQuery {
 
     case _: EventReferenceQuery | _: EntityClassQuery | _: EventClassQuery | _: SerializedKeyQuery |
         _: EventSerializedKeyQuery | _: ReferenceQuery | _: EntityClassAppIdUserIdQuery | _: EntityCmReferenceQuery |
-        _: EventCmReferenceQuery | _: EntityClassAppIdUserIdQuery | _: LinkageQuery =>
+        _: EventCmReferenceQuery | _: EntityClassAppIdUserIdQuery | _: LinkageQuery | _: VersionedReferenceQuery =>
       // can't yet use these in PRC
       None
   }

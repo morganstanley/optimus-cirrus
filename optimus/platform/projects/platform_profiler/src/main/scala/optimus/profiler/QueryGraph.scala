@@ -74,7 +74,7 @@ object QueryGraph extends App {
             //          estCacheSizes.append(startHeap - finalHeap)
             //          finalMemSizes.append(finalHeap)
             cStats.append(cstats)
-            allTags.append(td: _*)
+            allTags.append(td.toVarArgsSeq: _*)
             readServers += 1
           }
         } catch {

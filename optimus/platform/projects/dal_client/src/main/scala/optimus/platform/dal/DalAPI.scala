@@ -420,9 +420,8 @@ abstract class DALModuleAPI {
    * @throws MessagesErrorResult
    *   if publishing of transaction fails for any reason
    */
-  @async def publishTransaction[T <: Transaction](
-      transaction: T
-  ): Unit = resolver.publishTransaction(transaction)
+  @async def publishTransaction[T <: Transaction](transaction: T, waitForAck: Boolean = true): Unit =
+    resolver.publishTransaction(transaction, waitForAck)
 
   @async private[platform] def checkEntitlementAndSetACLs(streamAppId: String, acls: Seq[StreamsACLs]) =
     resolver.checkEntitlementAndSetACLs(streamAppId, acls)
@@ -462,6 +461,20 @@ abstract class DALModuleAPI {
 
   def invalidateCurrentInstances(entityReferences: Seq[EntityReference], className: String): Int =
     resolver.invalidateCurrentInstances(entityReferences, className)
+
+  /**
+   * Similar to invalidateCurrentInstances[E](erefs) but a timeslice with the latest vref will be added after the closed timeslices to ensure continued query access for the user
+   *
+   * This method is intended to be used for preparation of monoTemporal migration
+   *
+   * @return
+   *   number of instances converted to monotemporal
+   */
+  def prepareMonoTemporal[E <: Entity: Manifest](entityReferences: Seq[EntityReference]): Int =
+    resolver.prepareMonoTemporal[E](entityReferences)
+
+  def prepareMonoTemporal(entityReferences: Seq[EntityReference], className: String): Int =
+    resolver.prepareMonoTemporal(entityReferences, className)
 
   /**
    * Completely purges all data from the current database. Use with caution This works only on temporary unnamed

@@ -18,7 +18,6 @@ import optimus.buildtool.config.NpmConfiguration._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 object ElectronConfigurationCompiler {

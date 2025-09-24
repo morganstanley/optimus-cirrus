@@ -179,7 +179,8 @@ class OGEventsNewHotspotsObserver private[trace] extends OGEventsGlobalGraphObse
       val parentPnti = ctx.getPNTI()
       if (countTowardsLookup)
         parentPnti.childNodeLookupCount += 1
-      parentPnti.childNodeLookupTime += cacheTime // need to add to childNodeLookupTime even if not to count to not have any gaps in profiling
+      // need to add to childNodeLookupTime even if not to count to not have any gaps in profiling
+      parentPnti.childNodeLookupTime += cacheTime
     }
     pnti
   }
@@ -210,7 +211,7 @@ class OGEventsNewHotspotsObserver private[trace] extends OGEventsGlobalGraphObse
         if (lookupResult.isSeenBefore)
           pnti.cacheHitFromDifferentTask += 1
       } else {
-        // this definitely was not a trivial match, attribute to underlying. Note - this looks like overcounting, but
+        // this definitely was not a trivial match, attribute to underlying. Note - this looks like over counting, but
         // will work out once we aggregate profiling information from proxies and their original nodes [SEE_PROXY_NON_TRIVIAL]
         val underlyingPNTI = lt.ctx.getPNTI(candidate)
         underlyingPNTI.cacheHit += 1

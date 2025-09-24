@@ -20,19 +20,29 @@ import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.trace.LoadStratoConfig
 import optimus.buildtool.trace.ObtTrace
 import optimus.platform._
+import optimus.stratosphere.logger.CentralLogger
+import optimus.stratosphere.logger.Logger
 
 // StratoWorkspace does not have proper equals() defined and is mutable so we need to extract required information
 final case class StratoConfig(
-    scalaVersion: String,
+    scalaVersion: ScalaVersion,
     stratoVersion: String,
     obtVersion: String,
-    scalaHome: String,
     javaHome: String,
     config: Config,
     stratoDirs: Seq[Directory]
 )
 
+object StratoLogger extends Logger {
+  private val _logger = scalalog.getLogger(StratoConfig)
+  override def info(toLog: String): Unit = _logger.info(toLog)
+  override def debug(toLog: String): Unit = _logger.debug(toLog)
+  override def handleAnswer(answer: String): Unit = _logger.info(answer)
+}
+
 @entity object StratoConfig {
+  val stratoLogger = CentralLogger(Seq(StratoLogger))
+
   private val _stratoLogger = scalalog.getLogger(StratoWorkspace)
   def stratoLogger(s: String): Unit = _stratoLogger.info(s)
 
@@ -52,7 +62,7 @@ final case class StratoConfig(
   // this node cache reuse will only for single obt instance
   // auto stop logic is in optimus.stratosphere.jetfire.obt.ObtRunner.checkObtBspConfiguration
   @node @scenarioIndependent def stratoWorkspace(workspaceRoot: Directory): StratoWorkspace =
-    StratoWorkspace(CustomWorkspace(workspaceRoot.path), stratoLogger)
+    StratoWorkspace(CustomWorkspace(workspaceRoot.path), Some(stratoLogger))
 
   @node def load(directoryFactory: LocalDirectoryFactory, workspaceSrcRoot: Directory): StratoConfig =
     ObtTrace.traceTask(ScopeId.RootScopeId, LoadStratoConfig) {
@@ -66,10 +76,9 @@ final case class StratoConfig(
       val ws = stratoWorkspace(workspaceSrcRoot.parent)
 
       StratoConfig(
-        scalaVersion = ws.scalaVersion,
+        scalaVersion = ScalaVersion(ws.scalaVersion),
         stratoVersion = ws.stratosphereVersion,
         obtVersion = ws.obtVersion,
-        scalaHome = ws.scalaHomePath,
         javaHome = ws.internal.java.home.toString,
         config = ws.config,
         stratoDirs = stratoDirs
