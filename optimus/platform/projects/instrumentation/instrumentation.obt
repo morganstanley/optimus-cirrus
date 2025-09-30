@@ -33,6 +33,7 @@ main {
       ossscala.apache-kafka
     ]
   }
+  compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.attach
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.mbeans
   runtime.libs += msjava.jprofiler
 

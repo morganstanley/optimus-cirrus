@@ -26,6 +26,7 @@ import optimus.utils.OptimusStringUtils
 
 import java.lang.ref.WeakReference
 import java.util.Objects
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 object TaskTracker extends Log with OptimusStringUtils {
@@ -38,6 +39,13 @@ object TaskTracker extends Log with OptimusStringUtils {
   private def enabled = overrideEnabled.getOrElse(SamplingProfiler.stillPulsing())
 
   private val maxReportedActiveIds = DiagnosticSettings.getIntProperty("optimus.sampling.task.tracker.max.active", 10)
+
+  private final case class Callbacks(activate: ChainedID => Unit, deactivate: ChainedID => Unit)
+  private val callbacks = new ConcurrentHashMap[String, Callbacks]()
+
+  def registerCallbacks(key: String, activate: ChainedID => Unit, deactivate: ChainedID => Unit): Unit =
+    callbacks.put(key, Callbacks(activate, deactivate))
+  def unregisterCallbacks(key: String): Unit = callbacks.remove(key)
 
   final case class AppInstance(root: String, appId: String) extends Ordered[AppInstance] {
     override def toString: String = s"[$appId:$root]"
@@ -146,17 +154,20 @@ object TaskTracker extends Log with OptimusStringUtils {
       numLost = 0
     ))
 
-  def activate(ntsk: Launchable): Unit = if (enabled) {
-    val ti = TInfo(ntsk)
-    state.updateAndGet { c =>
-      val ret = c.copy(
-        lastTransitionToActive = if (c.activeNow.isEmpty) TestableClock.nanoTime() else c.lastTransitionToActive,
-        activeNow = c.activeNow + (ti.id -> ti),
-        activeInCycle = c.activeInCycle + (ti.id -> ti),
-        numActivated = c.numActivated + 1
-      )
-      log.info(s"Activating $ti -> state=${ret.toString.abbrev}")
-      ret
+  def activate(ntsk: Launchable): Unit = {
+    if (enabled) {
+      val ti = TInfo(ntsk)
+      state.updateAndGet { c =>
+        val ret = c.copy(
+          lastTransitionToActive = if (c.activeNow.isEmpty) TestableClock.nanoTime() else c.lastTransitionToActive,
+          activeNow = c.activeNow + (ti.id -> ti),
+          activeInCycle = c.activeInCycle + (ti.id -> ti),
+          numActivated = c.numActivated + 1
+        )
+        callbacks.values().forEach(_.activate.apply(ntsk.ID))
+        log.info(s"Activating $ti -> state=${ret.toString.abbrev}")
+        ret
+      }
     }
   }
 
@@ -165,8 +176,11 @@ object TaskTracker extends Log with OptimusStringUtils {
   private def deactivate(i: Int): Unit = if (enabled) {
     state
       .updateAndGet { c =>
+        val ti = c.activeNow.get(i).map { t =>
+          callbacks.values().forEach(_.deactivate.apply(t.chainedID))
+          t.deactivated
+        }
         // After the deactivation, will there be nothing left?
-        val ti = c.activeNow.get(i).map(_.deactivated)
         val fullyDeactivating = (c.activeNow.size == 1 && ti.nonEmpty && c.lastTransitionToActive > 0)
         val ret = c.copy(
           // Flush currently active time to committed

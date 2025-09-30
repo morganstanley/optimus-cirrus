@@ -22,6 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 private[optimus] trait ProfilerUIControl {
   def startGraphDebugger(): Unit
 
+  def alert(msg: String): Unit
+
   def brk(): Unit
 
   def brk(msg: String): Unit

@@ -101,5 +101,7 @@ object GraphInputConfiguration {
 
   def setTraceMode(newObserver: OGEventsObserver): Unit = setTraceMode(Level.withName(newObserver.name.toUpperCase))
 
+  def isTracing = ProcessState.getIfPresent(ProcessGraphInputs.ProfileLevel).contains(Level.TRACENODES)
+
   def setTraceMode(lvl: Level): Unit = ProcessState.changeValueOfInputTo(ProcessGraphInputs.ProfileLevel, lvl)
 }

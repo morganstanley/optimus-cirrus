@@ -1,0 +1,568 @@
+package optimus.graph.diagnostics.heartbeat
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import msjava.zkapi.ZkaAttr
+import msjava.zkapi.ZkaConfig
+import msjava.zkapi.internal.ZkaContext
+import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Properties
+import optimus.graph.DiagnosticSettings
+import optimus.graph.diagnostics.OSInformation
+import optimus.graph.diagnostics.sampling.ForensicSource
+import optimus.graph.diagnostics.sampling.TaskTracker
+import optimus.platform.util.InfoDumpUtils
+import optimus.platform.util.Log
+import optimus.utils.FileUtils
+import optimus.scalacompat.collection._
+import org.kohsuke.args4j.CmdLineException
+import org.kohsuke.args4j.CmdLineParser
+import org.kohsuke.args4j.{Option => ArgOption}
+
+import java.io.BufferedReader
+import scala.util.Try
+import java.io.BufferedWriter
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.lang.management.ManagementFactory
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import java.nio.file.Files
+import java.nio.file.Paths
+import com.sun.tools.attach.VirtualMachine
+import optimus.platform.util.JExecute
+import sun.jvmstat.monitor.MonitoredHost
+import sun.jvmstat.monitor.MonitoredVm
+import sun.jvmstat.monitor.VmIdentifier
+import sun.jvmstat.monitor.event.MonitorStatusChangeEvent
+import sun.jvmstat.monitor.event.VmEvent
+import sun.jvmstat.monitor.event.VmListener
+import sun.jvmstat.perfdata.monitor.protocol.local.LocalMonitoredVm
+import sun.tools.attach.HotSpotVirtualMachine
+
+import java.time.Instant
+import java.util.Objects
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.unused
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.control.NonFatal
+
+class WatcherArgs {
+  @ArgOption(name = "--uuid", usage = "Impersonate uuid for diag uploads")
+  val uuid: String = ChainedID.root.repr
+
+  @ArgOption(name = "--pid", usage = "Process id to monitor", required = true)
+  val pid: Long = 0
+
+  @ArgOption(name = "--env", usage = "Environment for crumb purposes", required = true)
+  val env = "qa"
+
+  @ArgOption(name = "--dump", usage = "Generate/upload dump now")
+  val dumpNow = false
+
+  @ArgOption(name = "--kill", usage = "Kill process now")
+  val killNow = false
+
+  @ArgOption(name = "--listen", usage = "Listen for commands from parent process")
+  val listen = false
+
+}
+
+private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JExecute {
+
+  private val logVmEvents = DiagnosticSettings.getBoolProperty("optimus.watcher.logVmEvents", false)
+  private val goodOldGenPct = DiagnosticSettings.getDoubleProperty("optimus.watcher.goodOldGenPct", 95.0)
+  private val maxGoodOldGenTimeMs =
+    DiagnosticSettings.getLongProperty("optimus.watcher.maxGoodOldGenTimeSec", 300L) * 1000L
+  private val livenessTimeoutMs = DiagnosticSettings.getIntProperty("optimus.water.liveness.timeout.sec", 10) * 1000L
+  private val deleteLogs = !DiagnosticSettings.getBoolProperty("optimus.watcher.retain.diag", true)
+  private val doUpload = DiagnosticSettings.getBoolProperty("optimus.watcher.splunk", true)
+  private val deleteCores = DiagnosticSettings.getBoolProperty("optimus.watcher.delete.cores", false)
+  private val cyclePeriodSec = DiagnosticSettings.getIntProperty("optimus.watcher.cyclePeriod.sec", 5)
+
+  val watcherArgs = new WatcherArgs
+  val parser = new CmdLineParser(watcherArgs)
+  try {
+    parser.parseArgument(args: _*)
+  } catch {
+    case e: CmdLineException =>
+      parser.printUsage(System.err)
+      System.exit(-1)
+  }
+  import watcherArgs._
+
+  val isLinux = !DiagnosticSettings.isWindows
+
+  private final case class VM(hsvm: HotSpotVirtualMachine, monitoredHost: MonitoredHost, monitoredVm: LocalMonitoredVm)
+  @volatile private var vm: Option[VM] = None
+
+  private def attachToParent(): Option[VM] = try {
+    log.info(s"Attaching back to $pid")
+    val hsvm = VirtualMachine.attach(pid.toString).asInstanceOf[HotSpotVirtualMachine]
+    val vmId = new VmIdentifier(pid.toString)
+    val monitoredHost = MonitoredHost.getMonitoredHost(vmId)
+    // cast to LocalMonitoredVm so that addVmListener links correctly
+    val monitoredVm = monitoredHost.getMonitoredVm(vmId, 10000).asInstanceOf[LocalMonitoredVm]
+    // Optionally subscribe to and log events
+    if (logVmEvents) {
+      val vmListener = new VmListener {
+        override def monitorStatusChanged(event: MonitorStatusChangeEvent): Unit =
+          log.info(event.toString)
+        override def monitorsUpdated(event: VmEvent): Unit =
+          log.info(event.toString)
+        override def disconnected(event: VmEvent): Unit =
+          log.info(event.toString)
+      }
+      monitoredVm.addVmListener(vmListener)
+    }
+    Some(VM(hsvm, monitoredHost, monitoredVm))
+  } catch {
+    case e: Throwable =>
+      log.warn(s"Unable to connect to $pid", e)
+      None
+  }
+
+  // Initialize breadcrumbs explicitly from parent configuration
+  Breadcrumbs.customizedInit(
+    Map("breadcrumb.config" -> env),
+    new ZkaContext(ZkaConfig.fromURI(s"zpm://$env.na/optimus").attr(ZkaAttr.KERBEROS, false))
+  )
+
+  private val parentHandle = ProcessHandle.of(pid).get
+  private val parentExitFuture: CompletableFuture[ProcessHandle] = parentHandle.onExit()
+  private def checkIfDead = {
+    try {
+      val p = parentExitFuture.get(5, TimeUnit.SECONDS)
+      !p.isAlive
+    } catch {
+      case _: Exception => false
+    }
+  }
+
+  // Thread to read from stdin and push to a queue, so that we can listen with a timeout
+  private val DONE = "DONE" // for eq comparison
+  private val input = new LinkedBlockingQueue[String]()
+  private val inputThread = new Thread {
+    override def run(): Unit = {
+      val in = new BufferedReader(new InputStreamReader(System.in))
+      try {
+        in.lines().iterator().asScala.foreach(input.put)
+      } catch {
+        case io: Throwable =>
+          log.error(s"Exception reading from stdin", io)
+      } finally {
+        input.put(DONE)
+      }
+    }
+  }
+  inputThread.setDaemon(true)
+  inputThread.start()
+
+  @volatile private var stopped = false
+
+  Runtime.getRuntime.addShutdownHook(new Thread {
+    override def run(): Unit = if (!stopped) {
+      log.warn(s"Shutdown hook")
+      Try(vm.foreach(vm => vm.monitoredHost.detach(vm.monitoredVm)))
+      WatcherProcess.checkCores()
+      WatcherProcess.stop()
+    }
+  })
+
+  private def stop() = {
+    stopped = true
+    log.info("Shutting down")
+    System.exit(0)
+  }
+
+  private val parentId = ChainedID(uuid)
+  private val prefix = s"watcher-$uuid"
+
+  private var dumpIndex = 0
+  private def dump(java: Boolean, msg: String): Unit = {
+    val sb = new StringBuilder()
+    dumpIndex += 1
+
+    sb.append(s"$msg\n")
+    sb.append(s"Current tasks: $activeTasks\n")
+
+    if (isLinux) {
+      val pinfo = parentHandle.info()
+      sb.append(s"cmd=${pinfo.command().orElse("??")}\n")
+      sb.append(s"opts=${pinfo.arguments().orElse(Array.empty).mkString(" ")}\n")
+      OSInformation.dumpPidInfo(sb.underlying, parentHandle.pid(), timeoutMs = 60000, stacks = false)
+    }
+
+    vm.foreach { vm =>
+      jexecute(sb, vm.hsvm, "threaddump") // jstacks
+      jexecute(sb, vm.hsvm, maxLines = 200, timeoutMs = 30000, logging = true, "inspectheap", "live") // histo
+      jexecute(sb, vm.hsvm, "jcmd", "VM.info")
+    }
+
+    if (isLinux) euStack.foreach { euStack =>
+      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, euStack, "-p", pid)
+    }
+
+    for {
+      path <- writeToTmpAndLog(s"$prefix-log-$dumpIndex", ForensicSource, parentId, sb.toString, deleteLogs)
+      rootId <- publishDestinations
+    } if (doUpload)
+      upload(ForensicSource, rootId, path, deleteUncompressed = true, deleteUploadedFile = false, taskInfo)
+
+  }
+
+  private def checkCores(): Boolean = {
+    var foundCore = false
+    if (isLinux) euStack.foreach { euStack =>
+      try {
+        val oneMinuteAgo = System.currentTimeMillis() - 60000L
+        val sb = new StringBuilder()
+        log.info("Looking for core files less than a minute old")
+        Files.walk(Paths.get("/var/tmp/cores")).iterator().asScala.foreach { p =>
+          var tLast = 0L
+          var t = Files.getLastModifiedTime(p).toMillis
+          if (t > oneMinuteAgo && Files.isRegularFile(p) && p.getFileName.toString.contains("core")) {
+            log.info(s"$p is recent.  Loop until it's stable.")
+            foundCore = true
+            do {
+              Thread.sleep(1000L)
+              tLast = t
+              t = Files.getLastModifiedTime(p).toMillis
+            } while (t != tLast)
+            FileUtils.uncompress(p, deleteOld = deleteCores) match {
+              case Success(pUnzipped) =>
+                sb.append(s"Extracting binary stack from $pUnzipped\n")
+                execute(sb, timeoutMs = 180000, maxLines = -1, logging = true, euStack, "--core", pUnzipped)
+                Try(pUnzipped.toFile.delete())
+              case Failure(e) =>
+                sb.append(s"uncompress failed: $e")
+            }
+          }
+        }
+        val stacks = sb.toString
+        if (stacks.nonEmpty) for {
+          path <- writeToTmpAndLog(s"$prefix-core", ForensicSource, parentId, stacks, deleteLogs)
+          root <- publishDestinations
+        } if (doUpload) upload(ForensicSource, root, path, deleteUncompressed = true, deleteUploadedFile = false, taskInfo)
+      } catch {
+        case e: Throwable =>
+          log.error("Error extracting cores", e)
+      }
+    }
+    foundCore
+  }
+
+  def kill(): Unit = {
+    log.error(s"Killing parent process $parentHandle")
+    parentHandle.destroy()
+    if (checkIfDead) return
+    log.error("Now trying destroyForcibly")
+    parentHandle.destroyForcibly()
+    if (checkIfDead) return
+    if (isLinux) {
+      log.error("Now trying kill -9")
+      Runtime.getRuntime.exec(Array("/usr/bin/kill", "-9", parentHandle.pid.toString))
+    }
+    if (checkIfDead) return
+    log.error("Giving up")
+  }
+
+  if (dumpNow)
+    dump(java = true, "Dump requested by --dump")
+
+  if (killNow)
+    kill()
+
+  private final case class Timer(deadline: Long, interval: Long)
+
+  // Accessed only from main thread
+  private val timers = mutable.HashMap.empty[String, Timer]
+
+  // Potentially accessed in shutdown thread too
+  private val activeTasks = new mutable.HashSet[ChainedID]()
+
+  @unused
+  private def taskInfo = activeTasks.synchronized(Properties.currentlyRunning -> activeTasks.toSeq)
+  // Write to one chainedID per active root
+  private def publishDestinations: Iterable[ChainedID] = activeTasks.synchronized {
+    (activeTasks + parentId).groupBy(_.root).values.map(_.head)
+  }
+
+  private def getCounterValue(name: String, default: Option[Double]): Option[Double] = vm.flatMap { vm =>
+    try {
+      val c = vm.monitoredVm.findByName(name)
+      if (Objects.nonNull(c)) c.getValue match {
+        case l: java.lang.Long    => Some(l.toDouble)
+        case d: java.lang.Double  => Some(d.toDouble)
+        case i: java.lang.Integer => Some(i.toDouble)
+        case _                    => default
+      }
+      else {
+        default
+      }
+    } catch {
+      case NonFatal(e) =>
+        None
+    }
+  }
+
+  // Commands
+  private val Register = "register (\\w+) (\\d+)".r // register a ping timer with given timeout
+  private val Ping = "ping (\\w+) (\\d+)".r // ping a timer and say when we did it
+  private val Delete = "delete (\\w+)".r // delete a timer
+  private val Activate = "activate (\\S+)".r // activate a task
+  private val Deactivate = "deactivate (\\S+)".r
+
+  private val zeroSome = Some(0.0)
+  private val someOne = Some(1.0)
+
+  if (listen) {
+    vm = attachToParent()
+    var tLastGoodOg = System.currentTimeMillis()
+    while (true) {
+
+      // Check for liveness of parent java process.  Should respond to GC.heap_info
+      vm.foreach { vm =>
+        val code = jexecute(
+          new StringBuilder(),
+          vm.hsvm,
+          maxLines = -1,
+          timeoutMs = livenessTimeoutMs,
+          logging = false,
+          "jcmd",
+          "GC.heap_info")
+        if (code == TIMEOUT) {
+          val msg = s"Parent java process $pid is unresponsive to GC.heap_info after ${livenessTimeoutMs}ms; killing!"
+          log.error(msg)
+          if (!checkCores())
+            dump(java = false, msg)
+          kill()
+          stop()
+        }
+      }
+
+      // Check for memory pressure
+      // See option gcutil in jdk.jcmd/sun/tools/jstat/resources/jstat_options
+      if (vm.isDefined) {
+        for {
+          oldGenUsed <- getCounterValue("sun.gc.generation.1.space.0.used", None)
+          oldGenCapacity <- getCounterValue("sun.gc.generation.1.space.0.capacity", None)
+          freq <- getCounterValue("sun.os.hrt.frequency", someOne)
+          timeMinor <- getCounterValue("sun.gc.collector.0.time", zeroSome)
+          timeFull <- getCounterValue("sun.gc.collector.1.time", zeroSome)
+          timeConc <- getCounterValue("sun.gc.collector.2.time", zeroSome)
+          numFull <- getCounterValue("sun.gc.collector.1.invocations", zeroSome)
+        } {
+          val t = System.currentTimeMillis()
+          val totalTimeSec = (timeMinor + timeFull + timeConc) / freq
+          val oldPctUsed = (1.0 - (oldGenCapacity - oldGenUsed) / oldGenCapacity) * 100.0
+          log.debug(s"GC time=$totalTimeSec full=$numFull pctOld=$oldPctUsed")
+          if (oldPctUsed < goodOldGenPct) tLastGoodOg = t
+          // maybe check for increasing time spent in GC too?
+          else if ((t - tLastGoodOg) > maxGoodOldGenTimeMs) {
+            val msg =
+              s"Old gen usage is high: $oldPctUsed > $goodOldGenPct for ${t - tLastGoodOg}ms; gcTime=${totalTimeSec}sec; numFull=$numFull; killing process!"
+            log.error(msg)
+            if (checkIfDead)
+              checkCores()
+            else {
+              dump(java = false, msg)
+              kill()
+            }
+            stop()
+          }
+        }
+      }
+
+      // Check for new command every 5 minutes
+      val line = input.poll(cyclePeriodSec, TimeUnit.SECONDS)
+      val t = System.currentTimeMillis()
+
+      // Check for expired ping timers
+      timers.iterator.minByOption(_._2.deadline).foreach { case (name, Timer(deadline, _)) =>
+        if (t > deadline) {
+          val msg = s"Ping timeout for $name at ${Instant.ofEpochMilli(deadline)}"
+          log.error(msg)
+          dump(java = true, msg)
+          kill()
+          stop()
+        }
+      }
+
+      if (Objects.nonNull(line)) {
+        log.debug(s"Got $line")
+        line match {
+          case DONE if line eq DONE => // want the exact string instance pushed by the reader thread
+            log.info("End of input stream")
+            if (checkIfDead)
+              checkCores()
+            else {
+              dump(java = false, "Unexpected end of input stream")
+              kill()
+            }
+            stop()
+          case "stop" =>
+            stop()
+          case "dump" =>
+            dump(java = true, "Dump requested by parent process")
+          case "kill" =>
+            kill()
+            stop()
+          case Register(name, timeout) =>
+            log.info(s"Registering timer $name for every $timeout ms")
+            timers.put(name, Timer(t + timeout.toLong, timeout.toLong))
+          case Delete(name) =>
+            log.info(s"Removing timer $name")
+            timers.remove(name)
+          case Ping(name, tClient) =>
+            log.debug(s"Pinging timer $name")
+            // Update to timer.interval from now
+            timers.updateWith(name)(_.map(timer => Timer(t + timer.interval, timer.interval))) match {
+              case Some(timer) =>
+                val lag = System.currentTimeMillis() - tClient.toLong
+                if (lag > timer.interval / 10) {
+
+                  log.warn(s"Received ping for $name delayed by $lag ms")
+                }
+              case None =>
+                log.warn(s"Received ping for unregistered $name")
+            }
+          case Activate(id) =>
+            activeTasks.synchronized {
+              activeTasks += ChainedID.parse(id)
+            }
+          case Deactivate(id) =>
+            activeTasks.synchronized {
+              activeTasks -= ChainedID.parse(id)
+            }
+          case s =>
+            log.warn(s"Unrecognized command: $s")
+        }
+      }
+    }
+  }
+}
+
+object Watcher extends Log with InfoDumpUtils {
+
+  val attachRelatedOpens = Seq(
+    "--add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED",
+    "--add-opens=jdk.internal.jvmstat/sun.jvmstat.monitor=ALL-UNNAMED",
+    "--add-opens=jdk.internal.jvmstat/sun.jvmstat.monitor.event=ALL-UNNAMED",
+    "--add-opens=jdk.internal.jvmstat/sun.jvmstat.perfdata.monitor.protocol.local=ALL-UNNAMED"
+  )
+
+  private def send(cmd: Any*) = watch().writer.foreach { w =>
+    w.write(cmd.mkString(" ") + "\n")
+    w.flush()
+  }
+
+  private trait WatcherInfo {
+    def running = false
+    def writer: Option[BufferedWriter] = None
+  }
+  private final case object Uninitialized extends WatcherInfo
+  private final case class WatcherChild(process: Process, bw: BufferedWriter) extends WatcherInfo {
+    override def running = process.isAlive
+    override def writer = Some(bw)
+  }
+  private final case object Disabled extends WatcherInfo
+
+  private val watcher = new AtomicReference[WatcherInfo](Uninitialized)
+  private def watch(): WatcherInfo = {
+    watcher.updateAndGet {
+      case Uninitialized =>
+        val pid = ProcessHandle.current().pid
+
+        val moreArgs =
+          Option(System.getProperty("optimus.watcher.javaArgs")).fold(Seq.empty[String])(_.split(":::").toSeq)
+        val moreOpts =
+          Option(System.getProperty("optimus.watcher.mainOpts")).fold(Seq.empty[String])(_.split(":::").toSeq)
+
+        val nohup = if (!DiagnosticSettings.isWindows) Seq("/usr/bin/nohup") else Seq()
+
+        val watcherProperties = System.getProperties.asScala.collect {
+          case (k, v) if k.startsWith("optimus.watcher") =>
+            s"-D$k=$v"
+        }
+
+        val cmd =
+          nohup ++
+            Seq(
+              javaExecutable,
+              "-cp",
+              System.getProperty("java.class.path"),
+              "-Xmx300m", // can be overridden via optimus.watcher.javaArgs
+              "-XX:+UseSerialGC", // dramatically less memory overhead
+              "-Xrs", // Don't automatically pass on signals from parent
+              // "-XX:NativeMemoryTracking=detail",  // uncomment to allow jcmd VM.native_memory_summary
+              "-Doptimus.sampling=false",
+              "-Dlogback.configurationFile=polite.xml"
+            ) ++ moduleArgs ++ attachRelatedOpens ++ watcherProperties ++ moreArgs ++
+            Seq(
+              "optimus.graph.diagnostics.heartbeat.WatcherProcess",
+              "--pid",
+              pid.toString,
+              "--uuid",
+              ChainedID.root.repr,
+              "--env",
+              Breadcrumbs.getEnv().fold("qa")(_.name),
+              "--listen"
+            ) ++ moreOpts
+        log.info(s"Executing ${cmd.mkString(" ")}")
+        try {
+          val pb = new ProcessBuilder(cmd: _*)
+          pb.redirectError(ProcessBuilder.Redirect.INHERIT)
+          pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+          pb.redirectInput(ProcessBuilder.Redirect.PIPE)
+          val p = pb.start()
+
+          log.info(s"Created WatcherProcess ${p.pid} watching ${pid}")
+
+          Runtime.getRuntime.addShutdownHook(new Thread {
+            override def run(): Unit = disable()
+          })
+
+          TaskTracker.registerCallbacks("watcher", id => send("activate", id), id => send("deactivate", id))
+
+          WatcherChild(p, new BufferedWriter(new OutputStreamWriter(p.getOutputStream)))
+        } catch {
+          case e: Throwable =>
+            log.error(s"Unable to register watcher", e)
+            Disabled
+        }
+      case w => w
+    }
+  }
+
+  def disable(): Unit = watcher.updateAndGet { case WatcherChild(p, _) =>
+    log.info(s"Deregistering with process watcher")
+    if (p.isAlive) {
+      Try(send("stop"))
+      if (Try(p.onExit().get(1, TimeUnit.SECONDS)).isFailure)
+        p.destroyForcibly()
+    }
+    Disabled
+  }
+
+  def enable(): Boolean = watch().running
+
+  def register(key: String, timeoutMs: Long): Unit = send("register", key, timeoutMs)
+  def ping(key: String): Unit = send("ping", key, System.currentTimeMillis())
+  def delete(key: String): Unit = send("delete", key)
+
+}

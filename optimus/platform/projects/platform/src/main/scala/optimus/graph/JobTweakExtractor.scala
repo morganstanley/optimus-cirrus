@@ -15,7 +15,7 @@ import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
 
-private[optimus] object JobTweakExtractor {
+object JobTweakExtractor {
 
   private val redirectToGuide =
     "Please check out http://optimusguide/AdvancedAnnotations/AnnotationJob.html#troubleshooting for further info"

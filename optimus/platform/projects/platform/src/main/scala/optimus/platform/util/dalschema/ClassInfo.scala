@@ -327,12 +327,13 @@ final case class MetaDataClassInfo(meta: ClassMetaData, classLoader: ClassLoader
           classSymbol.typeSignature.members.filter { m =>
             m.isMethod && m.asMethod.isGetter && ctorArgs.exists { _.fullName == m.fullName }
           }
-        }.getOrElse(Seq.empty)
+        }
+        .getOrElse(Seq.empty)
 
     } else {
       classSymbol.typeSignature.members.filter(if (isEntity) { (s: Symbol) =>
         !s.isStatic &&
-          (s match {
+        (s match {
           case t: TermSymbol =>
             t.annotations.exists { a =>
               a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[valAccessor]
@@ -373,7 +374,7 @@ object ClassInfo extends ClassInfoBase {
 
 class ClassInfoFromClassLoader(
     protected val resourceFinder: ResourceFinder,
-    protected val classLoader: ClassLoader
+    val classLoader: ClassLoader
 ) extends ClassInfoBase
 
 trait ClassInfoBase extends Log {

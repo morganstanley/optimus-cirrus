@@ -138,7 +138,7 @@ class BuildArtifactComparator(
 
     log.info("Computing diffs...")
     val diffs = TimingUtil.timeThis("compute diffs") {
-      fingerprintDiffs(lhs, rhs, fingerprints)
+      fingerprintDiffs(lhs, rhs, fingerprints, ignoredDiffs)
     }
 
     val runtimeDependencyChangedScopes: Set[ScopeId] = getRuntimeDependencyChangedScopes(diffs, scopeConfigSource)
@@ -246,11 +246,12 @@ class BuildArtifactComparator(
   }
 
   /**
-   * Fingerprints do not support all of the file types, so we need to fall back to Git
+   * Fingerprints do not support all the file types, so we need to fall back to Git
    */
   private def gitChangedScopes(): Set[ScopeId] = {
     def isFingerprintsUnsupportedFile(filePath: Path): Boolean =
-      !fingerprintsConfig.supportedExtensions.exists(filePath.toString.endsWith)
+      !fingerprintsConfig.supportedExtensions.exists(filePath.getFileName.toString.endsWith) ||
+        fingerprintsConfig.unsupportedFiles.exists(filePath.toString.endsWith)
 
     gitChanges.changesByScope
       .getOrElse(Map.empty)
@@ -258,6 +259,8 @@ class BuildArtifactComparator(
       .map { case (scope, _) => scope }
       .toSet
   }
+
+  private def ignoredDiffs = fingerprintsConfig.ignoredDiffs.map(e => FingerprintLineId(e.category, e.id))
 }
 
 object BuildArtifactComparator extends Log {
@@ -265,7 +268,9 @@ object BuildArtifactComparator extends Log {
   def fingerprintDiffs(
       lhs: JarToHashes,
       rhs: JarToHashes,
-      fingerprints: Seq[FingerprintDirComparison]): Set[ScopeFingerprintDiffs] = {
+      fingerprints: Seq[FingerprintDirComparison],
+      ignoredDiffs: Set[FingerprintLineId] = Set.empty
+  ): Set[ScopeFingerprintDiffs] = {
     val differingJars = rhs.keySet.toSeq.sorted
       .map(jarName => JarComparison(jarName, lhs.get(jarName), rhs.get(jarName)))
       .filter(_.diffMode != DiffMode.SAME)
@@ -281,7 +286,7 @@ object BuildArtifactComparator extends Log {
       fingerprints
         .flatMap(_.scopes)
         .filter(_.diffMode != DiffMode.SAME)
-        .map(fingerprintScope => fingerprintScope.scope -> fingerprintScope.diff)
+        .map(fingerprintScope => fingerprintScope.scope -> fingerprintScope.diff(ignoredDiffs))
         .filter { case (_, diff) => diff.nonEmpty }
         .groupBy { case (scope, _) => scope }
         .mapValuesNow(diff => diff.flatMap { case (_, lines) => lines }.toSet)

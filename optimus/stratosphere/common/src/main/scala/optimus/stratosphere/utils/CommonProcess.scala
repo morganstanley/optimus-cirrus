@@ -63,6 +63,8 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
       } else if (line.startsWith(joinLinkPrefix)) {
         log.highlight(line)
         log.info("Server is running in background...")
+        log.info(
+          s"Hint: run the following command from Windows client: strato ideClient -i ${stratoWorkspace.intellij.version}")
       })
     ScalaProcess(processBuilder).run(processLogger).exitValue()
   }

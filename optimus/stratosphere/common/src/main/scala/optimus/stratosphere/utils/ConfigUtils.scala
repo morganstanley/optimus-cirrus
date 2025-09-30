@@ -63,6 +63,7 @@ object ConfigUtils {
       workspace: StratoWorkspaceCommon): Unit = {
     val currentConfig = loadConfig(configFile)
     val updatedConfig = parseProperty(propertyName, value, prepend, append).withFallback(currentConfig)
+    workspace.update(propertyName)(value)
     configFile.file.writeConfig(updatedConfig)
   }
 

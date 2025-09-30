@@ -21,4 +21,6 @@ object Text {
 
   def pluralize(i: Int, noun: String): String =
     if (i == 1) noun else s"${noun}s"
+
+  def normalizeLineEndings(text: String): String = text.replaceAll("\r\n", "\n")
 }

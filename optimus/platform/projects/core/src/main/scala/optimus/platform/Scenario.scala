@@ -66,11 +66,12 @@ final class Scenario private[optimus] (
   /** true if we have unresolved tweaks (i.e. also-sets which have not been expanded, or tweak markers) */
   private[optimus] def hasUnresolvedOrMarkerTweaks: Boolean = (flags & ScenarioFlags.hasUnresolvedOrMarkerTweaks) != 0
 
-  /** true if we have tweaks that depend on parent context */
-  private[optimus] def hasContextDependentTweaks: Boolean = (flags & ScenarioFlags.hasContextDependentTweaks) != 0
+  /** true if we have tweaks that depend on parent context and those dependencies have not been declared via a call to onlyReads */
+  private[optimus] def hasTweaksWithUndeclaredDependencies: Boolean =
+    (flags & ScenarioFlags.hasUndeclaredDependenciesInTweaks) != 0
 
   /** true if we have tweaks that have when clause */
-  private[optimus] def hasWhenClauseTweaks: Boolean = (flags & ScenarioFlags.hasWhenClauseTweaks) != 0
+  private[optimus] def hasWhenPredicatedTweaks: Boolean = (flags & ScenarioFlags.hasWhenPredicatedTweaks) != 0
 
   /** true to compare tweaks as set */
   private[optimus] def unorderedTweaks: Boolean = (flags & ScenarioFlags.unorderedTweaks) != 0
@@ -84,7 +85,7 @@ final class Scenario private[optimus] (
   private[optimus] def flagsWithoutUnresolved: Int = flags & ~ScenarioFlags.hasUnresolvedOrMarkerTweaks
   private def flagsWithDisableRemoveRedundant: Int = flags | ScenarioFlags.disableRemoveRedundant
 
-  def removeRedundantDisabled: Boolean = (flags & ScenarioFlags.disableRemoveRedundant) != 0
+  def keepRedundantTweaks: Boolean = (flags & ScenarioFlags.disableRemoveRedundant) != 0
 
   /**
    * this is definitely not the function you are looking for
@@ -222,22 +223,38 @@ final class Scenario private[optimus] (
   def nestWithFlatten(s: Scenario): Scenario = {
     if (s.isEmpty) this
     else if (this.isEmpty) s
-    else if (s.hasContextDependentTweaks) {
+    else if (s.hasTweaksWithUndeclaredDependencies) {
       copyWithNested(nestedScenarios ::: s.withoutNested :: s.nestedScenarios)
     } else {
+      val targetProperties = new ju.HashSet[NodeTaskInfo]()
       val combinedTweaks = new ju.HashMap[TweakTarget[_, _], Tweak]()
       val it = _topLevelTweaks.iterator
       while (it.hasNext) {
         val tweak = it.next()
         combinedTweaks.put(tweak.target, tweak)
+        targetProperties.add(tweak.target.propertyInfo)
       }
+
       val it2 = s._topLevelTweaks.iterator
-      while (it2.hasNext) {
+      var conflictDetected = false
+      while (it2.hasNext && !conflictDetected) {
         val tweak = it2.next()
+        if (tweak.readsTweakables != null) {
+          var i = 0
+          val props = tweak.readsTweakables.properties
+          while (i < props.length && !conflictDetected) {
+            val read = props(i)
+            if (targetProperties.contains(read)) conflictDetected = true
+            i += 1
+          }
+        }
         combinedTweaks.put(tweak.target, tweak)
       }
 
-      new Scenario(combinedTweaks.values().toArray(new Array[Tweak](0)), nestedScenarios, flags)
+      if (conflictDetected)
+        copyWithNested(nestedScenarios ::: s.withoutNested :: s.nestedScenarios)
+      else
+        new Scenario(combinedTweaks.values().toArray(new Array[Tweak](0)), nestedScenarios, flags)
     }
   }
 
@@ -397,8 +414,8 @@ object Scenario {
       if (tweak.isReducibleToByValue) flags |= ScenarioFlags.hasReducibleToByValueTweaks
       if (tweak.shouldCheckForRedundancy) flags |= ScenarioFlags.hasPossiblyRedundantTweaks
       if (tweak.target.isUnresolvedOrMarkerTweak) flags |= ScenarioFlags.hasUnresolvedOrMarkerTweaks
-      if (tweak.isContextDependent) flags |= ScenarioFlags.hasContextDependentTweaks
-      if (tweak.hasWhenClause) flags |= ScenarioFlags.hasWhenClauseTweaks
+      if (tweak.hasUndeclaredDependencies) flags |= ScenarioFlags.hasUndeclaredDependenciesInTweaks
+      if (tweak.hasPredicate) flags |= ScenarioFlags.hasWhenPredicatedTweaks
       if (tweak.target.propertyInfo.tweakableID() == 1) flags |= ScenarioFlags.markedForDebugging
     }
     if (unorderedTweaks) flags |= ScenarioFlags.unorderedTweaks
@@ -464,7 +481,7 @@ object Scenario {
             val prevTweak = propertyTweaks.put(target, tweak)
             if ((prevTweak ne null) && prevTweak != tweak)
               throw new IllegalArgumentException(
-                s"$messagePrefix: Same tweak extractors should have the same value producers for the same property: " +
+                s"$messagePrefix: Same tweak extractors should have the same := RHS for a given property: " +
                   s"$pinfo extractor: $keyExtractor  T1:$prevTweak   T2:$tweak")
             keyExtractor
           case _ => tweak

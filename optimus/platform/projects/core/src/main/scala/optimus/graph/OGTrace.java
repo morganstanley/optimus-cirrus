@@ -29,6 +29,7 @@ import optimus.graph.diagnostics.PNodeTaskInfo;
 import optimus.graph.diagnostics.ProfiledEvent;
 import optimus.graph.diagnostics.SchedulerProfileEntry;
 import optimus.graph.diagnostics.gridprofiler.GridProfiler;
+import optimus.graph.diagnostics.heartbeat.Watcher;
 import optimus.graph.diagnostics.messages.BookmarkCounter;
 import optimus.graph.diagnostics.messages.ProfilerEventsWriter;
 import optimus.graph.diagnostics.messages.ProfilerMessages;
@@ -192,6 +193,7 @@ public class OGTrace {
     GridProfiler.ensureLoaded();
     AsyncProfilerIntegration.ensureLoadedIfEnabled();
     SamplingProfiler.ensureLoadedIfEnabled();
+    if (DiagnosticSettings.watcherProcess) Watcher.enable();
     // traceAvailable, we should be prepared to summarize some profile data.
     // Should we make it even lazier? Should we lower priority?
     if (DiagnosticSettings.traceAvailable) {

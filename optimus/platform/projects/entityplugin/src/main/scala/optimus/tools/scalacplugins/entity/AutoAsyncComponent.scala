@@ -819,7 +819,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
         // .collect must be async'd manually on an option
         case (CombApply.IsOption, true) if origComb == names.collect =>
-          alarm(OptimusNonErrorMessages.MANUAL_OPTION_ASYNC_COLLECT(), newColl.pos)
+          alarm(OptimusErrors.UNABLE_TO_TRANSFORM_OPTION(newColl), newColl.pos)
           reassemble()
 
         // .collect must be async'd manually on an iterable

@@ -21,6 +21,7 @@ import optimus.buildtool.resolvers.ExternalDependencyResolver
 import optimus.buildtool.resolvers.MavenUtils
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.utils.Utils
+import optimus.platform.util.Log
 import optimus.platform._
 
 import java.nio.file.Paths
@@ -59,7 +60,7 @@ final case class MavenExecutable(
     variant: Option[String] = None,
 ) extends DependencyReference
 
-trait PortableExecutable extends ResolvableResource {
+trait PortableExecutable extends ResolvableResource with Log {
   val windows: DependencyReference
   val linux: DependencyReference
 
@@ -103,16 +104,32 @@ final case class PortableMavenExecutable(
       .withClassifier(
         configuredDependency.classifier
       ) // We want to force update the classifier anyway, because they may be platform specific
+    val deps = DependencyDefinitions(Seq(dependencyDefinition), Nil)
 
-    val res = dependencyResolver
-      .resolveDependencies(DependencyDefinitions(Seq(dependencyDefinition), Nil))
+    val res = dependencyResolver.resolveDependencies(deps)
 
     res.resolvedArtifacts.toList match {
       case (exec: ExternalBinaryArtifact) :: Nil =>
         val depCopyExec = dependencyCopier.atomicallyDepCopyFileIfMissing(exec.file)
         MavenUtils.setExecutablePermissions(depCopyExec)
         depCopyExec
-      case rest => throw new IllegalStateException(s"There should be only a single artifact downloaded but was $rest")
+      case _ =>
+        val allResolverMsgs = res.messages.map(_.toString).mkString("\n")
+        log.error(s"Resolver messages:\n$allResolverMsgs")
+
+        val currentDepInfo = deps.all.map(_.key).mkString("\n")
+        val scopeInfo = s"[${scope.id.toString}] at ${scope.config.paths.absScopeConfigDir.pathString}"
+        val configInfo = configuration.map { case (k, v) => s"$k -> $v" }.mkString("\n")
+        val msg =
+          s"""$scopeInfo
+             |Configs: $configInfo
+             |Dependencies: $currentDepInfo
+             |Resolver Msgs: $allResolverMsgs
+             |This error indicates that OBT couldn't download the required dependency, please check your credentials.
+        """.stripMargin
+
+        log.error(msg)
+        throw new IllegalStateException(msg)
     }
   }
 }

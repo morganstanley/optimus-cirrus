@@ -52,12 +52,8 @@ private[platform] final class Shape private (
   val fieldOrder: Array[(String, Int)] = name2index.toArray
   def hasTag: Boolean = tag ne Shape.NoTag
 
-  // This is used to support removal of the tag from SlottedBufferAsMap methods.
   // noinspection ScalaUnusedSymbol - called by generated code
-  def maybeIntern(o: AnyRef, index: Int): AnyRef = {
-    if (!safeToIntern || isSeq) o
-    else maybeInterner.maybeIntern(o, index)
-  }
+  def maybeIntern(o: AnyRef, index: Int): AnyRef = maybeInterner.maybeIntern(o, index)
 
   def getFieldIndex(key: String): Int = name2index.getOrElse(key, Shape.invalidField)
 
@@ -84,20 +80,6 @@ private[platform] final class Shape private (
   // Serialization Support
   def writeReplace(): AnyRef = {
     new ShapeMoniker(this)
-  }
-
-  // The rationale for using a var and cloning is because we want the non-interning
-  // instance of the shape to share all its state except for the safeToInternSbs flag.
-  // Sharing the state is important because we want statistics on queries and hits
-  // for each of the fields to drive the interning decisions of each of the fields
-  // of the shape.
-  private var allowInterning: Boolean = true
-  // This is set to true if all the fields of the shape are internable
-  def safeToIntern: Boolean = allowInterning
-  lazy val nonInterning: Shape = {
-    val other = this.clone().asInstanceOf[Shape]
-    other.allowInterning = false
-    other
   }
 }
 
@@ -153,14 +135,13 @@ private[platform] object Shape {
   private val shapeCache = new ConcurrentHashMap[ShapeKey, Shape]()
 
   // This creates a Shape to be used for SlottedBufferAsMap
-  def apply(names: Array[String], classes: Array[Class[_]], tag: String, safeToIntern: Boolean): Shape = {
+  def apply(names: Array[String], classes: Array[Class[_]], tag: String): Shape = {
     val lookupShape = new ShapeKey(names, classes, tag)
-    val shape = shapeCache.computeIfAbsent(lookupShape, k => new Shape(k.names, k.classes, k.tag))
-    if (safeToIntern) shape else shape.nonInterning
+    shapeCache.computeIfAbsent(lookupShape, k => new Shape(k.names, k.classes, k.tag))
   }
 
   // This creates a Shape to be used for SlottedBufferAsSeq
-  def apply(classes: Array[Class[_]]): Shape = apply(null, classes, Shape.NoTag, safeToIntern = true)
+  def apply(classes: Array[Class[_]]): Shape = apply(null, classes, Shape.NoTag)
 
   // Intended to be used from the debugger to dump out stats.
   def dumpStats(): String = {

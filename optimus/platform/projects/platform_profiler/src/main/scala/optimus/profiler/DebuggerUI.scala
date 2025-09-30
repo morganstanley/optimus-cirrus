@@ -110,11 +110,15 @@ object DebuggerUI extends Log {
 
   def brk(): Unit = brk("\nStopped: " + (if (ntsk ne null) ntsk.toString else "") + " \"go\" to continue\n")
 
-  def brk(msg: String): Unit = {
-    brkCount += 1
+  def alert(msg: String): Unit = {
     GraphDebuggerUI.showMessage(msg)
     GraphConsole.out(msg)
     log.info(msg) // need to make sure it's on the console, process may have exited by now
+  }
+
+  def brk(msg: String): Unit = {
+    brkCount += 1
+    alert(msg)
     setDebuggerStop(new CountDownLatch(1))
     dbgStop.await()
     setDebuggerStop(null)

@@ -89,7 +89,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
     !DiagnosticSettings.getBoolProperty(AbstractPersistBlock.UseImmutableEntitiesProperty, false)
 
   val generateIgnoreListForReferenceResolutionEnabled: Boolean =
-    DiagnosticSettings.getBoolProperty(AbstractPersistBlock.generateIgnoreListForReferenceResolution, false)
+    DiagnosticSettings.getBoolProperty(AbstractPersistBlock.generateIgnoreListForReferenceResolution, true)
   val writeRetryAllowed = false
 
   private[this] var deferredValidations: List[() => Unit] = Nil

@@ -49,6 +49,7 @@ import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipFile
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Success
 import scala.util.Try
 import scala.util.Using
 import scala.util.control.NonFatal
@@ -193,6 +194,21 @@ object FileUtils extends Log {
     dirs.foreach(deleteRecursively)
   }
 
+  val GZIP_SUFFIX = ".gz"
+  val ZSTD_SUFFIX = ".zst"
+
+  def gzip(from: Path): Try[Path] = gzip(from, true)
+  def gzip(from: Path, deleteOld: Boolean): Try[Path] = {
+    if (from.getFileName.toString.endsWith(GZIP_SUFFIX)) Success(from)
+    else {
+      val to =
+        if (from.getNameCount > 1)
+          from.getParent.resolve(from.getFileName.toString + GZIP_SUFFIX)
+        else Paths.get(from.getFileName.toString + GZIP_SUFFIX)
+      gzip(from, to, deleteOld).map(_ => to)
+    }
+  }
+
   def gzip(
       from: Path,
       to: Path,
@@ -210,6 +226,26 @@ object FileUtils extends Log {
     }
     _ <- Try { if (removeOld) Files.delete(from) }
   } yield ret
+
+  private def strip(p: Path, suffix: String): Path = {
+    val name = p.getFileName.toString
+    if (name.endsWith(suffix)) p.getParent.resolve(name.substring(0, name.length - suffix.length))
+    else p
+  }
+
+  def uncompress(from: Path, deleteOld: Boolean = true): Try[Path] = Try {
+    var p0 = from
+    var p1 = strip(from, GZIP_SUFFIX)
+    if (p0 ne p1) {
+      gunzip(p0, p1, deleteOld).get
+      p0 = p1
+    }
+    p1 = strip(p0, ZSTD_SUFFIX)
+    if (p0 ne p1) {
+      zstdDecompress(p0, p1, deleteOld).get
+    }
+    p1
+  }
 
   def gunzip(
       from: Path,
@@ -229,6 +265,19 @@ object FileUtils extends Log {
     _ <- Try { if (removeOld) Files.delete(from) }
 
   } yield ret
+
+  def zstdCompress(from: Path): Try[Path] = zstdCompress(from, true)
+
+  def zstdCompress(from: Path, deleteOld: Boolean): Try[Path] = {
+    if (from.getFileName.toString.endsWith(ZSTD_SUFFIX)) Success(from)
+    else {
+      val to =
+        if (from.getNameCount > 1)
+          from.getParent.resolve(from.getFileName.toString + ZSTD_SUFFIX)
+        else Paths.get(from.getFileName.toString + ZSTD_SUFFIX)
+      zstdCompress(from, to, deleteOld).map(_ => to)
+    }
+  }
 
   def zstdCompress(
       from: Path,

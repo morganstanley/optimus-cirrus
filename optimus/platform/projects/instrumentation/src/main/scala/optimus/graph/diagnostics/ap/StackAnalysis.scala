@@ -55,21 +55,23 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.lang.{StringBuilder => JStringBuilder}
+import scala.collection.mutable
 
 object StackType {
+  val Adapted_DAL = "Adapted_DAL"
   val Alloc = "Alloc"
   val AllocNative = "AllocNative"
   val CacheHit = "CacheHit"
   val Cpu = "Cpu"
-  val Live = "Live"
-  val LiveNative = "LiveNative"
   val Free = "Free"
   val FreeNative = "FreeNative"
-  val Adapted_DAL = "Adapted_DAL"
-  val Lock = "Lock"
-  val Wait = "Wait"
-  val Unfired_DAL = "Unfired_DAL"
   val FullWait_NS_None = "FullWait.NS.None"
+  val Live = "Live"
+  val LiveNative = "LiveNative"
+  val Lock = "Lock"
+  val Rev = "Rev"
+  val Unfired_DAL = "Unfired_DAL"
+  val Wait = "Wait"
 }
 
 object StackAnalysis extends Log {
@@ -863,7 +865,11 @@ object StackAnalysis extends Log {
           self = 0L
           only.pushSelfTimesToLeaves()
         case lm: LM[_] =>
-          val kidsArr = lm.cast.valuesIterator.toArray
+          // We sort children by self time in ascending order so that redistribution always starts with the smallest leaves.
+          // This ensures that redistribution preserves the relative proportions of the heavier nodes, and also removes
+          // the non-deterministic order issue of Map.values.
+          // Otherwise, with the same input the redistribution results may vary.
+          val kidsArr = lm.cast.valuesIterator.toArray.sortInPlaceBy(_.self)
           if (self > 0L) {
             val sum = kidsArr.map(_.total).sum
             val toAdd = self
@@ -1077,7 +1083,7 @@ object StackAnalysis extends Log {
       paths
     }
 
-    def stackString = frames.mkString(";")
+    def stackString = frames.mkString(";") + s" $total $self"
   }
 
   val encoder64 = Base64.getUrlEncoder
@@ -1509,34 +1515,59 @@ class StackAnalysis(
     case PruningStrategy.`leavesHaveSelfTime`   => (sn: StackNode) => sn.self > 0
   }
 
-  private[diagnostics] def reverseTree(oldCurrNode: StackNode, name: String): StackNode = {
-    @tailrec
-    def reversing(nodesToProcess: List[(StackNode, StackNode)]): Unit = {
-      if (nodesToProcess.isEmpty) {
-        return
-      }
+  /**
+   * Build a reversed tree so that flamegraphs after pruneLeaves retain more detailed callee paths.
+   *
+   * - In the forward tree, pruneLeaves cuts away callees first, discarding callee detail.
+   * - In the reverse tree, pruneLeaves removes callers first, preserving the deepest callee distributions.
+   *
+   * Therefore, when pruneLeaves is applied, these two views are complementary rather than redundant.
+   * By publishing them, we preserve detail at the top and bottom, while dropping some middle layers.
+   */
+  private[diagnostics] def reverseTree(oldRoot: StackNode, name: String): StackNode = {
+    val newReverseRoot = rootStackNode(name)
+    // memory & GC friendly, avoid passing the stack at every reversing recursion
+    val nodesToProcess = new mutable.ArrayDeque[(StackNode, StackNode)]()
+    val stopAt = oldRoot.kiderator.find(_.cn.name == AppName) match {
+      // for Cpu samples, we shouldn't prune callees under App then redistribute their self time to GC and compiler.
+      case Some(appRoot) =>
+        // Step 1: create reversed App tree
+        val revAppRoot = newReverseRoot.getOrCreateChildNode(cleanName(AppName))
+        nodesToProcess.append((appRoot, revAppRoot))
+        // Step 2: attach helper roots: Compiler, GC directly under the new reversed root.
+        // helper roots are siblings of App in the original tree
+        val helperRoots = oldRoot.kiderator
+        helperRoots.foreach { helperRoot =>
+          // append rest helper roots to newReverseRoot: GC, Compiler
+          if (helperRoot != appRoot && helperRoot.getTotal != 0) {
+            val newHelperNode = newReverseRoot.getOrCreateChildNode(helperRoot.cn)
+            newHelperNode.addTotal(helperRoot.getTotal)
+            newHelperNode.addSelf(helperRoot.getSelf)
+            newReverseRoot.addTotal(helperRoot.getTotal)
+          }
+        }
+        appRoot
+      case None =>
+        nodesToProcess.append((oldRoot, newReverseRoot))
+        oldRoot
+    }
 
-      val (currentOldNode, currentNewNode) = nodesToProcess.head
-      val remainingNodes = nodesToProcess.tail
-
+    while (nodesToProcess.nonEmpty) {
+      val (currentOldNode, currentNewNode) = nodesToProcess.removeHead()
       if (currentOldNode.self > 0L) {
         var oldN = currentOldNode
         var newN = currentNewNode
-
-        do {
+        // walk up until we hit the given oldRoot
+        while (oldN ne stopAt) {
           newN = newN.getOrCreateChildNode(oldN.cn)
           oldN = oldN.parent
-        } while (oldN.parent ne NoNode)
+        }
         newN.add(currentOldNode.self)
       }
-
-      val childNodesToProcess = currentOldNode.kiderator.map(kid => (kid, currentNewNode)).toList
-      reversing(childNodesToProcess ++ remainingNodes)
+      currentOldNode.kiderator.foreach(kid => nodesToProcess.append((kid, currentNewNode)))
     }
 
-    val newRoot = rootStackNode(name)
-    reversing(List((oldCurrNode, newRoot)))
-    newRoot
+    newReverseRoot
   }
 
   private[diagnostics] def addReversed(
@@ -1580,13 +1611,13 @@ class StackAnalysis(
       // Add live view to roots, and remove Free stub
       val origNames =
         Seq(Cpu, Alloc, AllocNative, Adapted_DAL, Lock, Wait, Unfired_DAL, FullWait_NS_None)
-      val newTrees: Seq[(String, StackNode)] = for {
+      val revTrees: Seq[(String, StackNode)] = for {
         origName <- origNames
-        reversed <- addReversed(origName, roots0, s"Rev$origName")
-      } yield s"Rev$origName" -> reversed
+        reversed <- addReversed(origName, roots0, s"$Rev$origName")
+      } yield s"$Rev$origName" -> reversed
 
       val roots =
-        roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - Free - FreeNative) ++ newTrees
+        roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - Free - FreeNative) ++ revTrees
 
       if (DiagnosticSettings.samplingAsserts) roots.valuesIterator.foreach(assertTreesAreConsistent)
 
@@ -1597,13 +1628,14 @@ class StackAnalysis(
       if (DiagnosticSettings.samplingAsserts) roots.valuesIterator.foreach(assertTreesAreConsistent)
 
       val stackData = leaves.flatMap { case (rootName, stacks) =>
-        stacks.map { s =>
-          if (DiagnosticSettings.samplingAsserts) {
-            s.assertConsistentTimes()
-            assert(leafPred(s), "stacks should have been a leaf")
-          }
-          val hashId = stackMemoize(rootName, rootIds, s)
-          StackData(rootName, s.total, s.self, hashId, if (generateFolded) folded(s.frames, s.self) else "")
+        stacks.collect {
+          case s if s.total > 0 => // drop empty nodes
+            if (DiagnosticSettings.samplingAsserts) {
+              s.assertConsistentTimes()
+              assert(leafPred(s), "stacks should have been a leaf")
+            }
+            val hashId = stackMemoize(rootName, rootIds, s)
+            StackData(rootName, s.total, s.self, hashId, if (generateFolded) folded(s.frames, s.self) else "")
         }
       }.toSeq
 

@@ -65,7 +65,7 @@ import optimus.core.config.StaticConfig;
 import optimus.graph.cache.Caches;
 import optimus.graph.cache.CauseGCNative$;
 import optimus.graph.diagnostics.GCNativeStats;
-import optimus.graph.diagnostics.InfoDumper;
+import optimus.graph.diagnostics.InfoDumper$;
 import optimus.graph.gcmonitor.GCCrumbs;
 import optimus.graph.tracking.DependencyTrackerRoot$;
 import optimus.graph.tracking.TrackingGraphCleanupTrigger;
@@ -1874,11 +1874,11 @@ public class GCNative {
       if (jemallocVerbose
           && jemallocAPILoaded
           && level != LEVEL_SHUTDOWN) { // on shutdown, we'll already be generating the dump
-        InfoDumper.upload(Crumb.gcSource(), jemallocDump("pre-clear-" + gcIndex));
+        InfoDumper$.MODULE$.upload(Crumb.gcSource(), jemallocDump("pre-clear-" + gcIndex));
       }
       clearCache(level, nativeHeapBeforeClear, nativeHeapChange);
       if (jemallocVerbose && jemallocAPILoaded)
-        InfoDumper.upload(Crumb.gcSource(), jemallocDump("post-clear-" + gcIndex));
+        InfoDumper$.MODULE$.upload(Crumb.gcSource(), jemallocDump("post-clear-" + gcIndex));
     }
   }
 

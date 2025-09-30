@@ -44,7 +44,7 @@ object ConvertByNameToByValueNode {
   } else false
 
   def removeRedundantTweaks(s: Scenario, ss: ScenarioStack): Scenario =
-    if (s.hasPossiblyRedundantTweaks && !s.removeRedundantDisabled)
+    if (s.hasPossiblyRedundantTweaks && !s.keepRedundantTweaks)
       s.filterConserve(!isTweakRedundant(_, ss), s.flagsWithoutHasRedundant)
     else s
 }
@@ -146,7 +146,7 @@ class ConvertByNameToByValueNode[T](
       if (rtweakAwaiting eq null) {
         var newTweaks = new Array[Tweak](rtweaks.length)
         var count = 0
-        def add(t: Tweak): Unit = if (originalScenario.removeRedundantDisabled || !isTweakRedundant(t, curSS)) {
+        def add(t: Tweak): Unit = if (originalScenario.keepRedundantTweaks || !isTweakRedundant(t, curSS)) {
           newTweaks(count) = t
           count += 1
         }

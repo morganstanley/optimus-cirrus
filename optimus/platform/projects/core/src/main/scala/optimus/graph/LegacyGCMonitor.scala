@@ -27,10 +27,13 @@ import optimus.graph.cache.CleanupStats
 import optimus.graph.cache.UNodeCache
 import optimus.graph.diagnostics.GCMonitorDiagnostics
 import optimus.graph.diagnostics.InfoDumper
+import optimus.graph.diagnostics.ProfilerUIControl
+import optimus.graph.diagnostics.trace.OGTraceMode
 import optimus.graph.gcmonitor.HeapUsageMb
 import optimus.graph.gcmonitor._
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.logging.LoggingInfo
+import optimus.platform.inputs.GraphInputConfiguration
 import optimus.scalacompat.collection._
 import optimus.utils.ProcessExitCodes
 import optimus.utils.SystemFinalization
@@ -268,8 +271,16 @@ final class LegacyGCMonitor(allowForceGCOnEviction: Boolean = LegacyGCMonitor.de
           "suspending" :: Nil)
         cleanupsTriggered += 1 // at backOffAfter+1, it won't keep repeating the message above
         GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedBackoffTriggerHit)
-      } else
+      } else {
         log.info(s"Skipping cleanup due to backoff")
+        if (DiagnosticSettings.diag_showConsole) {
+          if (GraphInputConfiguration.isTracing) {
+            GraphInputConfiguration.setTraceMode(OGTraceMode.none)
+            ProfilerUIControl.alert("GCMonitor failing to recover memory! Shutting off trace")
+          } else
+            ProfilerUIControl.alert("GCMonitor failing to recover memory!")
+        }
+      }
     }
   }
 

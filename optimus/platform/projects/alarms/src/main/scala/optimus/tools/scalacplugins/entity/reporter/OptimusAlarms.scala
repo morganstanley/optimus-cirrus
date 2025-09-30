@@ -43,6 +43,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NOWARN = error1(20516, StagingPhase.GENERAL_API_CHECK, "Illegal use of @nowarn: %s")
 
   // auto async
+  val UNABLE_TO_TRANSFORM_OPTION =
+    error1(
+      20552,
+      OptimusPhases.AUTOASYNC,
+      "Unable to automatically transform %s. Use .aseq to transform closures on Option.")
   val UNABLE_TO_PARALLELIZE_COLLECTION =
     warning1(20553, OptimusPhases.AUTOASYNC, "Unable to parallelize %s; must explicitly choose apar or aseq")
   val UNMARKED_ASYNC_CLOSURE_T =
@@ -844,6 +849,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       OptimusPhases.EXPORTINFO,
       "The storable annotated with @meta %s, needs a Catalog; The Owner object can be omitted at the discretion of the developer, usually owners are set by annotating a package"
     )
+
+  val UNSUPPORTED_INDEX_KEY_REFERENCE = error1(29204, OptimusPhases.ADJUST_AST, "Unsupported Indexed/Key reference: %s")
 }
 
 //noinspection TypeAnnotation
@@ -891,16 +898,14 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     info0(
       10563,
       OptimusPhases.AUTOASYNC,
-      "Iterable.collect must by async'd manually.(No non-RT calls detected; .apar is likely appropriate.)"
+      "Iterable.collect requires .apar or .aseq (No non-RT calls detected; .apar is likely appropriate.)"
     )
   val ASYNC_TRY = warning0(10564, OptimusPhases.AUTOASYNC, "Do not use try/catch with async body.")
-  val MANUAL_OPTION_ASYNC_COLLECT =
-    error0(10565, OptimusPhases.AUTOASYNC, "Option.collect must by async'd manually.")
   val MANUAL_ASYNC_COLLECT_ASEQ =
     info0(
       10566,
       OptimusPhases.AUTOASYNC,
-      "Iterable.collect must by async'd manually.(Possible non-RT calls detected; .aseq may be necessary.)"
+      "Iterable.collect requires .apar or .aseq (Possible non-RT calls detected; .aseq may be necessary.)"
     )
   val ASYNC_CLOSURE =
     warning1(10567, OptimusPhases.AUTOASYNC, "Async call found in closure passed as sync argument to %s")

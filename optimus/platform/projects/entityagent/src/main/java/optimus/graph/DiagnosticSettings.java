@@ -286,6 +286,8 @@ public class DiagnosticSettings {
   public static int infoDumpEmergencyKillSec =
       getIntProperty("optimus.diagnostic.dump.emergency.kill.sec", 0);
 
+  public static boolean watcherProcess = getBoolProperty("optimus.watcher", false);
+
   // Full heap dump - i.e. not just "live"
   public static boolean fullHeapDumpOnKill =
       getBoolProperty("optimus.diagnostic.dump.heap.full", false);

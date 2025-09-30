@@ -82,11 +82,11 @@ final class TweakKeyExtractorTarget[R, SetT](
   def writePrettyString(sb: PrettyStringBuilder): PrettyStringBuilder = {
     if (!sb.short) {
       val entityString =
-        try key.toString
+        try s"${key.info} when $keyExtractor == [${key.keyValue}]"
         catch { case _: Exception => key.getClass.getName + "[.toString threw!]" }
-      sb ++= entityString ++= "."
-    }
-    sb ++= propertyInfo.name
+      sb ++= entityString
+    } else
+      sb ++= propertyInfo.name
   }
 }
 
@@ -228,7 +228,7 @@ final case class PredicatedPropertyTweakTarget[E, WhenT <: AnyRef, SetT, R](
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[PredicatedPropertyTweakTarget[_, _, _, _]]
-  private def predicateEquals(other: AnyRef) = NodeClsIDSupport.equals(other, predicate)
+  private def predicateEquals(other: AnyRef): Boolean = NodeClsIDSupport.equals(other, predicate)
 
   override def hashCode: Int =
     41 * (41 + propertyInfo.hashCode) + (if (predicate.isInstanceOf[NodeClsID]) NodeClsIDSupport.hashCode(predicate)
@@ -237,7 +237,6 @@ final case class PredicatedPropertyTweakTarget[E, WhenT <: AnyRef, SetT, R](
   override def matchesKeyFromRSS(key: NodeKey[_]): Boolean =
     false // Predicated tweak targets are not supported by this API
 
-  override def hasWhenClause: Boolean = true
   override def whenPredicate: AnyRef = predicate
   override def whenClauseNode(key: NodeKey[_], scenarioStack: ScenarioStack): Node[Boolean] = {
     val node = key.argsCopy(predicate).asInstanceOf[Node[Boolean]]

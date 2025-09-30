@@ -77,7 +77,7 @@ object SamplingProfilerLogger {
     def error(msg: String): Unit = logger.error(logPrefix + msg)
     def error(msg: String, t: Throwable): Unit = logger.error(logPrefix + msg, t)
   }
-  def logProfireUrl(uuid: String): Unit = if (uuid.nonEmpty) {
+  def logProfireUrl(uuid: String): Option[String] = if (uuid.nonEmpty) {
     val urlRoot = Breadcrumbs.getEnv().flatMap {
       case qa @ (ServiceEnvironment.qa | ServiceEnvironment.uat) => Some(SamplingProfilerConfig.string("profire-qa"))
       case ServiceEnvironment.prod                               => Some(SamplingProfilerConfig.string("profire-prod"))
@@ -87,9 +87,12 @@ object SamplingProfilerLogger {
       case Some(root) =>
         val url = root + s"&pfrInput=$uuid"
         log.info(s"You can check the profiling data here: $url")
-      case None => log.debug("Profire URL root not configured; skip logging URL.")
+        Some(url)
+      case None =>
+        log.debug("Profire URL root not configured; skip logging URL.")
+        None
     }
-  }
+  } else None
 }
 
 object SamplingProfilerSource extends Crumb.Source {
@@ -581,6 +584,7 @@ object SamplingProfiler {
   def nanosToMillis(ns: Long) = ns / NANOSPERMILLI
 
   def ensureLoadedIfEnabled(): Unit = {}
+  def isEnabled = enabled
   private val auto = DiagnosticSettings.samplingProfilerStartsOn
   private var enabled = DiagnosticSettings.samplingProfilerStatic
 

@@ -18,4 +18,5 @@ import spray.json.DefaultJsonProtocol._
 private[optimus] object DistProperties extends KnownProperties {
   val jobId = prop[String]("job_id")
   val taskId = prop[String]("task_id")
+  val rootChainId = prop[String]("root_chain_id")
 }

@@ -503,7 +503,7 @@ final case class ScenarioStack private[optimus] (
       name: String = null
   ): ScenarioStack = {
     val tl =
-      if (scenario.hasWhenClauseTweaks && givenNode.isInstanceOf[Node[_]])
+      if (scenario.hasWhenPredicatedTweaks && givenNode.isInstanceOf[Node[_]])
         tweakableListener.withWhenTarget(givenNode.asInstanceOf[Node[_]])
       else tweakableListener
 

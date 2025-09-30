@@ -18,25 +18,45 @@ import optimus.buildtool.format.Success
 
 import scala.jdk.CollectionConverters._
 
-final case class FingerprintsDiffConfiguration(supportedExtensions: Set[String])
+final case class FingerprintsDiffConfiguration(
+    supportedExtensions: Set[String],
+    unsupportedFiles: Set[String],
+    ignoredDiffs: Set[FingerprintDiffId]
+)
+
+final case class FingerprintDiffId(category: String, id: String)
 
 object FingerprintsDiffConfiguration {
 
-  val Empty: FingerprintsDiffConfiguration = FingerprintsDiffConfiguration(Set.empty)
+  val Empty: FingerprintsDiffConfiguration = FingerprintsDiffConfiguration(Set.empty, Set.empty, Set.empty)
 
   private val origin = FingerprintsDiffConfig
   private val supportedExtensionsKey = "supportedExtensions"
+  private val unsupportedFilesKey = "unsupportedFiles"
+  private val ignoredDiffsKey = "ignoredDiffs"
 
   def load(loader: ObtFile.Loader): Result[FingerprintsDiffConfiguration] =
     loader(origin).flatMap(load)
 
-  private def load(config: Config) =
-    Result.tryWith(origin, config) {
-      val supportedExtensions: Set[String] =
-        if (config.hasPath(supportedExtensionsKey))
-          config.getStringList(supportedExtensionsKey).asScala.toSet
+  private def load(config: Config) = {
+    def stringSet(key: String): Set[String] =
+      if (config.hasPath(key)) config.getStringList(key).asScala.toSet
+      else Set.empty
+
+    def ignoredDiffs: Set[FingerprintDiffId] = {
+      val ignoredDiffs: Set[Config] =
+        if (config.hasPath(ignoredDiffsKey)) config.getObjectList(ignoredDiffsKey).asScala.map(_.toConfig).toSet
         else Set.empty
-      Success(FingerprintsDiffConfiguration(supportedExtensions))
+      ignoredDiffs.map(e => FingerprintDiffId(e.getString("category"), e.getString("id")))
     }
+
+    Result.tryWith(origin, config) {
+      Success(
+        FingerprintsDiffConfiguration(
+          stringSet(supportedExtensionsKey).map(ext => s".$ext"),
+          stringSet(unsupportedFilesKey),
+          ignoredDiffs))
+    }
+  }
 
 }

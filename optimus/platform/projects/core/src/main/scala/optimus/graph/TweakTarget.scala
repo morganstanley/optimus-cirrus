@@ -27,8 +27,8 @@ trait TweakTarget[R, SetT] {
    */
   def matchesKeyFromRSS(key: NodeKey[_]): Boolean
 
-  /** Returns true for PropertyTweaks with 'when' clause */
-  def hasWhenClause = false
+  /** Returns true for PropertyTweaks with 'when' clause, however logically similar key extractor would still return false */
+  final def hasPredicate: Boolean = whenPredicate != null
 
   /** Returns predicate for PropertyTweaks with `when` clause, else null */
   def whenPredicate: AnyRef = null

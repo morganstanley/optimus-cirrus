@@ -147,16 +147,18 @@ abstract class MapOptionHandler[KeyType, ValueType](
     setter: Setter[Map[KeyType, ValueType]])
     extends OneArgumentOptionHandler[Map[KeyType, ValueType]](parser, option, setter) {
   override def parse(arg: String): Map[KeyType, ValueType] = {
-    arg
-      .split(delimiter)
-      .map(keyValuePair =>
-        keyValuePair.split(keyValueDelimiter) match {
-          case Array(key: String, value: String) =>
-            (convertKey(key), convertValue(value))
-          case _ =>
-            throw new IllegalArgumentException(s"Unable to parse \'$keyValuePair\' as a key-value pair")
-        })
-      .toMap
+    if (arg == "NO_ARG") Map.empty[KeyType, ValueType]
+    else
+      arg
+        .split(delimiter)
+        .map(keyValuePair =>
+          keyValuePair.split(keyValueDelimiter) match {
+            case Array(key: String, value: String) =>
+              (convertKey(key), convertValue(value))
+            case _ =>
+              throw new IllegalArgumentException(s"Unable to parse \'$keyValuePair\' as a key-value pair")
+          })
+        .toMap
   }
   def convertKey(s: String): KeyType
   def convertValue(s: String): ValueType

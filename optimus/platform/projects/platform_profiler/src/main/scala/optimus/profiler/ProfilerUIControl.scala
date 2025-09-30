@@ -48,6 +48,7 @@ private final class ProfilerUIControl extends ProfilerUIControlAPI {
     ScenarioStackProfileViewHelper.createScenarioStackProfileView(ss)
   override def refresh(): Unit = GraphDebuggerUI.refresh()
 
+  override def alert(msg: String): Unit = DebuggerUI.alert(msg)
   override def bookmark(name: String, color: Color): Unit = DebuggerUI.bookmark(name, color)
   override def brk(): Unit = DebuggerUI.brk()
   override def callback(name: String, x: Any): Any = DebuggerUI.callback(name, x)

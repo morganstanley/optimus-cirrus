@@ -18,7 +18,7 @@ import optimus.platform._
 import optimus.platform.inputs.ProcessState
 import optimus.platform.inputs.loaders.FoldedNodeInput
 
-private[observability] object JobInputs {
+object JobInputs {
   def toTweakJobInputs(tweaks: Seq[Tweak]): Set[TweakJobInput] =
     // it is the caller's responsibility to ensure that tweaks have been validated via
     // JobTweakExtractor

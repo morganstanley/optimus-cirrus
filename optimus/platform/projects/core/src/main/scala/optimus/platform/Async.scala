@@ -105,7 +105,22 @@ class AsyncIterableMarker[A, CC <: Iterable[A]](private val c: CC with IterableL
 }
 class AsyncOptionMarker[A](private val o: Option[A]) extends AnyVal {
   def asyncOff: Option[A] = o
+
+  /**
+   * @see [[apar]]
+   */
   def async = new OptAsync[A](o)
+
+  /**
+   * Force async transformation of closures on Option. Options contain at most one element, so [[apar]] and [[aseq]] are
+   * equivalent.
+   */
+  def apar = new OptAsync[A](o)
+
+  /**
+   * @see [[apar]]
+   */
+  def aseq = new OptAsync[A](o)
 }
 class AsyncMapMarker[K, V, CC <: Map[K, V] with MapLike[K, V, CC]](private val m: CC) extends AnyVal {
   def apar = new asyncParMap[K, V, CC](m)
@@ -766,6 +781,10 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
         override def consume(elem: Boolean): Unit = { if (elem) count += 1 }
         override def getFinalResult: Int = count
       }
+
+  /**
+   * @see [[auto]]
+   */
   class AutoAsync[B, That](bf: BuildFrom[CC, B, That]) {
     @nodeSync
     @nodeSyncLift
@@ -786,11 +805,16 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
       AsyncBase.this.flatMap$newNode(toNodeFQ(f))(bf).enqueue
     def flatMap$withNode(f: A => Node[IterableOnce[B]]): That = AsyncBase.this.flatMap$newNode(f)(bf).get
   }
+
+  /**
+   * Plugin injects calls to this in
+   * [[optimus.tools.scalacplugins.entity.AutoAsyncComponent.AutoAsync.wrapAndRetype]]
+   * if we are missing an explicit [[AsyncIterableMarker.apar]] or [[AsyncIterableMarker.aseq]]
+   */
   def auto[B, That](bf: BuildFrom[CC, B, That]): AutoAsync[B, That] = new AutoAsync[B, That](bf)
 }
 
 /** Async versions of some nice map-only methods. */
-// Neither of these are auto-asynced right now.
 @loom
 trait AsyncMapBase[K, V, CC <: Map[K, V] with MapLike[K, V, CC]] { base: AsyncBase[(K, V), CC] =>
 

@@ -19,6 +19,7 @@ import optimus.platform.storable.Storable
 import optimus.platform.util.html._
 
 import java.util.concurrent.atomic.AtomicInteger
+import scala.annotation.unused
 import scala.collection.compat.immutable.ArraySeq
 import scala.collection.mutable
 
@@ -29,6 +30,8 @@ import scala.collection.mutable
 class Tweak private[optimus] (
     final val target: TweakTarget[_, _],
     final val tweakTemplate: TweakNode[_],
+    // null means unknown and empty array means scenario independent
+    final private[optimus] val readsTweakables: ReadsTweakable = null,
     final private[optimus] val evaluateIn: Int,
     final private[optimus] val flags: Int,
     previousCreationStack: StackTraceElement)
@@ -59,10 +62,10 @@ class Tweak private[optimus] (
     else null
 
   private[optimus] def this(target: TweakTarget[_, _], tweakTemplate: TweakNode[_]) =
-    this(target, tweakTemplate, Tweak.evaluateInParentOfGiven, TweakFlags.none, null /*user entry point*/ )
+    this(target, tweakTemplate, null, Tweak.evaluateInParentOfGiven, TweakFlags.none, null /*user entry point*/ )
 
   final private[optimus] def retarget(newTarget: TweakTarget[_, _]): Tweak =
-    new Tweak(newTarget, tweakTemplate, evaluateIn, flags, initSite)
+    new Tweak(newTarget, tweakTemplate, readsTweakables, evaluateIn, flags, initSite)
 
   if (evaluateIn != Tweak.evaluateInParentOfGiven && target.unresolved) {
     throw new RuntimeException("Tweak.bind is not supported for tweaks with handlers! Tweak: " + target.toString())
@@ -75,9 +78,24 @@ class Tweak private[optimus] (
     new Tweak(target, tweakTemplate)
   }
 
+  /** Allows to promise that the tweak only reads the given tweakables */
+  final def onlyReads(tweakableProperties: PropertyInfo[_]*): Tweak = {
+    if (tweakTemplate.isReducibleToByValue) {
+      log.warn(s"tweak $this is byValue, no-point of declaring onlyReads")
+      return this
+    }
+    val properties = tweakableProperties
+      .filter(prop => {
+        if (!prop.isTweakable) log.warn(s"PropertyInfo $prop is not tweakable, but declared in onlyReads of a tweak")
+        prop.isTweakable
+      })
+      .toArray
+    new Tweak(target, tweakTemplate, new ReadsTweakable(properties), evaluateIn, flags, initSite)
+  }
+
   private[optimus] final def bind(evaluateIn: Int): Tweak =
     if (evaluateIn == this.evaluateIn) this
-    else new Tweak(target, tweakTemplate, evaluateIn, flags, initSite)
+    else new Tweak(target, tweakTemplate, readsTweakables, evaluateIn, flags, initSite)
 
   /**
    * Returns fully expanded tweaks, in the same binding scope as this
@@ -149,11 +167,11 @@ class Tweak private[optimus] (
       val infected = ignoreTracing || hb.displayInColour(this.id)
       val xsftDependsOn = if (hb.tpdMask eq null) false else hb.tpdMask.intersects(target.propertyInfo.tweakMask)
       hb.buildPrettyLeaf(
-        if (infected) TweakTargetStyle else (if (xsftDependsOn) TweakMid else TweakLow),
+        if (infected) TweakTargetStyle else if (xsftDependsOn) TweakMid else TweakLow,
         target.writePrettyString _)
 
       hb.buildPrettyLeaf(
-        if (infected) TweakVal else (if (xsftDependsOn) TweakMid else TweakLow),
+        if (infected) TweakVal else if (xsftDependsOn) TweakMid else TweakLow,
         tweakTemplate.writePrettyString(_, this))
       hb.removeSeparator()
 
@@ -177,7 +195,7 @@ class Tweak private[optimus] (
       case _                        => throw new GraphException("Tweak value cannot be returned")
     }
 
-  protected def evaluateInDisplayValue: String = {
+  private def evaluateInDisplayValue: String = {
     if (evaluateIn == Tweak.evaluateInParentOfGiven) "" // it's a default value and no-point of displaying it all over
     else if (evaluateIn == Tweak.evaluateInCurrent) "current"
     else if (evaluateIn == Tweak.evaluateInGiven) "given"
@@ -185,7 +203,7 @@ class Tweak private[optimus] (
   }
 
   /**
-   * Create an instance of the node that will produce the value in the given scenariostack(s)
+   * Create an instance of the node that will produce the value in the given scenarioStack(s)
    *
    * @param ss
    *   requesting scenarioStack
@@ -205,19 +223,21 @@ class Tweak private[optimus] (
     tweakTemplate.asInstanceOf[TweakNode[R]].getComputeNode(evaluateInSS, null)
   }
 
-  /*
-   * Return the result of the evaluation of the LHS of the tweak value
-   */
-  private[optimus] def computableValueResult[R](evaluateInSS: ScenarioStack): R = {
-    computableValueNode[R](evaluateInSS).result
-  }
-
   /** False for the tweaks, that have computed/fixed value and the target is fixed and doesn't need to be resolved */
   private[optimus] final def isContextDependent =
-    !tweakTemplate.resultIsScenarioIndependent() || target.hasWhenClause || target.unresolved
+    !tweakTemplate.resultIsScenarioIndependent() || target.hasPredicate || target.unresolved
+
+  /**
+   * True for tweaks that are context dependent AND it's a black box on what they might depend on
+   * That situation arises when := RHS is not scenario independent and didn't declare dependencies via onlyReads
+   * It's also assumed that generic predicate on a property tweak can read anything...
+   * Specifically excludes key extractors that are scenario independent or actually env independent
+   */
+  private[optimus] final def hasUndeclaredDependencies = target.hasPredicate || target.isUnresolvedOrMarkerTweak ||
+    (readsTweakables == null && !tweakTemplate.resultIsScenarioIndependent())
 
   /** True for tweaks whose target has when clause */
-  private[optimus] final def hasWhenClause = target.hasWhenClause
+  private[optimus] final def hasPredicate = target.hasPredicate
 
   /** If all the inputs into RHS of the tweak are known at the entry into a given block, can replace with byValue RHS */
   private[optimus] final def isReducibleToByValue: Boolean =
@@ -231,30 +251,32 @@ class Tweak private[optimus] (
   private[optimus] def reduceToByValue(v: Node[_]): Tweak = {
     if (Settings.schedulerAsserts && !(v.isDone && v.isStable))
       throw new GraphInInvalidState("reduceToByValue needs a done and stable Node!")
-    new Tweak(target, new TweakNode(v), evaluateIn, flags & TweakFlags.dupAllowed, initSite)
+    new Tweak(target, new TweakNode(v), readsTweakables, evaluateIn, flags & TweakFlags.dupAllowed, initSite)
   }
 
   /** Returns a new tweak that allows for duplicate instance tweaks on the same scenario */
   final def resolveDupsByTakingLast: Tweak =
     if (dupAllowed) this
-    else new Tweak(target, tweakTemplate, evaluateIn, flags | TweakFlags.dupAllowed, initSite)
+    else new Tweak(target, tweakTemplate, readsTweakables, evaluateIn, flags | TweakFlags.dupAllowed, initSite)
 
   /**
    * Return a new tweak that keeps byName tweak as lazy evaluated even if given tries to auto-convert to byValue tweaks
    */
   final def keepLazyEvaluation: Tweak =
     if (keepLazyEval) this
-    else new Tweak(target, tweakTemplate, evaluateIn, flags | TweakFlags.keepLazyEval, initSite)
+    else new Tweak(target, tweakTemplate, readsTweakables, evaluateIn, flags | TweakFlags.keepLazyEval, initSite)
 
   /** Return a new tweak that always invalidates tweakable tracker (even if the value hasn't changed) */
   final def alwaysInvalidateTracking: Tweak =
     if (alwaysInvalidateTrack) this
-    else new Tweak(target, tweakTemplate, evaluateIn, flags | TweakFlags.alwaysInvalidateTrack, initSite)
+    else
+      new Tweak(target, tweakTemplate, readsTweakables, evaluateIn, flags | TweakFlags.alwaysInvalidateTrack, initSite)
 
   /** Returns a new tweak that always when used in a ScenarioStack will start a private cache */
   final def withPrivateCache: Tweak = {
     if (withPrivateCacheOnUse) this
-    else new Tweak(target, tweakTemplate, evaluateIn, flags | TweakFlags.withPrivateCacheOnUse, initSite)
+    else
+      new Tweak(target, tweakTemplate, readsTweakables, evaluateIn, flags | TweakFlags.withPrivateCacheOnUse, initSite)
   }
 }
 
@@ -643,10 +665,33 @@ class PropertyTweak[E, WhenT <: AnyRef](_target: TweakTarget[_, _], _tweakTempla
 }
 
 object SimpleValueTweak {
+  // noinspection ScalaUnusedSymbol
   @nodeLift
   @expectingTweaks
   def apply[T](n: T)(value: T): Tweak = optimus.core.needsPlugin
   def apply[T](node: NodeKey[T])(value: T) =
     new Tweak(new InstancePropertyTarget(node), new TweakNode(new AlreadyCompletedNode(value)))
   def apply$node[T](node: NodeKey[T], value: T): Tweak = apply(node)(value)
+}
+
+class ReadsTweakable(val properties: Array[PropertyInfo[_]]) extends Serializable {
+  @transient
+  private[this] var _mask: TPDMask = recomputeMask()
+  final def mask: TPDMask = _mask
+
+  private def recomputeMask(): TPDMask = {
+    val m = new TPDMask()
+    properties.foreach(p => {
+      p.ensureTweakMaskIsSet()
+      m.merge(p.tweakMask)
+    })
+    m
+  }
+
+  // after deserialization we need to recompute mask
+  @unused
+  private def readObject(in: java.io.ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    _mask = recomputeMask()
+  }
 }

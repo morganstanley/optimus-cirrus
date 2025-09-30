@@ -353,7 +353,11 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       if (GCNative.isLoaded) {
         for (level <- 0 until GCNative.LEVEL_SHUTDOWN) {
           GCNative.clearCache(level)
-          InfoDumper.upload(Crumb.GCSource, GCNative.jemallocDump(s"shutdown-$level"))
+          InfoDumper.upload(
+            Crumb.GCSource,
+            GCNative.jemallocDump(s"shutdown-$level"),
+            deleteUncompressed = true,
+            deleteUploadedFile = false)
         }
       } else {
         Caches.clearAllCaches(
@@ -363,7 +367,11 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
           includeNamed = true)
         System.gc()
         SystemFinalization.runFinalizers()
-        InfoDumper.upload(Crumb.GCSource, GCNative.jemallocDump("shutdown"))
+        InfoDumper.upload(
+          Crumb.GCSource,
+          GCNative.jemallocDump("shutdown"),
+          deleteUncompressed = true,
+          deleteUploadedFile = false)
       }
     }
   } catch {

@@ -10,19 +10,12 @@
  * limitations under the License.
  */
 package optimus.graph.diagnostics
-
-import java.io.BufferedReader
-import java.io.InputStreamReader
-
-import scala.util.Try
-
-//dont use scala StringBuilder
-import java.lang.StringBuilder
+import optimus.platform.util.InfoDumpUtils
 
 /**
  * OS information for diagnostic purposes. Used in StallDetector
  */
-object OSInformation {
+object OSInformation extends InfoDumpUtils {
   val isWindows: Boolean = System.getProperty("os.name").toLowerCase.indexOf("win") >= 0
   val isUnix: Boolean = !isWindows
 
@@ -42,57 +35,30 @@ object OSInformation {
     sb.append('\n')
   }
 
-  private val jbin = System.getProperty("java.home") + "/bin"
-  private val jstack = s"$jbin/jstack"
-
-  def dumpPidInfo(sb: java.lang.StringBuilder, pid: Long, maxHistoLength: Option[Int] = None): Unit = {
-    sb.append("Collect the information about PID : " + pid + "\n")
-    val commands =
+  def dumpPidInfo(
+      sb: java.lang.StringBuilder,
+      pid: Long,
+      maxHistoLength: Option[Int] = None,
+      timeoutMs: Long = 0,
+      stacks: Boolean = true
+  ): Unit = {
+    sb.append("Collecting information about PID : " + pid + "\n")
+    val T = expirTime(timeoutMs)
+    val cheapCommands =
       List(
         List("/usr/bin/free"),
         List("/usr/bin/cat", "/proc/meminfo"),
         List("/usr/bin/cat", s"/proc/$pid/status"),
         List("/usr/bin/ps", "auxfww"),
-        List(jstack, pid.toString)
       )
-    commands.map(cmd => sb.append(execute(cmd)))
-    dumpHisto(sb, pid, maxHistoLength)
-  }
+    cheapCommands.foreach(cmd => sb.append(execute(cmd, T).output))
 
-  private def dumpHisto(sb: java.lang.StringBuilder, pid: Long, maxHistoLength: Option[Int]): Unit = {
-    val histo = execute(List("jmap", "-histo:live", pid.toString))
-    if (maxHistoLength.isEmpty) {
-      sb.append(histo)
-    } else {
-      sb.append(histo.linesIterator.take(maxHistoLength.get).mkString(System.lineSeparator()))
+    if (stacks) {
+      sb.append(execute(List(jstack, pid.toString), T))
+      sb.append(execute(List(jmap, "-histo:live", pid.toString), timeoutMs, maxHistoLength.getOrElse(0)))
     }
   }
 
   def getPID: Long = ProcessHandle.current().pid()
 
-  // Execute the command
-  private[graph] def execute(cmd: List[String]): String = {
-    val sb = new StringBuilder
-    sb.append("Execute the command [").append(cmd).append("]\n")
-    val p = Try(Runtime.getRuntime.exec(cmd.toArray))
-    if (p.isSuccess) {
-      try {
-        val br = new BufferedReader(new InputStreamReader(p.get.getInputStream))
-        var line = br.readLine
-        while (line != null) {
-          sb.append(line).append('\n')
-          line = br.readLine
-        }
-
-      } catch {
-        case e: Exception =>
-          sb.append("Got exception while executing the command - " + e.toString)
-      } finally {
-        p.get.destroy()
-      }
-    } else {
-      sb.append("Got exception while executing the command - " + p.failed.getOrElse("").toString)
-    }
-    sb.toString
-  }
 }

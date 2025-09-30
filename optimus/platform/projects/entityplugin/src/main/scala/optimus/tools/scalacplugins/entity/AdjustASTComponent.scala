@@ -870,6 +870,24 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       // Tracks and verifies generated keys for this Storable
       val keyGen = new KeyGenerator(implDef, isEvent)
 
+      val clsDefValOrDefDefs: Seq[ValOrDefDef] = implDef.impl.body
+        .collect {
+          case vd: ValDef if hasAnnotation(vd.mods, tpnames.indexed) || hasAnnotation(vd.mods, tpnames.key) => vd
+          case dd @ DefDef(mods, _, _, _, _, Ident(_))
+              if hasAnnotation(mods, tpnames.indexed) || hasAnnotation(mods, tpnames.key) =>
+            dd
+          case dd @ DefDef(mods, _, _, _, _, Apply(func, _))
+              if (hasAnnotation(mods, tpnames.indexed) || hasAnnotation(mods, tpnames.key)) && func.toString
+                .startsWith("scala.Tuple") =>
+            dd
+          case dd @ DefDef(mods, _, _, _, _, Select(Ident(_), _))
+              if hasAnnotation(mods, tpnames.indexed) || hasAnnotation(mods, tpnames.key) =>
+            dd
+          case dd @ DefDef(mods, _, _, _, _, Apply(Select(Ident(_), n), _))
+              if (hasAnnotation(mods, tpnames.indexed) || hasAnnotation(mods, tpnames.key)) && n.toString == "map" =>
+            dd
+        }
+
       val newBody = impl.body flatMap handleDocDefHead {
         case d @ DefDef(mods, _, _, _, _, _)
             if hasAnnotation(mods, tpnames.givenAnyRuntimeEnv) ||
@@ -1028,6 +1046,47 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
           if (hasAnnotation(mods, tpnames.async))
             alarm(OptimusErrors.KEY_INDEX_DEF_CANNOT_BE_ASYNC, dd.pos)
+
+          def annotationToString(mods: Modifiers): String = {
+            if (hasAnnotation(mods, tpnames.key)) "@key" else "@indexed"
+          }
+
+          def rhsEqual(vdd: ValOrDefDef, rhs1: Tree, rhs2: Tree): Boolean = (rhs1, rhs2) match {
+            case (Select(q, n), Select(q2, n2)) => rhsEqual(vdd, q, q2) && n == n2
+            case (Literal(c), Literal(c2))      => c.value == c2.value
+            case (Ident(n), Ident(n2))          => n == n2
+            case (Ident(n), EmptyTree)          => vdd.name == n
+            case (Apply(fun, args), Apply(fun2, args2))
+                if fun.toString.startsWith("scala.Tuple") && fun2.toString.startsWith("scala.Tuple") =>
+              rhsEqual(vdd, fun, fun2) && args
+                .collect { case i: Ident => i.name }
+                .toSet
+                .diff(args2.collect { case i: Ident => i.name }.toSet)
+                .isEmpty
+            case (Apply(Select(q, n), args), Apply(Select(q2, n2), args2))
+                if n.toString == "map" && n2.toString == "map" =>
+              rhsEqual(vdd, q, q2) && n == n2 && args.zip(args2).forall { case (a, b) => rhsEqual(vdd, a, b) }
+            case _ => false
+          }
+
+          val reverseAnnotation = if (hasAnnotation(mods, tpnames.key)) tpnames.indexed else tpnames.key
+          val normalAnnotation = if (hasAnnotation(mods, tpnames.key)) tpnames.key else tpnames.indexed
+
+          clsDefValOrDefDefs
+            .filterNot(_.name == name)
+            .collect {
+              case vdd: ValOrDefDef
+                  if (hasAnnotation(vdd.mods, reverseAnnotation) || hasAnnotation(
+                    vdd.mods,
+                    normalAnnotation)) && rhsEqual(vdd, rhs, vdd.rhs) =>
+                s"${annotationToString(vdd.mods)} ${vdd.name}"
+            }
+            .foreach { msg =>
+              alarm(
+                OptimusErrors.UNSUPPORTED_INDEX_KEY_REFERENCE,
+                dd.pos,
+                s"${annotationToString(mods)} $name reference to $msg is not allowed.")
+            }
 
           addToCompanion(implDef.name.toTermName, keyGen.companionKeyTrees(dd))
           // Suppress sync->async warnings on @key defs referring to @nodes.  See OPTIMUS-3710

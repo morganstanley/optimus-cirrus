@@ -104,6 +104,10 @@ class StratoWorkspaceCommon protected (
     _reloadCallback = callback
   }
 
+  /**
+   * Do not use this method to update workspace config after calling `ConfigCmd#updateConfig`. This method itself
+   * updates the workspace property value.
+   */
   final def reload(
       workspaceLocation: WorkspaceLocation = Option(_directoryStructure)
         .map(ds => CustomWorkspace(ds.stratosphereWorkspaceDir))

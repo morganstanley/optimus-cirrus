@@ -16,9 +16,23 @@ public class ScenarioFlags {
   public static final int hasReducibleToByValueTweaks = 1;
   public static final int hasPossiblyRedundantTweaks = 1 << 1;
   public static final int disableRemoveRedundant = 1 << 2;
+  /** Contains tweaks that have also-sets or marker tweaks */
   public static final int hasUnresolvedOrMarkerTweaks = 1 << 3;
-  public static final int hasContextDependentTweaks = 1 << 4;
-  public static final int hasWhenClauseTweaks = 1 << 5;
+
+  /**
+   * True for tweaks that are context dependent AND it's a black box
+   *
+   * @see optimus.platform.Tweak#hasUndeclaredDependencies()
+   */
+  public static final int hasUndeclaredDependenciesInTweaks = 1 << 4;
+
+  /**
+   * Contains tweaks that are predicated on when clauses i.e. PredicatedPropertyTweakTarget Note:
+   * this is not set for key extractor based tweaks. Important difference is that key extractor is
+   * always scenario independent
+   */
+  public static final int hasWhenPredicatedTweaks = 1 << 5;
+
   public static final int unorderedTweaks = 1 << 6;
 
   public static final int markedForDebugging = 1 << 7;

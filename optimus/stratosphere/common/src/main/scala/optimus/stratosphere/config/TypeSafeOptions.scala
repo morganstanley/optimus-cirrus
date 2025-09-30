@@ -193,7 +193,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   object intellij {
     def attachAgent: Boolean = self.select("intellij.attach-agent")
     def enableStatusBanner: Boolean = self.select("intellij.enable-status-banner")
-    def jarRepoFile: Path = self.select("intellij.jar-repo-file")
     def jdk: Option[String] = self.select("intellij.jdk")
     def licenseServer: String = self.select("intellij.license-server")
     def linuxJcefSandbox: Boolean = self.select("intellij.linux-jcef-sandbox")
@@ -512,7 +511,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def conemu: Path = self.select("internal.paths.conemu")
       def console2: String = self.select("internal.paths.console2")
       def execv2: String = self.select("internal.paths.execv2")
-      def initEnviron: String = self.select("internal.paths.init-environ")
       def javassist(version: String): String =
         self.select("internal.paths.javassist").replace("$VERSION", version)
       def proidHomes: Seq[String] = self.select("internal.paths.proid-homes")
@@ -523,15 +521,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object pypi {
       def configFile: Path = self.select("internal.pypi.config-file")
       def uvConfigFile: Path = self.select("internal.pypi.uv-config-file")
-    }
-
-    object repositoryMigration {
-      def bitbucketTimeout: JDuration = self.select("internal.repository-migration.bitbucket-timeout")
-    }
-
-    object robocopy {
-      def args: String = self.select("internal.robocopy.args")
-      def enabled: Boolean = self.select("internal.robocopy.enabled")
     }
 
     object scheduledCleanup {
@@ -628,14 +617,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
               None
           }
         }
-      }
-
-      object migration {
-        def featureBranches: String = self.select("internal.urls.migration.feature-branches")
-        def phase1: String = self.select("internal.urls.migration.phase1")
-        def oldBranches: String = self.select("internal.urls.migration.old-branches")
-        def oldGit: String = self.select("internal.urls.migration.old-git")
-        def troubleshooting: String = self.select("internal.urls.migration.troubleshooting")
       }
 
       object pcHealth {

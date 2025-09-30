@@ -35,7 +35,6 @@ import net.iharder.base64.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.Settings
 import optimus.platform.pickling.PicklingConstants
-import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.pickling.Shape
 import optimus.platform.pickling.SlottedBufferAsEmptySeq
 
@@ -164,17 +163,10 @@ object ProtoPickleSerializer {
   //   - For SEQs that have higher number of entries, we use ArraySeq instances. Here, we are careful
   //   to use ArraySeq.ofInt, ArraySeq.ofDouble, etc. to avoid boxing of the primitive types where we can.
   //
-  // [2]- We want to intern the values of fields of SlottedBufferAsMap. The interning behavious is controlled
-  // in two stages. First stage is to "veto" the interning for fields that eventually contains values that
-  // we deem we should not intern. Currently, if we end up with an ArraySeq in the object-tree of the value
-  // in a field, we veto the interning. This is because a) we think sequences don't present interning
-  // opportunity and b) because we ArraySeq uses Scala == which treats 1 == 1.0. This means that if we intern
-  // the values the unpicklers get the wrong type. Although we could handle this in the pickler or within
-  // the custom equals function used for interning, consideration (a) makes us lean towards not interning.
-  // The Second stage of interning is through the stats maintained in the Shape class. Based on these
-  // stats we may deem interning unfruitful for a given field and turn it off.
+  // [2]- We want to intern the values of fields of SlottedBufferAsMap. The interning behaviour is driven by
+  // per-property stats maintained in the Shape class. Based on these stats we may deem interning unfruitful for a
+  // given field and turn it off.
   //
-
   private final case class MapEntry(key: String, value: Any)
 
   private def compareTypes(o1: FieldProto.Type, o2: FieldProto.Type) = {
@@ -193,16 +185,9 @@ object ProtoPickleSerializer {
     mappedType(o1).compare(mappedType(o2))
   }
 
-  // An on-purpose mutable type to hold a flag to see if as we recurse through
-  // the protobuffer we encounter a value that should not be interned. (See [2] above)
-  // The reason we prefer to use a mutable type here rather than return a tuple
-  // is a) to avoid tuple allocation and b) the code here becomes cleaner w.r.t.
-  // only dealing with the interning flag where it is applicable
-  class InterningWatcher(var intern: Boolean = true)
-
   // Takes a MAP or SEQ FieldProto instance and creates a SlottedBufferAsMap or SlottedBufferAsSeq
   // with it.
-  private def protoToSlottedBuffer(proto: FieldProto, watcher: InterningWatcher, isMap: Boolean): Any = {
+  private def protoToSlottedBuffer(proto: FieldProto, isMap: Boolean): Any = {
     val rawValues: util.List[FieldProto] = proto.getChildrenList
     val sortedList = new util.ArrayList(rawValues)
     var tag: String = Shape.NoTag
@@ -247,7 +232,7 @@ object ProtoPickleSerializer {
           // For object types, we get the actual values and
           // set the value into the array directly. The SlottedBuffers
           // will just use the value directly.
-          protoToPropertiesMaybeIntern(field, watcher) match {
+          protoToProperties(field) match {
             case MapEntry(_, v) => v
             case other          => other
           }
@@ -278,7 +263,7 @@ object ProtoPickleSerializer {
         srcI += 1
       }
 
-      val shape = Shape(keys, types, tag, watcher.intern)
+      val shape = Shape(keys, types, tag)
 
       if (!isMap)
         shape.createInstanceAsSeq(values)
@@ -291,7 +276,7 @@ object ProtoPickleSerializer {
   // repetitive because we want to use the ArraySeq.of* classes to avoid boxing
   // of primitive types and uses while loops to avoid closure allocations in hot code
   // like this.
-  private def protoToArraySeq(proto: FieldProto, watcher: InterningWatcher): PickleSeq[_] = {
+  private def protoToArraySeq(proto: FieldProto): ArraySeq[_] = {
     // We'll walk the values once to see if they are homogenous primitive types...
     var fType: FieldProto.Type = null
     var i = 0
@@ -367,15 +352,11 @@ object ProtoPickleSerializer {
         val values = new Array[AnyRef](proto.getChildrenCount)
         i = 0
         while (i < proto.getChildrenCount) {
-          values(i) = protoToPropertiesMaybeIntern(proto.getChildren(i), watcher).asInstanceOf[AnyRef]
+          values(i) = protoToProperties(proto.getChildren(i)).asInstanceOf[AnyRef]
           i += 1
         }
         new ArraySeq.ofRef(values)
     }
-    // We are using scala Seq which uses Scala == which treats 1 == 1.0. If we are to intern
-    // these Seqs, we will end up with type mismatches in unpicklers should such a match arise
-    // (and it does, as was caught in tests)
-    watcher.intern = false
     seq
   }
 
@@ -398,9 +379,7 @@ object ProtoPickleSerializer {
   // noinspection ScalaWeakerAccess - used from generated code
   def getByteValue(proto: FieldProto): Byte = proto.getIntValue.toByte
 
-  def protoToProperties(proto: FieldProto): Any = protoToPropertiesMaybeIntern(proto, new InterningWatcher())
-
-  private def protoToPropertiesMaybeIntern(proto: FieldProto, watcher: InterningWatcher): Any = {
+  def protoToProperties(proto: FieldProto): Any = {
     val value = proto.getType match {
       case FieldProto.Type.INT     => getIntValue(proto)
       case FieldProto.Type.STRING  => proto.getStringValue
@@ -420,12 +399,12 @@ object ProtoPickleSerializer {
           !Shape.reachedUniqueShapeThreshold
         ) {
           // We're below the thresholds so we'll go with SlottedBuffers
-          protoToSlottedBuffer(proto, watcher, isMap = false)
+          protoToSlottedBuffer(proto, isMap = false)
         } else {
-          protoToArraySeq(proto, watcher)
+          protoToArraySeq(proto)
         }
-      case FieldProto.Type.MAP    => protoToSlottedBuffer(proto, watcher, isMap = true)
-      case FieldProto.Type.TUPLE2 => (proto.getStringValue, protoToPropertiesMaybeIntern(proto.getChildren(0), watcher))
+      case FieldProto.Type.MAP        => protoToSlottedBuffer(proto, isMap = true)
+      case FieldProto.Type.TUPLE2     => (proto.getStringValue, protoToProperties(proto.getChildren(0)))
       case FieldProto.Type.ENTITY_REF =>
         // TODO (OPTIMUS-13436): string representation is used for filtering on CPS in DAL notification
         // when all the clients have upgraded to support string entity reference, we need to remove the redundant blob support

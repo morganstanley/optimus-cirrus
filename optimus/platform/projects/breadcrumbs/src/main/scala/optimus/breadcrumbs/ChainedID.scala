@@ -23,7 +23,6 @@ import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.Exceptions
-import optimus.platform.util.InfoDump
 import optimus.utils.PropertyUtils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -51,13 +50,6 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
         Properties.stackTrace -> Exceptions.minimizeTrace(new IllegalStateException()))
     )
 
-    val doKill = PropertyUtils.get("breadcrumb.unreasonable.depth.kill", default = false)
-    if (doKill)
-      InfoDump.kill(
-        "ChainedID",
-        msgs = s"Attempt to create unreasonably deep ChainedID($repr, $depth, $crumbLevel, $vertexId)" :: Nil,
-        exceptions = Array(new IllegalStateException("Unreasonably deep ChainedID"))
-      )
   }
 
   private[optimus] def this(repr: String, depth: Int, level: Int) =
@@ -83,6 +75,7 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
     val i = repr.indexOf('#')
     if (i >= 0) repr.substring(0, i) else repr
   }
+  def root = if (depth == 0) this else new ChainedID(base, 0, ChainedID.level)
 
   private[optimus] def asList: JavaArrayList[String] = ChainedID.asList(this)
 

@@ -80,7 +80,13 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
 
   override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
     finalizeTweakTreeNode()
-    completeFromNode(computeNode, eq)
+    if (
+      tweak != null && tweak.readsTweakables != null && !child.isTweakPropertyDependencySubsetOf(
+        tweak.readsTweakables.mask)
+    ) {
+      completeWithException(new GraphInInvalidState("Tweak RHS read unexpected tweakables"), eq)
+    } else
+      completeFromNode(computeNode, eq)
   }
 
   /**

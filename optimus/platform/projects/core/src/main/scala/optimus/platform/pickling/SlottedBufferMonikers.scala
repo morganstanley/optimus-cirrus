@@ -24,7 +24,6 @@ class ShapeMoniker(var shape: Shape) extends Externalizable {
     out.writeObject(shape.signature)
     out.writeBoolean(shape.hasTag)
     if (shape.hasTag) out.writeObject(shape.tag)
-    out.writeBoolean(shape.safeToIntern)
     var i = 0
     while (i < shape.names.length) {
       out.writeObject(shape.names(i))
@@ -36,7 +35,6 @@ class ShapeMoniker(var shape: Shape) extends Externalizable {
     val signature = in.readObject().asInstanceOf[String]
     val hasTag = in.readBoolean()
     val tag = if (hasTag) in.readObject().asInstanceOf[String] else Shape.NoTag
-    val safeToIntern = in.readBoolean()
     val classes = Shape.classesFromSignature(signature)
     val names = new Array[String](classes.length)
     var i = 0
@@ -44,7 +42,7 @@ class ShapeMoniker(var shape: Shape) extends Externalizable {
       names(i) = in.readObject().asInstanceOf[String]
       i += 1
     }
-    shape = Shape(names, classes, tag, safeToIntern)
+    shape = Shape(names, classes, tag)
   }
 
   // noinspection ScalaUnusedSymbol

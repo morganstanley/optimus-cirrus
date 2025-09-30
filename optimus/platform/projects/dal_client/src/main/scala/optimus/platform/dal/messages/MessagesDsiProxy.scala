@@ -48,6 +48,8 @@ object MessagesDsiProxyBase {
     DiagnosticSettings.getIntProperty("optimus.platform.messages.retryAttempts", 10)
   private val operationRetryBackoffTime: Long =
     DiagnosticSettings.getLongProperty("optimus.platform.messages.retryBackoffTimeMs", 1000L)
+  private val disablePublishRequestLogging: Boolean =
+    DiagnosticSettings.getBoolProperty("optimus.platform.messages.disablePublishRequestLogging", false)
   private val operationMaxRetryBackoffTimeMs: AtomicLong =
     new AtomicLong(DiagnosticSettings.getLongProperty("optimus.platform.messages.maxRetryBackoffTimeMs", 30000L))
 
@@ -238,9 +240,10 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
       val (publishTime, res) = AdvancedUtils.timed {
         client.publish(cmds)
       }
-      cmds.foreach(c =>
-        log.info(
-          s"publish request ${c.logDisplay(CmdLogLevelHelper.InfoLevel)} completed in ${TimeUnit.NANOSECONDS.toMillis(publishTime)} ms."))
+      if (!disablePublishRequestLogging)
+        cmds.foreach(c =>
+          log.info(
+            s"publish request ${c.logDisplay(CmdLogLevelHelper.InfoLevel)} completed in ${TimeUnit.NANOSECONDS.toMillis(publishTime)} ms."))
       res
     }
     if (res.hasException) {

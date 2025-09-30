@@ -50,7 +50,7 @@ trait RichConfigValueImplicits {
       extends RichConfigValuePprint {
     override protected def configValue: RichConfigValue[_] = richConfigValue
     override def pprint(title: String): Option[String] =
-      Option(s"$title: ${richConfigValue.location.pprint(richConfigValue.value.toString)}")
+      Some(s"$title: ${richConfigValue.location.pprint(richConfigValue.value.toString)}")
   }
 
   implicit class RichConfigValueHelper(value: RichConfigValue[String]) {

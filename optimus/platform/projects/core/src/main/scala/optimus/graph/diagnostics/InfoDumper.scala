@@ -20,19 +20,13 @@ import optimus.utils.MiscUtils.Endoish._
 
 import java.io.ObjectOutputStream
 import java.lang.management.ManagementFactory
-import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.Base64
-import java.util.zip.GZIPOutputStream
 import com.sun.management.HotSpotDiagnosticMXBean
-import org.apache.commons.io
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
-import optimus.breadcrumbs.crumbs.DiagPropertiesCrumb
-import optimus.breadcrumbs.crumbs.LogPropertiesCrumb
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -46,19 +40,16 @@ import optimus.graph.Exceptions
 import optimus.graph.GCNative
 import optimus.graph.NodeTask
 import optimus.graph.Scheduler
+import optimus.graph.diagnostics.sampling.ForensicSource
 import optimus.logging.LoggingInfo
 import optimus.platform.util.InfoDump
-import optimus.platform.util.Log
+import optimus.platform.util.InfoDumpUtils
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
 import optimus.utils.FileUtils
-import org.apache.commons.io.IOUtils
 
-import scala.util.Failure
-import scala.util.Success
 import scala.util.Try
 import scala.util.Using
-import scala.util.control.NonFatal
 import scala.jdk.CollectionConverters._
 import optimus.utils.FileUtils.tmpPath
 
@@ -86,13 +77,25 @@ class InfoDumper extends InfoDump {
       taskDump: Boolean = false,
       noMore: Boolean = false,
       exceptions: Array[Throwable] = Array.empty,
-      emergency: Boolean = false
+      emergency: Boolean = false,
+      doLog: Boolean = true
   ): String =
-    InfoDumper.dump(prefix, msgs, crumbSource, id, description, heapDump, taskDump, noMore, exceptions, emergency)
+    InfoDumper.dump(
+      prefix,
+      msgs,
+      crumbSource,
+      id,
+      description,
+      heapDump,
+      taskDump,
+      noMore,
+      exceptions,
+      emergency,
+      doLog)
 
 }
 
-object InfoDumper extends Log {
+object InfoDumper extends InfoDumpUtils {
 
   val memoryDxCommand: String = StaticConfig.string("memoryDiagCommand")
   val nodeStatsFile = "nodes.stats"
@@ -176,6 +179,8 @@ object InfoDumper extends Log {
   // attach extra properties to serializable object
   @volatile private var meta: Properties.Elems = Elems.Nil
 
+  override def getMeta: Properties.Elems = meta
+
   // used to read off the chainedID in the hprof
   private var id: ChainedID = _
 
@@ -189,18 +194,6 @@ object InfoDumper extends Log {
     runningTask = Some(task)
     meta = metaData
     id = nodeId
-  }
-
-  private def dropCrumb(crumbSource: Crumb.Source, id: ChainedID, msg: String, file: Option[Path]): Unit = {
-    System.err.println(s"${Instant.now} InfoDumper id=$id " + file.fold(msg)(f => s"$msg $f"))
-    Breadcrumbs.warn(
-      id,
-      LogPropertiesCrumb(
-        _,
-        crumbSource,
-        (Properties.logMsg -> s"InfoDumper:$msg") ::
-          file.map(Properties.file -> _.toString) ::
-          Version.verboseProperties))
   }
 
   /**
@@ -245,14 +238,15 @@ object InfoDumper extends Log {
   def dump(
       prefix: String,
       msgs: List[String] = Nil,
-      crumbSource: Crumb.Source = Crumb.RuntimeSource,
+      crumbSource: Crumb.Source = ForensicSource,
       id: ChainedID = ChainedID.root.child,
       description: String = "Information",
       heapDump: Boolean = false,
       taskDump: Boolean = false,
       noMore: Boolean = false,
       exceptions: Array[Throwable] = Array.empty,
-      emergency: Boolean = false
+      emergency: Boolean = false,
+      doLog: Boolean = true
   ): String = this.synchronized {
     if (enabled || emergency) {
       if (noMore) enabled = false
@@ -308,20 +302,18 @@ object InfoDumper extends Log {
         sb.appendln(trace)
       }
       var saves: List[String] = Nil
-      def save(p: Path): Unit = {
-        saves = upload(crumbSource, id, p) :: saves
+      def save(p: Path): Path = {
+        saves = upload(crumbSource, id, p, deleteUncompressed = true, deleteUploadedFile = false) :: saves
+        p
       }
 
       // Dump all this text to a temp file and upload if possible.
-      val infoPath: Option[Path] =
-        writeToTmpLog(s"$prefix-diagnostics", crumbSource, id, sb.toString).flatMap(zip(_).toOption)
-      infoPath.foreach(save)
+      writeToTmpAndLog(s"$prefix-diagnostics", crumbSource, id, sb.toString, doLog = doLog).map(save)
 
       // Upload jemalloc dump if available
-      val jemallocPath =
-        Option(GCNative.jemallocDump(tmpPath(s"$prefix-jemalloc", suffix = "prof"))).flatMap(zip(_).toOption)
-      jemallocPath.foreach(save)
-      for (a <- apSnag; p <- a.path; z <- zip(p)) save(_)
+      Option(GCNative.jemallocDump(tmpPath(s"$prefix-jemalloc", suffix = "prof"))).map(save)
+
+      for (a <- apSnag; p <- a.path) save(_)
 
       if (taskDump)
         runningTask.foreach { t =>
@@ -339,10 +331,8 @@ object InfoDumper extends Log {
               o.close()
             }
           if (wrote) {
-            zip(path).foreach { path =>
-              dropCrumb(crumbSource, id, s"Wrote running task to $path", Some(path))
-              saves = upload(crumbSource, id, path) :: saves
-            }
+            dropCrumb(crumbSource, id, s"Wrote running task to $path", Some(path))
+            saves = upload(crumbSource, id, path, deleteUncompressed = true, deleteUploadedFile = false) :: saves
           }
         }
 
@@ -360,121 +350,14 @@ object InfoDumper extends Log {
             val tmp = tmpPath("memDiag")
             val csv = tmp.resolve(nodeStatsFile + ".csv")
             val command = List(memoryDxCommand, "--nodes", path.toString, "-o", tmp.toString)
-            saves = OSInformation.execute(command) :: saves
-            saves = upload(crumbSource, id, csv) :: saves
+            saves = execute(command, -1L).output :: saves
+            saves = upload(crumbSource, id, csv, deleteUncompressed = true, deleteUploadedFile = false) :: saves
           }
         }
 
       }
       saves.mkString(";")
     } else "disabled"
-  }
-
-  def writeToTmpLog(prefix: String, crumbSource: Crumb.Source, id: ChainedID, msg: => String): Option[Path] = {
-    val path: Path = tmpPath(prefix, "log")
-    try {
-      val m = msg
-      io.FileUtils.write(path.toFile, m, Charset.defaultCharset())
-      dropCrumb(crumbSource, id, s"Writing diagnostics to $path", Some(path))
-      System.err.println(m) // Deliberate!
-      Some(path)
-    } catch {
-      case NonFatal(e) =>
-        log.warn(s"Unable to write to $path: $e")
-        None
-    }
-  }
-
-  private def zip(p: Path): Try[Path] = zip(p, deleteOld = true)
-  private def zip(p: Path, deleteOld: Boolean): Try[Path] = {
-    import scala.util.Using
-    val name = p.getFileName.toString
-    if (name.endsWith(".gz")) Success(p)
-    else {
-      // go to filename's directory and add our filename + gz extension to it
-      val pz =
-        if (p.getNameCount > 1)
-          p.getParent.resolve(p.getFileName.toString + ".gz")
-        else
-          Paths.get(p.getFileName.toString + ".gz")
-      Using.Manager { use =>
-        val in = use(Files.newInputStream(p))
-        val out = use(new GZIPOutputStream((new FileOutputStream(pz.toFile))))
-        in.transferTo(out)
-        assert(Files.exists(pz))
-        if (deleteOld)
-          Try { Files.delete(p) } recover { case e: Throwable => log.warn(s"Failed to delete $p - $e") }
-        pz
-      }
-    }
-  }
-
-  def upload(crumbSource: Crumb.Source, path: Path): String = upload(crumbSource, ChainedID.root, path)
-  def upload(crumbSource: Crumb.Source, id: ChainedID, path: Path): String = {
-    if (path == null) // might be called from java
-      "no path to upload"
-    else {
-      val zipped = zip(path)
-        .map { path =>
-          val splunk = splunkUpload(crumbSource, id, path, Some(meta)).isSuccess
-          if (splunk) s"uploaded $path as $id"
-          else s"failed to upload $path as $id"
-        }
-
-      zipped match {
-        case Failure(exception) => s"failed to upload with exception: $exception"
-        case Success(value)     => value
-      }
-    }
-  }
-
-  def encode(path: Path, maxZippedFileSize: Long): Try[String] = {
-    zip(path, deleteOld = false).flatMap { path =>
-      if (Files.size(path) > maxZippedFileSize) {
-        val msg = s"File $path exceeded $maxZippedFileSize bytes"
-        log.error(msg)
-        Failure(new IllegalStateException(msg))
-      } else
-        Using.Manager { use =>
-          val input = use(Files.newInputStream(path))
-          val bytes = IOUtils.toByteArray(input)
-          val encoder = Base64.getEncoder
-          val contents = encoder.encodeToString(bytes)
-          contents
-        }
-    }
-  }
-
-  val MAX_FILE_SIZE = 30 * 1000 * 1000
-  val MAX_CRUMB_SIZE = 35 * 1000 * 1000
-
-  // Will zip first if not already done
-  def splunkUpload(source: Crumb.Source, id: ChainedID, path: Path, meta: Option[Elems] = None): Try[String] = {
-    encode(path, MAX_FILE_SIZE).flatMap { contents =>
-      val file = {
-        val n = path.toString
-        if (n.endsWith(".gz")) n else s"${n}.gz"
-      }
-      if (contents.size > MAX_CRUMB_SIZE) {
-        val msg = s"Encoded $file exceeds $MAX_CRUMB_SIZE bytes"
-        log.error(msg)
-        Failure(new IllegalArgumentException(msg))
-      } else {
-        val uid = id.child
-        Breadcrumbs.info(
-          uid,
-          DiagPropertiesCrumb(
-            _,
-            source,
-            Properties.file -> file ::
-              Properties.fileContents -> contents ::
-              meta :::
-              Version.verboseProperties))
-        dropCrumb(source, uid, s"base64 upload", Some(path))
-        Breadcrumbs.flush()
-        Success(file)
-      }
-    }
   }
 
   def decodeToFile(content: String, path0: Path, tmpDir: Option[Path] = None): Try[Path] = {
