@@ -16,7 +16,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import optimus.buildtool.builders.BackgroundCmdId
 import optimus.buildtool.builders.postinstallers.uploaders.ArchiveUtil.ArchiveEntry
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader._
 import optimus.buildtool.builders.postinstallers.PostInstaller
@@ -33,6 +32,7 @@ import optimus.buildtool.utils.BlockingQueue
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.TarUtils
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.util.Log
 
@@ -64,18 +64,17 @@ class AssetUploader(
     uploadDir: Directory,
     sourceDir: Directory,
     installDir: Directory,
-    logDir: Directory,
+    processBuilder: ExternalProcessBuilder,
     toolsDir: Option[Directory],
     locations: Seq[UploadLocation],
     maxConcurrentUploads: Int,
     minBatchSize: Int,
     maxBatchSize: Int,
     maxBatchBytes: Long,
-    maxRetry: Int,
+    maxRetries: Int,
     srcPrefix: Option[RelativePath],
     srcFilesToUpload: Seq[Regex],
     uploadFormat: UploadFormat,
-    useCrumbs: Boolean,
     filesToExclude: Seq[Regex] = Seq()
 ) extends PostInstaller
     with Log {
@@ -133,13 +132,12 @@ class AssetUploader(
 
   private val uploaders = locations.zipWithIndex.map { case (location, idx) =>
     new LocationUploader(
-      id = BackgroundCmdId(s"uploader-${idx + 1}"),
+      id = s"uploader-${idx + 1}",
       location = location,
       throttle = sharedThrottle,
-      maxRetry = maxRetry,
-      logDir = logDir,
-      toolsDir = toolsDir,
-      useCrumbs = useCrumbs
+      maxRetries = maxRetries,
+      processBuilder = processBuilder,
+      toolsDir = toolsDir
     )
   }
 

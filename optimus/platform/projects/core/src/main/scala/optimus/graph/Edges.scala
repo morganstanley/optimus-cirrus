@@ -16,11 +16,9 @@ import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.CrumbNodeType
-import optimus.breadcrumbs.crumbs.Events
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.crumbs.EdgeType
-import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.breadcrumbs.graph.RawEdges
 import optimus.platform._
 
@@ -37,7 +35,6 @@ object Edges {
     override def onChildCompleted(q: EvaluationQueue, n: NodeTask): Unit = {
       if (n.isDoneWithException)
         Breadcrumbs.info(n.ID, PropertiesCrumb(_, source, Properties.exception -> n.exception()))
-      Breadcrumbs.info(n.ID, new EventCrumb(_, source, Events.Completed))
     }
   }
   private val crumbCompleter = new CrumbCompleter

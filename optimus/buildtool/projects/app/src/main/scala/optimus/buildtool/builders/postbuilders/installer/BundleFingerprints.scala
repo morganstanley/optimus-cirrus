@@ -217,7 +217,7 @@ sealed class BundleFingerprints(
   }
 }
 object BundleFingerprints extends Log {
-  private val Filename = "fingerprints.txt"
+  private[buildtool] val Filename = "fingerprints.txt"
   private val ContainerSeparator = "!" // this matches JarFileSystem for consistency, but doesn't need to
   val HashFlagStr: String = NamingConventions.HASH
 

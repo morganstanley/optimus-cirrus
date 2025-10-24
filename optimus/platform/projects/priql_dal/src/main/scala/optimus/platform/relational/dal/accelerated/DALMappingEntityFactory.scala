@@ -28,6 +28,7 @@ import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
 import optimus.platform.dsi.expressions.{Linkage => LinkageExpression}
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.Registry
 import optimus.platform.pickling.Unpickler
 import optimus.platform.relational.RelationalUnsupportedException
@@ -118,7 +119,7 @@ object DALMappingEntityFactory {
     } else Map.empty[String, Any]
   }
 
-  private def getAllAddedFieldMap(startPoint: ClientVertex): Seq[Map[String, Any]] = {
+  private def getAllAddedFieldMap(startPoint: ClientVertex): Seq[PickledProperties] = {
     val clientGraph = TransformerRegistry.getClientGraph
     clientGraph
       .getAllInboundEdges(startPoint)

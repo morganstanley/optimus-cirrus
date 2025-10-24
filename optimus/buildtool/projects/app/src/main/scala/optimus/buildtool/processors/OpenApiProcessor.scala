@@ -19,16 +19,14 @@ import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.ProcessorArtifactType
-import optimus.buildtool.builders.BackgroundProcessBuilder
-import optimus.buildtool.builders.OpenApiCmdId
 import optimus.buildtool.config.ScopeId
-import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.trace.OpenApiApp
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.exceptions.RTException
 import optimus.graph.AsyncProfilerIntegration
 import optimus.platform._
@@ -46,7 +44,7 @@ import scala.jdk.CollectionConverters._
  * built code in a separate JVM, so it's important that the OpenApiSpecBuilder's behavior is backward compatible the
  * currently configured OBT version.
  */
-@entity class OpenApiProcessor(logDir: Directory, useCrumbs: Boolean) extends ScopeProcessor {
+@entity class OpenApiProcessor(processBuilder: ExternalProcessBuilder) extends ScopeProcessor {
   override val artifactType: ProcessorArtifactType = ArtifactType.OpenApi
 
   override type Inputs = OpenApiProcessor.Inputs
@@ -94,14 +92,7 @@ import scala.jdk.CollectionConverters._
       dependencyArtifacts: Seq[Artifact]): Either[CompilationMessage, (RelativePath, String)] = {
     val in: Inputs = inputs()
     NodeTry {
-      val content =
-        OpenApiProcessor.generateContent(
-          pathingArtifact,
-          dependencyArtifacts,
-          logDir,
-          in,
-          useCrumbs
-        )
+      val content = OpenApiProcessor.generateContent(pathingArtifact, dependencyArtifacts, processBuilder, in)
       Right(in.installLocation -> content)
     }.getOrRecover { case ex @ RTException =>
       val id = s"${pathingArtifact.scopeId}:${in.processorName}"
@@ -125,17 +116,17 @@ object OpenApiProcessor extends Log {
   // it looks a little odd to hardcode the names of codetree scopes here, but the OpenApiProcessor is inherently
   // coupled to the existance of these scopes so that it can invoke the OpenApiSpecBuilder. Note that if
   // OpenApiProcessor is not enabled for a scope, none of this code runs and therefore these scopes need not exist.
-  val EntityAgentPathingArtifactId =
+  val EntityAgentPathingArtifactId: InternalArtifactId =
     InternalArtifactId(ScopeId("optimus", "platform", "entityagent", "main"), ArtifactType.Pathing, None)
-  val BuildToolRestScalaArtifactId =
+  val BuildToolRestScalaArtifactId: InternalArtifactId =
     InternalArtifactId(ScopeId("optimus", "buildtool", "rest", "main"), ArtifactType.Pathing, None)
 
   @async def generateContent(
       pathingArtifact: PathingArtifact,
       dependencyArtifacts: Seq[Artifact],
-      logDir: Directory,
-      input: Inputs,
-      useCrumbs: Boolean): String = {
+      processBuilder: ExternalProcessBuilder,
+      input: Inputs
+  ): String = {
     val name = input.processorName
     val targetClass = input.targetClass
     val configMemory = input.configuration.get("memory")
@@ -160,29 +151,25 @@ object OpenApiProcessor extends Log {
     // Shut off async-profiler to avoid multi-class-loader problems
     val disableAP = s"-D${AsyncProfilerIntegration.apEnabledProperty}=false"
 
-    val id = OpenApiCmdId(scopeId, name)
-    val logFile = id.logFile(logDir)
+    val cmdLine = ExternalProcessBuilder.javaCommand(
+      classpathArtifacts = Seq(pathingArtifact, buildtoolRestPathingArtifact),
+      javaAgentArtifacts = Seq(entityAgent),
+      // a fairly small environment should be sufficient
+      javaOpts = Seq("-Doptimus.gthread.ideal=2", javaMemoryStr, disableAP),
+      mainClass = OpenApiSpecBuilder.getClass.getName.stripSuffix("$"),
+      mainClassArgs = Seq("--target", targetClass.name, "--outputFile", outputFile.pathString),
+    )
     val (durationInNanos, (_, outputContent)) = AdvancedUtils.timed {
       aseq(
-        BackgroundProcessBuilder
-          .java(
-            id,
-            logFile = logFile,
-            classpathArtifacts = Seq(pathingArtifact, buildtoolRestPathingArtifact),
-            javaAgentArtifacts = Seq(entityAgent),
-            // a fairly small environment should be sufficient
-            javaOpts = Seq("-Doptimus.gthread.ideal=2", javaMemoryStr, disableAP),
-            mainClass = OpenApiSpecBuilder.getClass.getName.stripSuffix("$"),
-            mainClassArgs = Seq("--target", targetClass.name, "--outputFile", outputFile.pathString),
-            useCrumbs
-          )
-          .build(scopeId, OpenApiApp(name), lastLogLines = 20),
+        processBuilder
+          .build(scopeId, s"openapi-$name", cmdLine, Some(OpenApiApp(name)), lastLogLines = 20)
+          .start(),
         try Files.readAllLines(outputFile.path).asScala.to(Seq).mkString(System.lineSeparator())
         finally Files.deleteIfExists(outputFile.path)
       )
     }
 
-    log.info(s"[$id] Completed in ${Utils.durationString(durationInNanos / 1000000L)}")
+    log.info(s"[$scopeId:openapi-$name] Completed in ${Utils.durationString(durationInNanos / 1000000L)}")
 
     outputContent
   }

@@ -47,6 +47,7 @@ import optimus.platform.util.InfoDumpUtils
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
 import optimus.utils.FileUtils
+import msjava.slf4jutils.scalalog.Logger
 
 import scala.util.Try
 import scala.util.Using
@@ -64,8 +65,10 @@ class InfoDumper extends InfoDump {
       msgs: List[String] = Nil,
       code: Int = -1,
       crumbSource: Crumb.Source = Crumb.RuntimeSource,
-      exceptions: Array[Throwable] = Array.empty[Throwable]): Unit =
-    InfoDumper.kill(prefix, msgs, code, crumbSource, exceptions)
+      exceptions: Array[Throwable] = Array.empty[Throwable],
+      logger: Logger = log
+  ): Unit =
+    InfoDumper.kill(prefix, msgs, code, crumbSource, exceptions, logger)
 
   override def dump(
       prefix: String,
@@ -78,7 +81,8 @@ class InfoDumper extends InfoDump {
       noMore: Boolean = false,
       exceptions: Array[Throwable] = Array.empty,
       emergency: Boolean = false,
-      doLog: Boolean = true
+      doLog: Boolean = true,
+      logger: Logger = log
   ): String =
     InfoDumper.dump(
       prefix,
@@ -91,7 +95,9 @@ class InfoDumper extends InfoDump {
       noMore,
       exceptions,
       emergency,
-      doLog)
+      doLog,
+      logger
+    )
 
 }
 
@@ -215,7 +221,9 @@ object InfoDumper extends InfoDumpUtils {
       msgs: List[String] = Nil,
       code: Int = -1,
       crumbSource: Crumb.Source = Crumb.RuntimeSource,
-      exceptions: Array[Throwable] = Array.empty[Throwable]): Unit = {
+      exceptions: Array[Throwable] = Array.empty[Throwable],
+      logger: Logger = log
+  ): Unit = {
     Try { backupKillThread.start() }
     dump(
       prefix,
@@ -225,11 +233,12 @@ object InfoDumper extends InfoDumpUtils {
       heapDump = DiagnosticSettings.heapDumpOnKill,
       taskDump = true,
       noMore = true,
-      exceptions = exceptions
+      exceptions = exceptions,
+      logger = logger
     )
     Breadcrumbs.flush()
     if (DiagnosticSettings.fakeOutOfMemoryErrorOnKill) {
-      log.warn("About to trigger an OutOfMemoryError")
+      logger.warn("About to trigger an OutOfMemoryError")
       new Array[Byte](Int.MaxValue)
     }
     Runtime.getRuntime.exit(code)
@@ -246,12 +255,13 @@ object InfoDumper extends InfoDumpUtils {
       noMore: Boolean = false,
       exceptions: Array[Throwable] = Array.empty,
       emergency: Boolean = false,
-      doLog: Boolean = true
+      doLog: Boolean = true,
+      logger: Logger = log
   ): String = this.synchronized {
     if (enabled || emergency) {
       if (noMore) enabled = false
       val msg = ("InfoDumper: " + msgs.mkString(";")).applyIf(noMore)(_ + ";final")
-      log.error(msg)
+      logger.error(msg)
       System.err.println(msg)
       Breadcrumbs.error(
         id,
@@ -325,20 +335,20 @@ object InfoDumper extends InfoDumpUtils {
               true
             } catch {
               case e: IOException => // including serialization exception
-                dropCrumb(crumbSource, id, s"Failed to write task to $path: $e", Some(path))
+                dropCrumb(crumbSource, id, s"Failed to write task to $path: $e", Some(path), logger = logger)
                 false
             } finally {
               o.close()
             }
           if (wrote) {
-            dropCrumb(crumbSource, id, s"Wrote running task to $path", Some(path))
+            dropCrumb(crumbSource, id, s"Wrote running task to $path", Some(path), logger = logger)
             saves = upload(crumbSource, id, path, deleteUncompressed = true, deleteUploadedFile = false) :: saves
           }
         }
 
       if (heapDump) {
         val path = tmpPath(s"$prefix-jmap", "hprof")
-        dropCrumb(crumbSource, id, s"Dumping heap to $path", Some(path))
+        dropCrumb(crumbSource, id, s"Dumping heap to $path", Some(path), logger = logger)
         val mxBean = ManagementFactory.newPlatformMXBeanProxy(
           ManagementFactory.getPlatformMBeanServer(),
           "com.sun.management:type=HotSpotDiagnostic",

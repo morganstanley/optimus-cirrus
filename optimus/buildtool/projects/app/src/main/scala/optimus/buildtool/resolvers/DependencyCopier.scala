@@ -27,11 +27,11 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.resolvers.HttpResponseUtils._
+import optimus.buildtool.resolvers.MavenUtils.getHttpAssetResponse
 import optimus.buildtool.resolvers.MavenUtils.isNonUnzipLibJarFile
 import optimus.buildtool.resolvers.MavenUtils.maxDownloadSeconds
 import optimus.buildtool.resolvers.MavenUtils.maxRetry
 import optimus.buildtool.resolvers.MavenUtils.retryIntervalSeconds
-import optimus.buildtool.trace.CheckRemoteUrl
 import optimus.buildtool.trace.DepCopy
 import optimus.buildtool.trace.DepCopyFromRemote
 import optimus.buildtool.trace.DownloadRemoteUrl
@@ -42,9 +42,7 @@ import optimus.buildtool.utils.Utils.localize
 import optimus.platform._
 import optimus.stratosphere.artifactory.Credential
 
-import java.io.FileNotFoundException
 import java.io.InputStream
-import java.net.SocketTimeoutException
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
@@ -52,7 +50,7 @@ import java.util.concurrent.TimeUnit
 
 @entity class DependencyCopier(
     depCopyPath: Directory,
-    credentials: Seq[Credential] = Nil,
+    val credentials: Seq[Credential] = Nil,
     assetStore: RemoteAssetStore = NoOpRemoteAssetStore,
     depCopyFileSystemAsset: Boolean = false
 ) {
@@ -112,35 +110,6 @@ import java.util.concurrent.TimeUnit
     depFile
   }
 
-  def getHttpAssetResponse(httpAsset: BaseHttpAsset, timeoutSec: Int): HttpProbingResponse =
-    ObtTrace.traceTask(RootScopeId, CheckRemoteUrl(httpAsset.url)) {
-      val url = httpAsset.url
-      val host = url.getHost
-      val cred = credentials.find(_.host == host)
-      val conn = url.openConnection()
-      cred.foreach(c => conn.setRequestProperty("Authorization", c.toHttpBasicAuth))
-      conn.setReadTimeout(timeoutSec * 1000)
-      try {
-        val stream = conn.getInputStream
-        val header = conn.getHeaderFields.toString
-        log.debug(s"Got response from url: ${url.toString}, length: ${conn.getContentLength}, header: $header")
-        HttpProbingResponse(Right(stream), loadHttpHeaderInfo(header, url))
-      } catch {
-        case e: SocketTimeoutException =>
-          HttpProbingResponse(
-            Left(getHttpException(httpAsset, maxRetry, e)),
-            HttpHeaderInfo(Map(ServerCodeKey -> "time out!")))
-        case e: FileNotFoundException =>
-          HttpProbingResponse(
-            Left(getHttpException(httpAsset, maxRetry, e)),
-            HttpHeaderInfo(Map(ServerCodeKey -> "not found!")))
-        case e: Exception =>
-          HttpProbingResponse(
-            Left(getHttpException(httpAsset, maxRetry, e)),
-            HttpHeaderInfo(Map(ServerCodeKey -> e.toString)))
-      }
-    }
-
   private def downloadUrlFromStream(
       httpAsset: BaseHttpAsset,
       localPath: Path,
@@ -175,7 +144,7 @@ import java.util.concurrent.TimeUnit
       openedHttp: Option[HttpProbingResponse],
       retry: Int,
       retryIntervalSeconds: Int): Unit = {
-    val workingHttpResponse = openedHttp.getOrElse(getHttpAssetResponse(httpAsset, maxDownloadSeconds))
+    val workingHttpResponse = openedHttp.getOrElse(getHttpAssetResponse(httpAsset, maxDownloadSeconds, credentials))
     workingHttpResponse.inputStream match {
       case Right(stream) =>
         downloadUrlFromStream(httpAsset, localPath, stream, workingHttpResponse.headerInfo, retry, retryIntervalSeconds)

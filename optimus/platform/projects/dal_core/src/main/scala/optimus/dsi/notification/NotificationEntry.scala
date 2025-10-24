@@ -11,16 +11,18 @@
  */
 package optimus.dsi.notification
 
-import java.time.Instant
 import optimus.dsi.base.SlottedVersionedReference
 import optimus.dsi.base.dalQuantum
 import optimus.dsi.partitioning.Partition
 import optimus.dsi.trace.TraceId
+import optimus.platform.TimeInterval
 import optimus.platform.ValidTimeInterval
 import optimus.platform.bitemporal.ValidSegment
 import optimus.platform.dsi.bitemporal.Context
 import optimus.platform.dsi.bitemporal.proto.Dsi.NotificationEntryProto
 import optimus.platform.storable._
+
+import java.time.Instant
 
 // The enumeration entries should be one-on-one mapped to the types in NotificationEntryProto
 object NotificationType extends Enumeration {
@@ -162,6 +164,9 @@ sealed trait NotificationEntry extends NotificationMessage {
     }
     cachedProto
   }
+
+  private[optimus] final def toPersistentEntity: PersistentEntity =
+    segment.data.toPersistentEntity(slotRef.vref, lockToken, segment.vtInterval, TimeInterval(txTime))
 }
 
 object NotificationEntry {

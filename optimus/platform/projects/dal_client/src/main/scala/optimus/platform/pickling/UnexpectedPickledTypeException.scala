@@ -14,5 +14,5 @@ package optimus.platform.pickling
 import optimus.exceptions.RTExceptionTrait
 
 class UnexpectedPickledTypeException(val expectedType: Manifest[_], val actualType: Class[_])
-    extends Exception("Could not unpickle type " + actualType.getName + " into " + expectedType)
-    with RTExceptionTrait
+    extends BaseExceptionWithHistory("Could not unpickle type " + actualType.getName + " into " + expectedType)
+    with RTExceptionTrait {}

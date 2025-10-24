@@ -17,6 +17,8 @@ import optimus.buildtool.builders.postinstallers.uploaders.UploadLocation
 import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.generators.GeneratorType
+import optimus.buildtool.generators.GeneratorUtils
 
 import java.net.URL
 import scala.collection.mutable
@@ -133,7 +135,11 @@ private[buildtool] final case class Queue(queued: CategoryTrace) extends AsyncCa
 }
 private[buildtool] case object MemQueue extends SingletonCategoryTrace with AsyncCategoryTrace
 
-private[buildtool] case object GenerateSource extends MessageTrace
+private[buildtool] final case class GenerateSource(generatorType: GeneratorType, generatorName: String)
+    extends MessageTrace {
+  override lazy val name: String =
+    s"$categoryName(${GeneratorUtils.generatorId(generatorType, generatorName)})"
+}
 
 private[buildtool] case object Signatures
     extends StrictSingletonCategoryTrace

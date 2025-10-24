@@ -12,20 +12,19 @@
 package optimus.breadcrumbs.crumbs
 
 import com.github.benmanes.caffeine.cache.Caffeine
+import msjava.base.util.uuid.MSUuid
+import optimus.breadcrumbs.ChainedID
+import optimus.platform.util.Log
+import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.{util => ju}
-import msjava.base.util.uuid.MSUuid
-import optimus.breadcrumbs.ChainedID
-import optimus.breadcrumbs.crumbs.PropertyUnits.BareNumber
-import spray.json.DefaultJsonProtocol._
-import spray.json._
-
 import java.util.Objects
+import java.{util => ju}
 import scala.annotation.varargs
 import scala.collection.immutable.SortedSet
 import scala.collection.immutable.TreeSet
@@ -37,9 +36,9 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 abstract class KnownProperties extends Enumeration {
+  import KnownProperties._
   import Properties.Elem
   import Properties.Key
-  import KnownProperties._
 
   // copied out of Enumeration.scala
   private def nextNameOrNull = if (nextName != null && nextName.hasNext) nextName.next() else null
@@ -56,6 +55,10 @@ abstract class KnownProperties extends Enumeration {
     }
     private[crumbs] def withMeta(md: MetaData, description: String): this.type = {
       _meta = md.copy(descriptionOverride = description)
+      this
+    }
+    private[crumbs] def withMeta(flags: Int, units: PropertyUnits.Units, description: String = ""): this.type = {
+      _meta = MetaData(flags, units, description, this)
       this
     }
   }
@@ -183,7 +186,9 @@ object KnownProperties {
   val INTERNAL = 32
 
   val NullMeta = MetaData(0, BareNumber)
+  val InternalNullMeta = MetaData(INTERNAL, BareNumber)
   val TimeSpent = MetaData(AGG_ALL, Millis)
+  val InternalTimeSpent = MetaData(AGG_ALL | INTERNAL, Millis)
   val TimeSpentNs = MetaData(AGG_ALL, Nanoseconds)
   val AllocSamples = MetaData(AGG_ALL, MegaBytes)
   val MemoryInUse = MetaData(AGG_OVER_ENGINES, MegaBytes)
@@ -467,9 +472,49 @@ object Properties extends KnownProperties {
 
   sealed trait ElemOrElems
 
-  final case class Elem[A](k: Key[A], v: A) extends ElemOrElems {
+  final case class Elem[A](k: Key[A], v: A) extends ElemOrElems with Log {
     // "null" is not likely to be meaningful, but it's better than throwing an NPE now
     def toTuple: (String, JsValue) = (k.toString, if (null == v) "null".toJson else k.toJson(v))
+
+    private def nonEmptyValue(v: Any) = v match {
+      case null            => false
+      case None            => false
+      case m: Map[_, _]    => m.nonEmpty
+      case it: Iterable[_] => it.nonEmpty
+      case n: Number =>
+        val d = n.doubleValue()
+        d != 0.0 && !d.isNaN // Profire ignores all zero values
+      case _ => true
+    }
+
+    def nonEmpty: Boolean = nonEmptyValue(v)
+
+    private def filterEmptyValues(value: Any): Any = value match {
+      case null | None => None
+      case m: Map[_, _] =>
+        m.flatMap { case (k, v) =>
+          val filtered = filterEmptyValues(v)
+          if (nonEmptyValue(filtered)) Some(k -> filtered) else None
+        }
+      case it: Iterable[_] =>
+        it.flatMap { elem =>
+          val filtered = filterEmptyValues(elem)
+          Some(filtered).filter(nonEmptyValue)
+        }
+      case n: Number if n.doubleValue() == 0.0 => None
+      case other                               => other
+    }
+
+    def filterEmptyValuesInList: Elem[A] = {
+      val value: A =
+        try { filterEmptyValues(v).asInstanceOf[A] }
+        catch {
+          case NonFatal(e) =>
+            log.debug(s"Filter empty values failed! $k -> $v", e)
+            v
+        }
+      Elem[A](k, value)
+    }
   }
   object Elem {
     def apply[A](tuple: (Key[A], A)): Elem[A] = Elem(tuple._1, tuple._2)
@@ -498,12 +543,28 @@ object Properties extends KnownProperties {
 
   object Elems {
     val Nil = new Elems(scala.Nil)
+
     @varargs def apply(ess: ElemOrElems*): Elems =
       new Elems(ess.foldLeft(List.empty[Elem[_]]) {
         case (acc, e: Elem[_]) => e :: acc
         case (acc, Elems.Nil)  => acc
         case (acc, es: Elems)  => es.m ::: acc
       })
+
+    @varargs def nonEmptyElems(ess: ElemOrElems*): Elems = {
+      def filtered(e: Elem[_]): Option[Elem[_]] = {
+        val f = e.filterEmptyValuesInList
+        if (f.nonEmpty) Some(f) else None
+      }
+
+      new Elems(
+        ess.flatMap {
+          case e: Elem[_] => filtered(e)
+          case es: Elems  => es.m.flatMap(filtered)
+          case _          => None
+        }.toList
+      )
+    }
   }
 
   trait Key[A] extends HasMetaData {
@@ -583,10 +644,12 @@ object Properties extends KnownProperties {
   private[optimus] val _meta = prop[MetaDataType.Value]
 
   val breadcrumbsSentSoFar = propL
-  val crumbsSent = prop[Map[String, Int]].withMeta(IntegrableCount)
-  val kafkaFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
-  val enqueueFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
-
+  val crumbsSent = prop[Map[String, Int]].withMeta(InternalIntegrableCount)
+  val enqueueFailures = prop[Map[String, Int]].withMeta(INTERNAL | AGG_ALL, PropertyUnits.Count)
+  val crumbCountAnalysis = prop[Map[String, Map[String, Double]]].withMeta(INTERNAL | AGG_ALL, PropertyUnits.Count)
+  val crumbSnapAnalysis =
+    prop[Map[String, Map[String, Double]]].withMeta(INTERNAL | AGG_OVER_ENGINES, PropertyUnits.Count)
+  val kafkaMetrics = prop[Map[String, Double]].withMeta(INTERNAL, PropertyUnits.BareNumber)
   val uuidLevel = prop[String]
 
   val `type` = prop[String]
@@ -841,13 +904,14 @@ object Properties extends KnownProperties {
 
   val snapTimeMs = propL.withMeta(TimeSpent)
   val snapTimeUTC = prop[String]
-  val snapEpochId = propL.withMeta(NullMeta)
-  val snapPeriod = propL.withMeta(TimeSpent)
-  val snapDuration = propL.withMeta(TimeSpent)
+  val snapEpochId = propL.withMeta(InternalNullMeta)
+  val snapPeriod = propL.withMeta(InternalTimeSpent)
+  val snapDuration = propL.withMeta(InternalTimeSpent)
   val snapBatch = propI
   val canonicalPub = propB
 
   val pulse = prop[Elems]
+  val pulseMeta = prop[Map[String, Int]]
 
   val profiledEvent = prop[ProfiledEventCause]
   val profiledEventStatistics = prop[Map[String, JsValue]]
@@ -861,6 +925,8 @@ object Properties extends KnownProperties {
   val appIds = prop[Seq[String]]
   val timeout = propL
   val pid = propL
+  val ppid = propL
+  val cpid = propL
   val host = prop[String]
   val port = prop[String]
   val user = prop[String]
@@ -1066,7 +1132,7 @@ object Properties extends KnownProperties {
   )
 
   val mergedAppName = prop[String].withMeta(NullMeta, "The merged application name for optimus app")
-  val smplTimes = prop[Map[String, Long]].withMeta(TimeSpent)
+  val smplTimes = prop[Map[String, Long]].withMeta(InternalTimeSpent)
   val flameTimes = prop[Map[String, Long]]
     .withMeta(TimeSpent.withFlags(FLAME), "root total time for a sample that is published as a flame graph")
   val flameLive = prop[Map[String, Long]]
@@ -1079,7 +1145,7 @@ object Properties extends KnownProperties {
       "root total memory allocated for a sample that is published as a flame graph")
   val flameCounts = prop[Map[String, Long]]
     .withMeta(IntegrableCount.withFlags(FLAME), "root total value for a sample that is published as a flame graph")
-  val samplingPauseTime = propL.withMeta(TimeSpent)
+  val samplingPauseTime = propL.withMeta(InternalTimeSpent)
   val childProcessCount = propI.withMeta(UnintegrableCount, "Number of child processes")
   val childProcessCPU = propD.withMeta(GaugeLevel, "Total CPU load of all child processes")
   val childProcessRSS = propL.withMeta(MemoryInUse, "Total resident memory size of all child processes")
@@ -1115,11 +1181,14 @@ object Properties extends KnownProperties {
   val numStacksPublished = propL.withMeta(InternalIntegrableCount)
   val numStacksReferenced = propL.withMeta(InternalIntegrableCount)
   val numSamplesPublished =
-    propL.withMeta(IntegrableCount, "Number of stacks published from sampling profiler during this sampling interval")
+    propL.withMeta(
+      InternalIntegrableCount,
+      "Number of stacks published from sampling profiler during this sampling interval")
   val numCrumbFailures = propI.withMeta(InternalIntegrableCount)
   val numStackProblems = propL.withMeta(InternalIntegrableCount)
   val numSamplersDisabled = propL.withMeta(InternalIntegrableCount)
   val crumbQueueLength = propI.withMeta(InternalGaugeLevel)
+  val crumbConfig = prop[Seq[String]]
   val stackElem = prop[String]
   val pTpe = prop[String]
   val jfrSize = propL
@@ -1315,6 +1384,7 @@ object StallPlugin {
   val DAL = "DAL"
   val Dist = "DIST"
   val DMC = "DMC"
+  val JOB = "JOB"
 }
 
 object RequestsStallInfo {

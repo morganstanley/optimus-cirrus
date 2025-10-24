@@ -16,6 +16,7 @@ import optimus.entity.StorableInfo
 import optimus.graph.PropertyInfo
 import optimus.platform._
 import optimus.platform.pickling.PickledMapWrapper
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.Pickler
 import optimus.platform.storable.Entity
 import optimus.platform.storable.EventInfo
@@ -31,12 +32,12 @@ import java.time.Instant
 class PropertyNotModifiedException(msg: String) extends RuntimeException(msg)
 
 object CopyHelper {
-  private type Props = Map[String, Any] // that good ol' omnitype again
+  private type Props = PickledProperties
 
   private def getNewProperties(info: StorableInfo, oldProps: Props, newProps: Props): Props = {
 
     // the compiler won't do check if the type is not concrete, so we need to check whether all properties are modified or not
-    val pickledProps = newProps.map { case (key, value) =>
+    val pickledProps = newProps.mapProps { case (key, value) =>
       val pinfo: PropertyInfo[_] = info.storedProperties.find(_.name == key).getOrElse {
         throw new PropertyNotModifiedException(s"$key in $info can't be modified (not storable val)")
       }
@@ -49,18 +50,18 @@ object CopyHelper {
   }
 
   // this is called from CopyMethodMacros
-  def copyHelp[E <: Storable](e: E)(props: Map[String, Any]): E = {
+  def copyHelp[E <: Storable](e: E)(props: PickledProperties): E = {
     val cinst = e match {
       case ent: Entity =>
         ent.$info.createUnpickled(
-          new PickledMapWrapper(getNewProperties(e.$info, e.toMap, props)),
+          new PickledMapWrapper(getNewProperties(e.$info, e.toProperties, props)),
           true,
           UniqueStorageInfo,
           null)
       case evt: BusinessEvent =>
         val (validTime, newProps) = props.get("validTime") match {
-          case Some(x: Instant) => (x, getNewProperties(e.$info, e.toMap, props - "validTime"))
-          case _                => (evt.validTime, getNewProperties(e.$info, e.toMap, props))
+          case Some(x: Instant) => (x, getNewProperties(e.$info, e.toProperties, props.remove("validTime")))
+          case _                => (evt.validTime, getNewProperties(e.$info, e.toProperties, props))
         }
         val ctx = TemporalContext(validTime, null)
         evt.$info.createUnpickled(new PickledMapWrapper(newProps, ctx), true)

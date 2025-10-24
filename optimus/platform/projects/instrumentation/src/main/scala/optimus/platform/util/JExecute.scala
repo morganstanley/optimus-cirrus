@@ -39,7 +39,7 @@ trait JExecute {
           case NonFatal(_) =>
             return InfoDumpUtils.EXCEPTION
         }
-    drain(sb, isr, timeoutMs = timeoutMs, logging = logging, maxLines = maxLines)
+    drain(sb, isr, s"[jcmd] $cmd ${args.mkString(" ")}", timeoutMs = timeoutMs, logging = logging, maxLines = maxLines)
   }
 
   def jexecute(sb: StringBuilder, hsvm: HotSpotVirtualMachine, cmd: String, args: Any*): Int =

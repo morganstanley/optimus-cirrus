@@ -62,17 +62,18 @@ object ChildProcessSampling extends Log {
   def removeChildId(id: Int): Unit = childId2Tag.remove(id)
 
   // Child process preload path will contain the libasyncProfiler and libjemalloc paths found in the parent process.
-  lazy private val (childPreloads, nativeMem) = {
-    UnixLibUtils.findLibrary("libasyncProfiler.so") match {
+  lazy private val (defaultPreloads: Seq[String], nativeMem: Boolean) = {
+    val (pre, nm) = UnixLibUtils.findLibrary("libasyncProfiler.so") match {
       case None =>
         log.warn("libasyncProfiler.so not found in /proc/self/maps")
-        ("", false)
+        (Seq.empty, false)
       case Some(ap) =>
         UnixLibUtils.findLibrary("libjemalloc.so") match {
-          case Some(je) => (s"$ap:$je", true)
-          case None     => (ap, false)
+          case Some(je) => (Seq(ap, je), true)
+          case None     => (Seq(ap), false)
         }
     }
+    (pre, nm)
   }
 
   private lazy val childLoopPeriodSec =
@@ -96,15 +97,16 @@ object ChildProcessSampling extends Log {
   /**
    * Construct environment variables to be set in the child process
    */
-  def getChildEnv(id: Int): Map[String, String] = if (
-    !allowChildProfiling || !SamplingProfiler.stillPulsing() || childPreloads.isEmpty || !childId2Tag.containsKey(id)
+  def getChildEnv(id: Int, morePreloads: Seq[String] = Seq.empty): Map[String, String] = if (
+    !allowChildProfiling || !SamplingProfiler.stillPulsing() || defaultPreloads.isEmpty || !childId2Tag.containsKey(id)
   )
     Map.empty
   else {
     val staxId = childId2Tag.get(id)
+    val preLoads = (morePreloads.filter(f => Files.isExecutable(Paths.get(f))) ++ defaultPreloads).mkString(":")
     val env = Map(
       // Preload async-profiler and possibly jemalloc
-      "LD_PRELOAD" -> childPreloads,
+      "LD_PRELOAD" -> preLoads,
       // Async-profiler will extract profiling arguments from this environment variable.
       // shmcontext sets the shared memory path for communicating context, which in
       // our case is the rolling hash of the await stacks.
@@ -117,9 +119,9 @@ object ChildProcessSampling extends Log {
     env
   }
 
-  def getNewChildEnv(): (Int, Map[String, String]) = {
+  def getNewChildEnv(morePreloads: Seq[String] = Seq.empty): (Int, Map[String, String]) = {
     val id = newChildId()
-    (id, getChildEnv(id))
+    (id, getChildEnv(id, morePreloads))
   }
 
   def reapChildStacks(): Iterable[TimedStack] = if (childId2Tag.size() == 0) Iterable.empty

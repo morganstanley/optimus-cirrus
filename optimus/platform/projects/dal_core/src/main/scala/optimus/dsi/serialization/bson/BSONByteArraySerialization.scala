@@ -13,10 +13,10 @@ package optimus.dsi.serialization.bson
 
 import java.time.Instant
 import java.time._
-
 import msjava.slf4jutils.scalalog._
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
+import optimus.platform.pickling.PickledProperties
 import optimus.utils.datetime.LocalDateOps
 import optimus.utils.datetime.ZoneIds
 
@@ -37,13 +37,13 @@ object BsonByteArraySerialization {
     }
   }
 
-  def propertiesMapToBytes(properties: Map[String, Any]): Array[Byte] = {
+  def propertiesMapToBytes(properties: PickledProperties): Array[Byte] = {
     val ser = new BsonByteArraySerialization
-    ser.writeData(properties)
+    ser.writeData(properties.asMap)
     ser.out.toByteArray
   }
 
-  def bytesToPropertiesMap(bytes: Array[Byte]): Map[String, Any] = {
+  def bytesToPropertiesMap(bytes: Array[Byte]): PickledProperties = {
     val handlerStackCallback = new HandlerStackCallback()
     val decode = new ThriftyBSONDecoder()
     decode.decode(bytes, handlerStackCallback)

@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.processors
 
-import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
@@ -23,12 +22,14 @@ import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
-import optimus.buildtool.generators.SourceGenerator
+import optimus.buildtool.files.SourceFileId
+import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.processors.DeploymentScriptProcessor.DefaultFileName
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.SandboxFactory
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.util.Log
 
@@ -40,16 +41,15 @@ import scala.util.Try
 /**
  * OBT Processor Task to generate deployment files as part of module build
  *
- * Sample Usage
- * ```
+ * Sample Usage:
  * deploy {
  *    template = resources/deploy-template.jinja2
  *    objects = resources/deploy-params.yaml
  *    installLocation = deploy-dir/deploy.yaml
  * }
- * ```
  */
-@entity class DeploymentScriptProcessor(sandboxFactory: SandboxFactory, logDir: Directory) extends ScopeProcessor {
+@entity class DeploymentScriptProcessor(sandboxFactory: SandboxFactory, processBuilder: ExternalProcessBuilder)
+    extends ScopeProcessor {
 
   override def artifactType: ProcessorArtifactType = ArtifactType.DeploymentScript
 
@@ -104,9 +104,12 @@ import scala.util.Try
       dependencyArtifacts: Seq[Artifact]): Either[CompilationMessage, (RelativePath, String)] = {
 
     val in = inputs()
-    val sandbox = sandboxFactory(s"${in.scopeId.properPath}-deploy", Map.empty)
-    val validatedTemplateFile = validateFile("Template", in.workspaceSrcRoot, in.templateContent)
-    val validatedParameterFile = validateFile("Parameter", in.workspaceSrcRoot, in.objectsContent)
+
+    val template = toSourceFile("Template", in.workspaceSrcRoot, in.templateContent)
+    val parameters = toSourceFile("Parameter", in.workspaceSrcRoot, in.objectsContent)
+
+    val files = Seq(template, parameters).collect { case Right(f) => f }.toMap
+    val sandbox = sandboxFactory(s"${in.scopeId.properPath}-deploy", files)
 
     val r = NodeTry {
       for {
@@ -133,15 +136,15 @@ import scala.util.Try
           ) // force creation of file and folders
           outputFile
         }.toEither.left.map(t => CompilationMessage.error("Couldn't create output file", t))
-        templateFile <- validatedTemplateFile
-        parameterFile <- validatedParameterFile
+        templateFile <- template
+        parameterFile <- parameters
         result <- DeploymentScriptProcessor.generateDeploymentFiles(
           pathingArtifact.scopeId,
           in.processorName,
-          templateFile,
-          parameterFile,
+          sandbox.source(templateFile._1).file,
+          sandbox.source(parameterFile._1).file,
           outputDir,
-          logDir
+          new DeploymentScriptWriter(processBuilder)
         ) match {
           case Success(r) =>
             log.debug(s"Command output:\n${r.response}")
@@ -156,15 +159,12 @@ import scala.util.Try
     r.get
   }
 
-  @node private def validateFile(
-      context: String,
-      dir: Directory,
-      fileWithContent: Option[(FileAsset, HashedContent)]): Either[CompilationMessage, FileAsset] = {
+  @node private def toSourceFile(context: String, dir: Directory, fileWithContent: Option[(FileAsset, HashedContent)])
+      : Either[CompilationMessage, (SourceUnitId, HashedContent)] = {
     fileWithContent match {
       case None => Left(CompilationMessage.error(s"$context file not found"))
       case Some((f, hc)) =>
-        val foundFile = SourceGenerator.validateFile(dir, f, hc)
-        foundFile.toRight(CompilationMessage.error(s"$f doesn't exist"))
+        Right(SourceFileId(dir.relativize(f), RelativePath(f.name)) -> hc)
     }
   }
 
@@ -190,14 +190,11 @@ object DeploymentScriptProcessor extends Log {
       templateFile: FileAsset,
       parameterFile: FileAsset,
       installLocation: Directory,
-      logDir: Directory,
-      writer: DeploymentScriptWriter = DeploymentScriptWriter
+      writer: DeploymentScriptWriter
   ): Try[DeploymentResponse] = {
-    val logFile =
-      logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$scopeId.deploymentScriptProcessor.log")
 
     log.info(s"Generating deployment scripts using $scopeId:$processorName")
-    writer.generateDeploymentScripts(templateFile, parameterFile, installLocation, scopeId, logFile)
+    writer.generateDeploymentScripts(templateFile, parameterFile, installLocation, scopeId)
   }
 
   def isCorrectFormatForDeployInstallation(outputDir: String): Boolean = {

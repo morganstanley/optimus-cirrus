@@ -13,7 +13,6 @@ package optimus.buildtool.generators
 
 import java.nio.file.Files
 import optimus.buildtool.artifacts.Artifact
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
@@ -26,23 +25,19 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.files.SourceFolder
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.GenerateSource
-import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AsyncUtils
 import optimus.buildtool.utils.CompilePathBuilder
-import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hide
-import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
 import scala.collection.immutable.{IndexedSeq, Seq}
-import scala.collection.immutable.SortedMap
 
 @entity class CppBridgeGenerator(scalac: AsyncClassFileCompiler, pathBuilder: CompilePathBuilder)
     extends SourceGenerator {
@@ -50,40 +45,34 @@ import scala.collection.immutable.SortedMap
 
   override type Inputs = CppBridgeGenerator.Inputs
 
+  override def templateType(configuration: Map[String, String]): PathFilter = SourceFolder.isScalaOrJavaSourceFile
+
   @node override def dependencies(scope: CompilationScope): IndexedSeq[Artifact] =
     scope.upstream.allCompileDependencies.apar.flatMap(_.resolution) ++
       scope.upstream.signaturesForOurCompiler
 
-  @node override protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
   ): Inputs = {
+    import templates._
+
+    val externalFiles = allExternalContent.keySet
     require(
-      externalFolders.isEmpty,
-      s"External folders not supported for cpp-bridge source generation: ${externalFolders.mkString(",")}"
+      externalFiles.isEmpty,
+      s"External folders not supported for cpp-bridge source generation: ${externalFiles.mkString(", ")}"
     )
 
-    val filter = sourceFilter && SourceFolder.isScalaOrJavaSourceFile
-    val templateContent = internalFolders.apar.map(_.findSourceFiles(filter)).merge[SourceUnitId]
-
-    val templatesFingerprint = scope.fingerprint(templateContent, s"Template:$name")
-    val configFingerprint = configuration.toSeq.map { case (k, v) => s"[Config:$name]$k=$v" }.sorted
     val dependenciesFingerprint = scope.scalaDependenciesFingerprint
-    val fingerprint = templatesFingerprint ++ configFingerprint ++ dependenciesFingerprint
 
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
+    val fingerprintHash = templates.hashFingerprint(configuration, dependenciesFingerprint)
 
-    val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
-      scope.upstream.allCompileDependencies.apar
-        .flatMap(_.transitiveExternalDependencies)
+    val allInputArtifacts: Seq[Artifact] = scope.upstream.signaturesForOurCompiler ++
+      scope.upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies)
 
     CppBridgeGenerator.Inputs(
-      name,
-      templateContent,
+      templates.toFiles,
       fingerprintHash,
       scope.config.scalacConfig,
       scope.config.javacConfig,
@@ -95,90 +84,67 @@ import scala.collection.immutable.SortedMap
     )
   }
 
-  @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
-    inputs().templateContent.nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset
-  ): Option[GeneratedSourceArtifact] = {
-    ObtTrace.traceTask(scopeId, GenerateSource) {
-      val resolvedInputs = inputs()
+      inputs: Inputs,
+      writer: ArtifactWriter
+  ): Option[GeneratedSourceArtifact] = writer.atomicallyWrite { tempJar =>
+    val tempDir = tempJar.parent.resolveDir(tempJar.name.stripSuffix(".jar"))
+    Utils.createDirectories(tempDir)
 
-      Utils.atomicallyWrite(outputJar) { tempOut =>
-        val tempJar = JarAsset(tempOut)
-        val tempDir = tempJar.parent.resolveDir(tempJar.name.stripSuffix(".jar"))
-        Utils.createDirectories(tempDir)
+    // we don't actually care about the compiled artifacts created, so just put them in a
+    // temporary location which we'll delete after the compilation. they do need to be in the `scala` directory
+    // though otherwise PathedArtifact validation will complain.
+    val tempOutputJar =
+      NamingConventions.tempFor(pathBuilder.scalaOutPath(scopeId, inputs.fingerprint.hash)).asJar
 
-        // we don't actually care about the compiled artifacts created, so just put them in a
-        // temporary location which we'll delete after the compile. they do need to be in the `scala` directory
-        // though otherwise PathedArtifact validation will complain.
-        val tempOutputJar =
-          NamingConventions.tempFor(pathBuilder.scalaOutPath(scopeId, resolvedInputs.fingerprint.hash)).asJar
+    val scalaOutDir = tempDir.resolveDir(CppBridgeGenerator.ScalaPath)
+    val cppOutDir = tempDir.resolveDir(CppBridgeGenerator.CppPath)
 
-        val scalaOutDir = tempDir.resolveDir(CppBridgeGenerator.ScalaPath)
-        val cppOutDir = tempDir.resolveDir(CppBridgeGenerator.CppPath)
-
-        val msgArtifact = scalac.messages(
+    AsyncUtils.asyncTry {
+      val messages = scalac
+        .messages(
           scopeId.copy(tpe = s"${scopeId.tpe}-${tpe.name}"),
           asNode(() => scalacInputs(scopeId, inputs, tempOutputJar, scalaOutDir, cppOutDir))
         )
+        .messages
 
-        val artifact = GeneratedSourceArtifact.create(
-          scopeId,
-          tpe,
-          resolvedInputs.generatorName,
-          outputJar,
-          CppBridgeGenerator.ScalaPath,
-          msgArtifact.messages
-        )
-        AsyncUtils.asyncTry {
-          SourceGenerator.createJar(
-            tpe,
-            resolvedInputs.generatorName,
-            CppBridgeGenerator.ScalaPath,
-            artifact.messages,
-            artifact.hasErrors,
-            tempJar,
-            tempDir
-          )()
-        } asyncFinally {
-          if (tempOutputJar.existsUnsafe) Files.delete(tempOutputJar.path)
-        }
-        Some(artifact)
-      }
+      writer.createArtifact(tempDir, tempJar, messages, CppBridgeGenerator.ScalaPath)()
+    } asyncFinally {
+      if (tempOutputJar.existsUnsafe) Files.delete(tempOutputJar.path)
     }
   }
 
-  @node private def scalacInputs(
+  @async private def scalacInputs(
       scopeId: ScopeId,
-      inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset,
+      inputs: Inputs,
+      tempOutputJar: JarAsset,
       scalaOutDir: Directory,
       cppOutDir: Directory
   ): SyncCompiler.Inputs = {
-    val resolvedInputs = inputs()
+    import inputs._
 
-    val pluginOptions = resolvedInputs.configuration ++ Map(
+    val sourceFiles = files.internalContent().map { case (k, v) => (k: SourceUnitId) -> v }
+
+    val pluginOptions = inputs.configuration ++ Map(
       "out" -> scalaOutDir.pathString,
       "outcpp" -> cppOutDir.pathString
-    ) ++ (if (!resolvedInputs.configuration.contains("project")) Map("project" -> scopeId.module) else Map.empty)
+    ) ++ (if (!inputs.configuration.contains("project")) Map("project" -> scopeId.module) else Map.empty)
 
     val bridgeParam = s"-P:${pluginOptions.map { case (k, v) => s"bridge:$k:$v" }.mkString(",")}"
-    val options = resolvedInputs.scalacConfig.options :+ bridgeParam
-    val scalaParams = resolvedInputs.scalacConfig.copy(options = options)
+    val options = inputs.scalacConfig.options :+ bridgeParam
+    val scalaParams = inputs.scalacConfig.copy(options = options)
 
     SyncCompiler.Inputs(
-      sourceFiles = resolvedInputs.templateContent,
-      fingerprint = resolvedInputs.fingerprint,
+      sourceFiles = sourceFiles,
+      fingerprint = fingerprint,
       bestPreviousAnalysis = Hide(None),
-      outPath = outputJar,
+      outPath = tempOutputJar,
       signatureOutPath = None,
       scalacConfig = scalaParams,
-      javacConfig = resolvedInputs.javacConfig,
-      inputArtifacts = resolvedInputs.allInputArtifacts,
-      pluginArtifacts = resolvedInputs.pluginArtifacts,
+      javacConfig = javacConfig,
+      inputArtifacts = allInputArtifacts,
+      pluginArtifacts = pluginArtifacts,
       outlineTypesOnly = false,
       saveAnalysisFiles = false,
       containsPlugin = false,
@@ -194,8 +160,7 @@ object CppBridgeGenerator {
   val CppPath: RelativePath = RelativePath("src/cpp")
 
   final case class Inputs(
-      generatorName: String,
-      templateContent: SortedMap[SourceUnitId, HashedContent],
+      files: SandboxedFiles,
       fingerprint: FingerprintArtifact,
       scalacConfig: ScalacConfiguration,
       javacConfig: JavacConfiguration,
@@ -203,14 +168,4 @@ object CppBridgeGenerator {
       pluginArtifacts: Seq[Seq[ClassFileArtifact]],
       configuration: Map[String, String]
   ) extends SourceGenerator.Inputs
-
-  import optimus.buildtool.cache.NodeCaching.reallyBigCache
-
-  // since _inputs holds the template files and the hash, it's important that it's frozen for the duration of
-  // a compilation (so that we're sure what we hashed is what we used for generation)
-  _inputs.setCustomCache(reallyBigCache)
-
-  // we want to guard against calling scalac more than once; normally this would happen by virtue of using
-  // reallyBigCache for AsyncScalaCompiler but we use a random output jar path so that cache won't save us
-  generateSource.setCustomCache(reallyBigCache)
 }

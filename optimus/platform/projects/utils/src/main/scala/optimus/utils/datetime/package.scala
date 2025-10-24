@@ -26,7 +26,6 @@ import java.time.chrono.ChronoZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.time.temporal.JulianFields
 import java.util.concurrent.TimeUnit
-
 import scala.math.Ordering.Implicits._
 
 package object datetime {
@@ -218,16 +217,21 @@ package object datetime {
     // types not covered here all extend Comparable of themselves which would be covered by the default ordering
     // for Comparable.
     //
-    implicit def localDateOrdering[T <: Comparable[ChronoLocalDate]]: Ordering[T] = new Ordering[T] {
-      override def compare(l: T, r: T): Int = l.compareTo(r.asInstanceOf[ChronoLocalDate])
-    }
-    implicit def localDateTimeOrdering[T <: Comparable[ChronoLocalDateTime[_]]]: Ordering[T] = new Ordering[T] {
-      override def compare(l: T, r: T): Int = l.compareTo(r.asInstanceOf[ChronoLocalDateTime[_]])
-    }
-    implicit def zonedDateTimeOrdering[T <: Comparable[ChronoZonedDateTime[_]]]: Ordering[T] = new Ordering[T] {
-      override def compare(l: T, r: T): Int = l.compareTo(r.asInstanceOf[ChronoZonedDateTime[_]])
-    }
+    // We want Orderings for the same class to compare equal, to optimize comparison of sorted sets
+    implicit def localDateOrdering[T <: Comparable[ChronoLocalDate]]: Ordering[T] =
+      OrderingImplicits.ComparableOrdering.asInstanceOf[Ordering[T]]
+    implicit def localDateTimeOrdering[T <: Comparable[ChronoLocalDateTime[_]]]: Ordering[T] =
+      OrderingImplicits.ComparableOrdering.asInstanceOf[Ordering[T]]
+    implicit def zonedDateTimeOrdering[T <: Comparable[ChronoZonedDateTime[_]]]: Ordering[T] =
+      OrderingImplicits.ComparableOrdering.asInstanceOf[Ordering[T]]
   }
 
-  object OrderingImplicits extends OrderingImplicits
+  object OrderingImplicits extends OrderingImplicits {
+    protected object ComparableOrdering extends Ordering[AnyRef] {
+      override def compare(x: AnyRef, y: AnyRef): Int = x.asInstanceOf[Comparable[AnyRef]].compareTo(y)
+    }
+  }
+  // synonym that will be less confusing when imported
+  val ChronoOrderingImplicits = OrderingImplicits
+
 }

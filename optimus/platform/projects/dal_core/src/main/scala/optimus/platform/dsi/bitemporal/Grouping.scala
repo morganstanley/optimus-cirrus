@@ -213,7 +213,7 @@ abstract class Grouping[TargetType](val id: RefHolder, val space: BitemporalSpac
 object EntityGrouping {
   type LockTokenType = Long
   implicit def ordering[T <: EntityGrouping]: Ordering[T] = new Ordering[T] {
-    override def compare(x: T, y: T): Int = RawReference.ordering.compare(x.id, y.id)
+    override def compare(x: T, y: T): Int = RawReference.orderingFixed.compare(x.id, y.id)
   }
   def mergeLinkedTypes(
       existingLinkedTypes: Option[LinkedTypes],

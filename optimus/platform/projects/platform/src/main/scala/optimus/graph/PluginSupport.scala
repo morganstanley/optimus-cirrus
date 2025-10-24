@@ -105,7 +105,7 @@ object PluginSupport {
         if (isExpandedIndex && !res.isInstanceOf[Iterable[_]] && !res.isInstanceOf[Array[_]])
           Seq(res).asInstanceOf[K]
         else res
-      val out = new PropertyMapOutputStream(referenceMap)
+      val out = new PropertyMapOutputStream(referenceMap, stableOrdering = true)
       out.writeStartArray()
       pickleRep(decoratedRes, out)
       out.writeEndArray()
@@ -118,7 +118,9 @@ object PluginSupport {
     final def entityToSerializedKey(e: E, referenceMap: collection.Map[Entity, EntityReference]): Seq[SerializedKey] = {
       val fieldInfos = e.$info.unsafeFieldInfo
       val fieldValues = ns.map { name =>
-        val out = new PropertyMapOutputStream(referenceMap)
+        // we sort unordered collections (e.g. HashSet, HashMap) because the DAL always compares collections in order,
+        // but we want Set(a, b) to equal Set(b, a) so must always pickle it as [a, b]
+        val out = new PropertyMapOutputStream(referenceMap, stableOrdering = true)
         fieldInfos.find(_.pinfo.name == name) match {
           case Some(fieldInfo) =>
             // the index field corresponds to a property, so use the standard property pickling mechanism which
@@ -724,7 +726,7 @@ object PluginSupport {
   import optimus.platform.storable.EntityReference
   final def getEntityReference(pnode: NodeKey[_]): Seq[EntityReference] = {
     pnode match {
-      case node: MaybePickledReference[_]         => getEntityReferenceFromPickledRepr(node, node.pickled)
+      case node: MaybePickledReference[_] => getEntityReferenceFromPickledRepr(node, node.pickled)
       // illegal cases
       case badNode: PropertyNode[_] =>
         throw new IllegalStateException(s"Unexpected node type $badNode ${badNode.getClass}")

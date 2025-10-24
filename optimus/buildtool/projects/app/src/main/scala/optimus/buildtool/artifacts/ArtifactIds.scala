@@ -57,6 +57,8 @@ object ExternalArtifactType {
   add(ClassJar)
   case object CppInclude extends ExternalArtifactType
   add(CppInclude)
+  case object MetadataXml extends ExternalArtifactType
+  add(MetadataXml)
 }
 
 private[buildtool] sealed trait ExternalArtifactId extends ArtifactId {

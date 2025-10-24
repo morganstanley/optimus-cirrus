@@ -50,8 +50,9 @@ trait ExpressionNormalizer {
   }
 
   def pickled(b: RelationElement, pickler: Pickler[_]): Any = b match {
-    case ConstValueElement(value, _) => PropertyMapOutputStream.pickledValue(value, pickler.asInstanceOf[Pickler[Any]])
-    case _                           => throw new IllegalStateException("Unexpected element: " + b)
+    case ConstValueElement(value, _) =>
+      PropertyMapOutputStream.pickledValue(value, pickler.asInstanceOf[Pickler[Any]], stableOrdering = true)
+    case _ => throw new IllegalStateException("Unexpected element: " + b)
   }
 
   def getConstOrFreevar(b: RelationElement): Any = b match {

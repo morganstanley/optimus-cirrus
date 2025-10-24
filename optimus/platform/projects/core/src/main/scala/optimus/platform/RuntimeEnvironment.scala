@@ -18,10 +18,6 @@ import optimus.platform.dal.EntityResolver
 import optimus.config.RuntimeComponents
 import msjava.slf4jutils.scalalog._
 import optimus.breadcrumbs.ChainedID
-import optimus.breadcrumbs.Breadcrumbs
-import optimus.breadcrumbs.crumbs.EventCrumb
-import optimus.breadcrumbs.crumbs.Events
-import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
 import optimus.graph.NodeTask
 import optimus.platform.RuntimeEnvironment.KnownNames
 import optimus.platform.util.PrettyStringBuilder
@@ -74,7 +70,6 @@ class RuntimeEnvironment private[optimus] (
     val config: RuntimeComponents,
     val entityResolver: EntityResolver
 ) extends ShutdownLifeCycle {
-  addShutdownAction { Breadcrumbs(id, new EventCrumb(_, RuntimeSource, Events.RuntimeShutDown)) }
   if (entityResolver ne null) addShutdownAction { entityResolver.close() }
 
   if ((entityResolver ne null) && (config ne null) && config.envName != KnownNames.EnvNone)
@@ -85,7 +80,6 @@ class RuntimeEnvironment private[optimus] (
       if ((config ne null) && (config.runtimeConfig ne null) && config.envName != KnownNames.EnvNone)
         config.runtimeConfig.rootID
       else ChainedID.create()
-    Breadcrumbs(ret, new EventCrumb(_, RuntimeSource, Events.RuntimeCreated))
     ret
   }
 

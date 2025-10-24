@@ -11,24 +11,21 @@
  */
 package optimus.buildtool.compilers
 
-import optimus.buildtool.app.OptimusBuildToolBootstrap
-import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilationMessage._
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagesMetadata
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.compilers.AsyncWebCompiler.Inputs
 import optimus.buildtool.compilers.npm.AsyncNpmCommandRunner
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.WebConfiguration
 import optimus.buildtool.files.Directory
-import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.SourceUnitId
+import optimus.buildtool.scope.sources.WebCompilationSources.NodeModules
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Web
 import optimus.buildtool.utils.AssetUtils
@@ -38,6 +35,7 @@ import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.SandboxFactory
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.exceptions.RTException
 import optimus.platform._
 
@@ -55,8 +53,7 @@ object AsyncWebCompiler {
       outputJar: JarAsset,
       webConfig: WebConfiguration,
       nodeVersion: String,
-      pnpmVersion: String,
-      inputArtifacts: Seq[Artifact]
+      pnpmVersion: String
   )
 }
 
@@ -72,12 +69,8 @@ object AsyncWebCompilerImpl {
 @entity private[buildtool] class AsyncWebCompilerImpl(
     pnpmStoreDir: Directory,
     sandboxFactory: SandboxFactory,
-    logDir: Directory,
-    useCrumbs: Boolean)
-    extends AsyncWebCompiler {
-  // one log file per scopeID, only be used for load debugging msg
-  private def webCmdLogFile(logDir: Directory, id: ScopeId): FileAsset =
-    logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$id.webCmd.log")
+    processBuilder: ExternalProcessBuilder
+) extends AsyncWebCompiler {
 
   @node override def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): InternalClassFileArtifact = {
     val resolvedInputs = inputs()
@@ -85,7 +78,6 @@ object AsyncWebCompilerImpl {
 
     val prefix = Utils.logPrefix(scopeId, Web)
     val trace = ObtTrace.startTask(scopeId, Web)
-    val logFile = webCmdLogFile(logDir, scopeId)
 
     NodeTry {
       log.info(s"${prefix}Starting compilation for mode ${webConfig.mode}")
@@ -113,20 +105,16 @@ object AsyncWebCompilerImpl {
                 nodeVersion,
                 pnpmVersion,
                 npmBuildCommands,
+                processBuilder,
                 sandbox.sourceDir,
-                pnpmStoreDir,
-                logFile,
-                useCrumbs
+                pnpmStoreDir
               )
-              BackgroundProcessBuilder
-                .lastLogLines(logFile, 500)
-                .foreach(log.debug(_)) // print max 500 lines for debugging
               writeNpmMetadata(sandbox.sourceDir, nodeVersion, pnpmVersion)
               executedCmdMsgs
             }
 
           // This is needed for special case when npm generates links between folders, also we don't want to include node_modules in the final bundle
-          val nodeModulesDir = sandbox.sourceDir.resolveDir("node_modules")
+          val nodeModulesDir = sandbox.sourceDir.resolveDir(NodeModules)
           // It's safe to call existsUnsafe here - node_modules folder might/might not exist depends on whether the
           // lock file is in sync with package.json, but it's RT relative to the input (package.json + lock file)
           if (nodeModulesDir.existsUnsafe) AssetUtils.recursivelyDelete(nodeModulesDir, throwOnFail = true)

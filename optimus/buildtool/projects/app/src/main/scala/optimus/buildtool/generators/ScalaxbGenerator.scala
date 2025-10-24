@@ -16,8 +16,6 @@ import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
@@ -25,15 +23,10 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
-import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.GenerateSource
-import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
-import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 import scalaxb.compiler.ConfigEntry._
@@ -41,49 +34,33 @@ import scalaxb.compiler._
 import scalaxb.compiler.xsd.Driver
 
 import scala.collection.compat._
-import scala.collection.immutable.SortedMap
 import scala.xml.Elem
 import scala.xml.Node
 
-@entity class ScalaxbGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
+@entity class ScalaxbGenerator extends SourceGenerator {
   override val generatorType: String = "scalaxb"
 
   override type Inputs = ScalaxbGenerator.Inputs
 
-  @node override protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+  override def templateType(configuration: Map[String, String]): PathFilter = ScalaxbGenerator.SourcePredicate
+
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
-  ): Inputs = {
-    val filePredicate = sourceFilter && ScalaxbGenerator.SourcePredicate
-
-    val (templateFiles, templateFingerprint) = SourceGenerator.templates(
-      internalFolders,
-      externalFolders,
-      filePredicate,
-      scope,
-      workspaceSourceRoot,
-      s"Template:$name"
-    )
+  ): ScalaxbGenerator.Inputs = {
 
     val pkg = configuration("package")
     val wrappedComplexTypes = configuration.get("wrappedComplexTypes").map(_.split(",").toIndexedSeq).getOrElse(Nil)
     val generateRuntime = configuration.get("generateRuntime").exists(_.toBoolean)
     val ignoreUnknown = configuration.get("ignoreUnknown").exists(_.toBoolean)
 
-    val fingerprint =
-      Seq(s"[scalaxb]${SourceGenerator.location[Driver].pathFingerprint}") ++
-        templateFingerprint ++
-        configuration.to(Seq).sorted.map { case (k, v) => s"[Configuration:$k]$v" }
-    val hashedFingerprint = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
+    val extraFingerprint = Seq(s"[scalaxb]${GeneratorUtils.location[Driver].pathFingerprint}")
+    val hashedFingerprint = templates.hashFingerprint(configuration, extraFingerprint)
 
     ScalaxbGenerator.Inputs(
-      name,
       pkg,
-      templateFiles,
+      templates.toFiles,
       wrappedComplexTypes,
       generateRuntime,
       ignoreUnknown,
@@ -91,74 +68,49 @@ import scala.xml.Node
     )
   }
 
-  @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
-    inputs().templateFiles.nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset
-  ): Option[GeneratedSourceArtifact] = {
-    val resolvedInputs = inputs()
-    import resolvedInputs._
-    ObtTrace.traceTask(scopeId, GenerateSource) {
-      val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
-        val tempJar = JarAsset(tempOut)
-        // Use a short temp dir name to avoid issues with too-long paths for generated .java files
-        val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
-        val outputDir = tempDir.resolveDir(ScalaxbGenerator.SourcePath)
-        Utils.createDirectories(outputDir)
+      inputs: ScalaxbGenerator.Inputs,
+      writer: ArtifactWriter
+  ): Option[GeneratedSourceArtifact] = writer.atomicallyWrite() { context =>
+    import inputs._
 
-        val cfg = {
-          val cfg = Config.default
-            .update(PackageNames(Map(None -> Some(pkg))))
-            .update(GeneratePackageDir)
-            .update(NamedAttributes)
-            .update(Outdir(outputDir.path.toFile))
-            .update(WrappedComplexTypes(wrappedComplexTypes.toList))
-          val ops = Seq[Config => Config](
-            if (ignoreUnknown) _.update(IgnoreUnknown) else identity,
-            if (!generateRuntime) _.remove(GenerateRuntime) else identity
-          )
-          ops.foldLeft(cfg) { (c, op) => op(c) }
-        }
-
-        val driver = new Driver
-        implicit val schema: CanBeRawSchema[(FileAsset, HashedContent), Node] = ScalaxbGenerator.Schema
-        implicit val writer: CanBeWriter[File] = ScalaxbGenerator.fileWriter(driver, cfg)
-        val generatedFiles = driver.processReaders(templateFiles.toSeq, cfg)._2
-
-        val sourcePath = ScalaxbGenerator.SourcePath
-        val message =
-          CompilationMessage(
-            None,
-            s"scalaxb[$generatorName]: ${generatedFiles.size} file(s) generated in package $pkg",
-            CompilationMessage.Info
-          )
-        val a = GeneratedSourceArtifact.create(
-          scopeId,
-          tpe,
-          generatorName,
-          outputJar,
-          sourcePath,
-          Seq(message)
-        )
-        SourceGenerator.createJar(tpe, generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
-        a
-      }
-      Some(artifact)
+    val cfg = {
+      val cfg = Config.default
+        .update(PackageNames(Map(None -> Some(pkg))))
+        .update(GeneratePackageDir)
+        .update(NamedAttributes)
+        .update(Outdir(context.outputDir.path.toFile))
+        .update(WrappedComplexTypes(wrappedComplexTypes.toList))
+      val ops = Seq[Config => Config](
+        if (ignoreUnknown) _.update(IgnoreUnknown) else identity,
+        if (!generateRuntime) _.remove(GenerateRuntime) else identity
+      )
+      ops.foldLeft(cfg) { (c, op) => op(c) }
     }
+
+    val driver = new Driver
+    implicit val schema: CanBeRawSchema[(FileAsset, HashedContent), Node] = ScalaxbGenerator.Schema
+    implicit val writer: CanBeWriter[File] = ScalaxbGenerator.fileWriter(driver, cfg)
+    val generatedFiles = driver.processReaders(files.content().toSeq, cfg)._2
+
+    val message =
+      CompilationMessage(
+        None,
+        s"${generatedFiles.size} file(s) generated in package $pkg",
+        CompilationMessage.Info
+      )
+
+    context.createArtifact(Seq(message))
   }
 }
 
 object ScalaxbGenerator extends Log {
-  private val SourcePath = RelativePath("src")
   private val SourcePredicate = Directory.fileExtensionPredicate("xsd")
 
   final case class Inputs(
-      generatorName: String,
       pkg: String,
-      templateFiles: SortedMap[FileAsset, HashedContent],
+      files: SandboxedFiles,
       wrappedComplexTypes: Seq[String],
       generateRuntime: Boolean,
       ignoreUnknown: Boolean,

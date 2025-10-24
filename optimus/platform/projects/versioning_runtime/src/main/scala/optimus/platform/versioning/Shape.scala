@@ -11,9 +11,11 @@
  */
 package optimus.platform.versioning
 
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.SerializedEntity
-import scala.collection.immutable.SortedMap
 import optimus.scalacompat.collection._
+
+import scala.collection.immutable.SortedMap
 import scala.collection.compat._
 
 /*
@@ -47,7 +49,7 @@ class Shape(className: SerializedEntity.TypeRef, fields: SortedMap[String, Field
     extends AbstractShape[FieldType](className, fields, isCanonical)
 
 object Shape {
-  def fromProperties(className: SerializedEntity.TypeRef, fields: Map[String, Any]) = {
+  def fromProperties(className: SerializedEntity.TypeRef, fields: PickledProperties): Shape = {
     val fieldTypes: SortedMap[String, FieldType] = fields.iterator
       .map { case (name, value) =>
         (name, FieldType.fromPickledValue(value))

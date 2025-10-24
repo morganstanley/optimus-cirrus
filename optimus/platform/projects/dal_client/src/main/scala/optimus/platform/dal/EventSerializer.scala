@@ -18,9 +18,7 @@ import optimus.entity.IndexInfo
 import optimus.graph.PropertyInfo
 import optimus.platform._
 import optimus.platform.internal.TemporalSource
-import optimus.platform.pickling.AbstractPickledOutputStream
-import optimus.platform.pickling.PickledMapWrapper
-import optimus.platform.pickling.PropertyMapOutputStream
+import optimus.platform.pickling._
 import optimus.platform.storable._
 import optimus.platform.temporalSurface._
 import optimus.platform.temporalSurface.advanced.TemporalContextUtils
@@ -59,7 +57,7 @@ sealed trait BusinessEventSerializer extends StorableSerializer {
 
   @async protected def getBusinessEvent(tc: HasTTContext)(
       ser: SerializedBusinessEvent,
-      props: Map[String, Any] = Map.empty,
+      props: PickledProperties = PickledProperties.empty,
       persisted: Boolean = true,
       forcePickle: Boolean = false): BusinessEvent = {
     val info = getInfo(ser)
@@ -104,7 +102,7 @@ sealed trait BusinessEventSerializer extends StorableSerializer {
     val types: Seq[String] = evt.$info.baseTypes.iterator.map { _.runtimeClass.getName }.toIndexedSeq
     val className = evt.getClass.getName
     val versionedProperties = {
-      val properties = PropertyMapOutputStream.pickledStorable(evt, entityReferences).asInstanceOf[Map[String, Any]]
+      val properties = PropertyMapOutputStream.pickledStorable(evt, entityReferences)
       val afterTransforms = TransformerRegistry.versionToWrite(className, properties, 0, TemporalSource.loadContext).get
       require(afterTransforms.isDefinedAt(0) && afterTransforms.size == 1, "events should only be written at slot 0")
       TransformerRegistry.executeForcedWriteTransform(className, afterTransforms(0), TemporalSource.loadContext)
@@ -200,14 +198,17 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
         deserContainedSe(se, results)
       case seq: collection.Seq[_] => seq.foreach(deserRefProperty(_, results))
       case set: Set[_]            => set.foreach(deserRefProperty(_, results))
-      case m: Map[_, _] => m.foreach { case (k, v) => deserRefProperty(k, results) -> deserRefProperty(v, results) }
-      case _            =>
+      case m: PickledProperties =>
+        m.foreach { case (k, v) => deserRefProperty(k, results) -> deserRefProperty(v, results) }
+      case m: Map[_, _] if PickledProperties.checkPickledPropertiesAsMapsAllowed(m) =>
+        m.foreach { case (k, v) => deserRefProperty(k, results) -> deserRefProperty(v, results) }
+      case _ =>
     }
 
     // not a node, there's a mutable array in the args
     private def deserContainedSe(se: SerializedEntity, results: mutable.ArrayBuffer[EntityReference]): Unit = {
       val restoredSe = ContainedEntitySerializer.restoreLinkageProperties(se)
-      val props = restoredSe.properties.map { case (k: String, propVal) =>
+      val props = restoredSe.properties.mapProps { case (k: String, propVal) =>
         k -> deserRefProperty(propVal, results)
       }
       results += restoredSe.copySerialized(properties = props).entityRef
@@ -249,17 +250,23 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
         }
       case seq: collection.Seq[_] => seq.aseq.map(deserRefProperty)
       case set: Set[_]            => set.aseq.map(deserRefProperty)
-      case m: Map[_, _]           => m.aseq.map { case (k, v) => deserRefProperty(k) -> deserRefProperty(v) }
-      case o                      => o
+      case m: PickledProperties =>
+        m.aseq.map { case (k, v) =>
+          deserRefProperty(k).asInstanceOf[String] -> deserRefProperty(v)
+        }(pickledPropertiesBuildFrom)
+      case m: Map[_, _] if PickledProperties.checkPickledPropertiesAsMapsAllowed(m) =>
+        m.aseq.map { case (k, v) => deserRefProperty(k) -> deserRefProperty(v) }
+      case o => o
     }
 
     // This is @node to avoid duplicate deserialization for the same entity.
     @node private def deserContainedSe(se: SerializedEntity): Entity = {
       // Use of .aseq is intentional here.
       val restoredSe = ContainedEntitySerializer.restoreLinkageProperties(se)
+
       val props = restoredSe.properties.aseq.map { case (k: String, propVal) =>
         k -> deserRefProperty(propVal)
-      }
+      }(pickledPropertiesBuildFrom)
       val storageInfo = getContained(se.entityRef) match {
         case AppliedHeapEntity(_) => AppliedStorageInfo
         case UniqueHeapEntity(_)  => UniqueStorageInfo
@@ -423,26 +430,32 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
   @async private def replaceRefs(
       prop: Any,
       erefMap: Map[EntityReference, Entity]
-  ): Any = prop match {
-    case r: EntityReference     => erefMap(r)
-    case seq: collection.Seq[_] => seq.aseq.map(replaceRefs(_, erefMap))
-    case set: Set[_]            => set.aseq.map(replaceRefs(_, erefMap))
-    case m: Map[_, _]           => m.aseq.map { case (k, v) => replaceRefs(k, erefMap) -> replaceRefs(v, erefMap) }
-    case o                      => o
+  ): Any = {
+    prop match {
+      case r: EntityReference     => erefMap(r)
+      case seq: collection.Seq[_] => seq.aseq.map(replaceRefs(_, erefMap))
+      case set: Set[_]            => set.aseq.map(replaceRefs(_, erefMap))
+      case m: PickledProperties =>
+        m.aseq.map { case (k, v) =>
+          replaceRefs(k, erefMap).asInstanceOf[String] -> replaceRefs(v, erefMap)
+        }(pickledPropertiesBuildFrom)
+      case m: Map[_, _] if PickledProperties.checkPickledPropertiesAsMapsAllowed(m) =>
+        m.aseq.map { case (k, v) => replaceRefs(k, erefMap) -> replaceRefs(v, erefMap) }
+      case o => o
+    }
   }
 
   // Gives back Business Event and Map of temporary Entities with erefs to persist later
   @async def deserialize[T <: BusinessEvent with ContainedEvent](
       serMsg: SerializedContainedEvent
   ): (T, Map[EntityReference, Entity]) = {
-
     val ser = serMsg.sbe
     val erefToContainedEntityMap = serMsg.entityMap
     val deser = ContainedEntityDeserializer(erefToContainedEntityMap)
     // Note: we don't expect 2 entries with same eref - if we did have duplicates this would keep only one in the map
     val erefMap = deser.deserEnts.map { case (serializedWithEref, entity) => serializedWithEref.eref -> entity }
 
-    val evtProps = ser.properties.aseq.map { case (k, v) => k -> replaceRefs(v, erefMap) }
+    val evtProps = ser.properties.aseq.map { case (k, v) => k -> replaceRefs(v, erefMap) }(pickledPropertiesBuildFrom)
 
     val persisted = ser.tt != null
     val ret = getBusinessEvent(TemporalSource.loadContext)(ser, evtProps, persisted, forcePickle = true)

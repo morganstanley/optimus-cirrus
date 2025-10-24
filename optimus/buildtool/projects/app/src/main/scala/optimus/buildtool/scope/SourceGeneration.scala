@@ -13,12 +13,14 @@ package optimus.buildtool.scope
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
+import optimus.buildtool.generators.ArtifactWriter
 import optimus.buildtool.generators.GeneratorType
+import optimus.buildtool.generators.GeneratorUtils
 import optimus.buildtool.generators.SourceGenerator
 import optimus.buildtool.trace.GenerateSource
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
@@ -34,45 +36,60 @@ import optimus.platform._
       if (ScopedCompilation.generate(artifactType)) {
         val dependencyErrors = Artifact.onlyErrors(gen.dependencies(scope))
         dependencyErrors.getOrElse {
-          val inputs =
-            gen.inputs(
-              cfg.name,
-              cfg.internalTemplateFolders.apar.map { p =>
-                val d = scope.config.paths.absScopeRoot.resolveDir(p)
-                scope.directoryFactory.lookupSourceFolder(scope.config.paths.workspaceSourceRoot, d)
-              },
-              cfg.externalTemplateFolders.apar.map(scope.directoryFactory.reactive),
-              cfg.sourceFilter,
-              cfg.configuration,
-              scope
-            )
+          val generatorId = GeneratorUtils.generatorId(gen.tpe, cfg.name)
 
-          val genType = generatorType.name
-          val discriminator = GeneratedSourceArtifact.discriminator(generatorType, cfg.name)
-          val tpeStr = if (cfg.name == genType) genType else s"$genType (${cfg.name})"
+          val internalFolders = cfg.internalTemplateFolders.apar.map { p =>
+            val d = scope.config.paths.absScopeRoot.resolveDir(p)
+            scope.directoryFactory.lookupSourceFolder(scope.config.paths.workspaceSourceRoot, d)
+          }
+
+          val externalFolders = cfg.externalTemplateFolders.apar.map(scope.directoryFactory.reactive)
+
+          val inputs = gen.inputs(
+            asNode { () =>
+              GeneratorUtils.sandboxTemplates(
+                scope.sandboxFactory,
+                scope.config.paths.workspaceSourceRoot,
+                generatorId,
+                internalFolders,
+                externalFolders,
+                gen.templateType(cfg.configuration) && cfg.sourceFilter,
+                scope
+              )
+            },
+            cfg.configuration,
+            scope
+          )
+
+          val discriminator = GeneratorUtils.discriminator(generatorType, cfg.name)
+          val category = GenerateSource(generatorType, cfg.name)
 
           val fingerprint = inputs().fingerprint
-          val genSources = if (gen.containsRelevantSources(inputs) || gen.tpe.name == "podcast") {
+          val genSources = if (gen.containsRelevantSources(inputs)) {
             val fingerprintHash = fingerprint.hash
             scope.cached(artifactType, discriminator, fingerprint.hash) {
-              val outputJar =
-                scope.pathBuilder
-                  .outputPathFor(scope.id, fingerprintHash, gen.artifactType, discriminator)
-                  .asJar
-              log.info(s"[${scope.id}] Starting $tpeStr source generation")
-              val artifacts = gen.generateSource(scope.id, inputs, outputJar)
-              if (!artifacts.exists(_.hasErrors)) log.info(s"[${scope.id}] Completing $tpeStr source generation")
-              else Utils.FailureLog.error(s"[${scope.id}] Completing $tpeStr source generation with errors")
-              artifacts
+              ObtTrace.traceTask(scope.id, category) {
+                val outputJar =
+                  scope.pathBuilder
+                    .outputPathFor(scope.id, fingerprintHash, gen.artifactType, discriminator)
+                    .asJar
+                log.info(s"[${scope.id}] Starting $generatorId source generation")
+                val artifactWriter = ArtifactWriter(scope.id, generatorType, cfg.name, outputJar)
+                val artifacts = gen.generateSource(scope.id, inputs, artifactWriter)
+                if (!artifacts.exists(_.hasErrors)) log.info(s"[${scope.id}] Completing $generatorId source generation")
+                else Utils.FailureLog.error(s"[${scope.id}] Completing $generatorId source generation with errors")
+                artifacts
+              }
             }
           } else {
             val messages =
-              Seq(CompilationMessage.error(s"[${scope.id}] No relevant sources found for $tpeStr source generation"))
+              Seq(
+                CompilationMessage.error(s"[${scope.id}] No relevant sources found for $generatorId source generation"))
             Seq(
               InMemoryMessagesArtifact(
                 InternalArtifactId(scope.id, gen.artifactType, discriminator),
                 messages,
-                GenerateSource))
+                category))
           }
           genSources :+ fingerprint
         }

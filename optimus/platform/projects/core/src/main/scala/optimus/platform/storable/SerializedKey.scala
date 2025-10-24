@@ -12,6 +12,7 @@
 package optimus.platform.storable
 import com.fasterxml.jackson.annotation.JsonCreator
 import optimus.graph.DiagnosticSettings
+import optimus.platform.pickling.PickledProperties
 
 class SerializedKey(
     val typeName: String,
@@ -37,7 +38,7 @@ class SerializedKey(
       indexed: Boolean,
       refFilter: Boolean,
       serializedSizeOpt: Option[Int]) =
-    this(typeName, SortedPropertyValues(properties), unique, indexed, refFilter, serializedSizeOpt)
+    this(typeName, SortedPropertyValues(PickledProperties(properties)), unique, indexed, refFilter, serializedSizeOpt)
 
   def isKey: Boolean = unique && !indexed
 
@@ -101,8 +102,17 @@ object SerializedKey {
       serializedSizeOpt: Option[Int] = None): SerializedKey =
     new SerializedKey(typeName, SortedPropertyValues(props), unique, indexed, refFilter, serializedSizeOpt)
 
+  def fromPickledProperties(
+      typeName: String,
+      props: PickledProperties,
+      unique: Boolean = true,
+      indexed: Boolean = false,
+      refFilter: Boolean = false,
+      serializedSizeOpt: Option[Int] = None): SerializedKey =
+    new SerializedKey(typeName, SortedPropertyValues(props), unique, indexed, refFilter, serializedSizeOpt)
+
   implicit val ordering: Ordering[SerializedKey] = (l: SerializedKey, r: SerializedKey) =>
     if (useNewEquals) l.compareTo(r) else l.compareMetaType(r)
 
-  val useNewEquals = DiagnosticSettings.getBoolProperty("SerializedKey.useNewEquals", true)
+  private val useNewEquals = DiagnosticSettings.getBoolProperty("SerializedKey.useNewEquals", true)
 }

@@ -29,6 +29,7 @@ import optimus.buildtool.files.PathedEntity
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.generators.GeneratorType
+import optimus.buildtool.generators.GeneratorUtils
 import optimus.buildtool.resolvers.DependencyInfo
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace
@@ -235,6 +236,32 @@ object ExternalBinaryArtifact {
   }
 }
 
+@entity private[buildtool] final class ExternalMetadataArtifact(
+    val id: ExternalArtifactId,
+    val isMaven: Boolean,
+    val file: FileAsset,
+) extends ExternalHashedArtifact {
+  type ThisCachedArtifact = ExternalMetadataArtifact.CachedExternalMetadataArtifact
+
+  def cached: ExternalMetadataArtifact.CachedExternalMetadataArtifact =
+    ExternalMetadataArtifact.CachedExternalMetadataArtifact(id, isMaven, file)
+  @node override protected def contentsHash: String = Hashing.hashFileContent(file)
+  override def path: Path = file.path
+
+  @node def copy(newFile: FileAsset): ExternalMetadataArtifact =
+    ExternalMetadataArtifact(id, isMaven, newFile)
+}
+
+object ExternalMetadataArtifact {
+  final case class CachedExternalMetadataArtifact(
+      id: ExternalArtifactId,
+      isMaven: Boolean,
+      file: FileAsset
+  ) extends CachedArtifact[ExternalMetadataArtifact] {
+    @entersGraph override def asEntity: ExternalMetadataArtifact = ExternalMetadataArtifact(id, isMaven, file)
+  }
+}
+
 @entity private[buildtool] sealed trait MessagesArtifact extends Artifact {
   def id: InternalArtifactId
   def messages: Seq[CompilationMessage]
@@ -329,13 +356,13 @@ object FingerprintArtifact {
   override val id: InternalArtifactId = InternalArtifactId(
     scopeId,
     ArtifactType.GeneratedSource,
-    GeneratedSourceArtifact.discriminator(generatorType, generatorName)
+    GeneratorUtils.discriminator(generatorType, generatorName)
   )
-  override val taskCategory: MessageTrace = trace.GenerateSource
+  override val taskCategory: MessageTrace = trace.GenerateSource(generatorType, generatorName)
 
   override def path: Path = sourceJar.path
 
-  def generator: String = GeneratedSourceArtifact.generator(generatorType, generatorName)
+  def generator: String = GeneratorUtils.generatorId(generatorType, generatorName)
 
   @node def hashedContent(filter: PathFilter = NoFilter): SortedMap[SourceUnitId, HashedContent] = {
     Jars.withJar(sourceJar) { root =>
@@ -398,12 +425,6 @@ object GeneratedSourceArtifact {
       messages,
       MessagesArtifact.hasErrors(messages)
     )
-
-  def generator(generatorType: GeneratorType, generatorName: String): String =
-    if (generatorType.name == generatorName) generatorName else s"${generatorType.name}-$generatorName"
-
-  def discriminator(generatorType: GeneratorType, generatorName: String): Option[String] =
-    Some(generator(generatorType, generatorName))
 }
 
 @entity private[buildtool] sealed trait ClassFileArtifact extends HashedArtifact {
@@ -704,6 +725,7 @@ object InternalClassFileArtifact {
   override def path: Path = file.path
   override val taskCategory: CategoryTrace = trace.Cpp
 
+  // noinspection MutatorLikeMethodIsParameterless
   def releaseFile: Option[FileInJarAsset] = release.map(f => FileInJarAsset(file, f))
   def debugFile: Option[FileInJarAsset] = debug.map(f => FileInJarAsset(file, f))
 
@@ -989,7 +1011,8 @@ object PathingArtifact {
         taskCategory,
         hasErrors,
         result.finalDependencies,
-        result.mappedDependencies
+        result.mappedDependencies,
+        result.resolvedMetadataArtifacts.map(_.cached)
       ),
       replace = false
     )
@@ -1012,7 +1035,8 @@ object ResolutionArtifact {
       taskCategory: trace.ResolveTrace,
       hasErrors: Boolean,
       transitiveDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
-      mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]]
+      mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
+      resolvedMetadataArtifacts: Seq[CachedArtifact[ExternalHashedArtifact]]
   )
 
   @node def create(
@@ -1228,7 +1252,7 @@ object CompilerMessagesArtifact {
       zip = false
     )
 
-  def withTimestamp(newTimestamp: Instant) =
+  def withTimestamp(newTimestamp: Instant): LocatorArtifact =
     LocatorArtifact(scopeId, analysisType, locatorFile, commitHash, artifactHash, newTimestamp)
 
   def summary: String = s"${commitHash.getOrElse("NOCOMMIT")} ($timestamp)"

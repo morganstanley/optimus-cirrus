@@ -143,7 +143,7 @@ object SchedulerDiagnosticUtils {
   private def endOfWaitChainIsAdapted(ctx: OGScheduler.Context): Boolean = {
     val forwardChain = ctx.awaitedTask.visitForwardChain()
     val endOfChain = forwardChain.get(forwardChain.size - 1)
-    endOfChain.isAdapted
+    endOfChain.isAdapted || endOfChain.hasPluginType
   }
 
   def getThreadIds(waitWorkQueues: Iterable[ContextSnapshot]): Array[Long] = {

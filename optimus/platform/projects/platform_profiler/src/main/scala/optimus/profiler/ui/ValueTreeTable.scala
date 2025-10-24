@@ -46,10 +46,10 @@ import optimus.profiler.ui.common.JPopupMenu2
 import java.util.Objects
 import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{mutable => m}
 import scala.util.control.NonFatal
 
-class RowID(val id: Any, val defOpen: Boolean = false) extends Ordered[RowID] {
+abstract sealed class RowID(val id: Any) extends Ordered[RowID] {
+  def defOpen: Boolean = false
   def typePrecedence: Int = 0
   def compareID(that: RowID): Int = id.toString.compareTo(that.id.toString)
   def title(raw: Boolean): String = id.toString
@@ -61,48 +61,61 @@ class RowID(val id: Any, val defOpen: Boolean = false) extends Ordered[RowID] {
     if (diffType == 0) compareID(that) else diffType
   }
 }
-class RowIDInt(i: Int) extends RowID(i) {
-  override def typePrecedence: Int = 1
-  override def compareID(that: RowID): Int = i - that.id.asInstanceOf[Int]
-}
-class RowIDString(i: String, defOpen: Boolean) extends RowID(i, defOpen) { override def typePrecedence: Int = 2 }
-class RowIDField(f: Field) extends RowID(f) {
-  override def typePrecedence: Int = 3
-  override def title(raw: Boolean): String = {
-    val fieldName = f.getName
-    if (raw) fieldName
-    else {
-      val index = fieldName.lastIndexOf('$')
-      if (index > 0) {
-        // ie, if it contains '$$', just drop everything up to that, the 'real name' follows
-        if ('$'.equals(fieldName.charAt(index - 1)))
-          fieldName.drop(index + 1)
-        else
-          // otherwise, if field name ends with $n for some int n, drop it, the 'real name' is the prefix
-          fieldName.substring(0, index)
-      } else fieldName
+
+object RowID {
+  abstract sealed class StringId(id: String, override final val defOpen: Boolean) extends RowID(id)
+
+  final class OfInt(i: Int) extends RowID(i) {
+    override def typePrecedence: Int = 1
+    override def compareID(that: RowID): Int = i - that.id.asInstanceOf[Int]
+  }
+  def ofInt(i: Int) = new OfInt(i)
+
+  final class OfString(i: String, defaultOpen: Boolean = false) extends StringId(i, defaultOpen) {
+    override def typePrecedence: Int = 2
+  }
+  def ofString(s: String, defaultOpen: Boolean = false) = new OfString(s, defaultOpen)
+
+  final class OfField(f: Field) extends RowID(f) {
+    override def typePrecedence: Int = 3
+    override def title(raw: Boolean): String = {
+      val fieldName = f.getName
+      if (raw) fieldName
+      else {
+        val index = fieldName.lastIndexOf('$')
+        if (index > 0) {
+          // ie, if it contains '$$', just drop everything up to that, the 'real name' follows
+          if ('$'.equals(fieldName.charAt(index - 1)))
+            fieldName.drop(index + 1)
+          else
+            // otherwise, if field name ends with $n for some int n, drop it, the 'real name' is the prefix
+            fieldName.substring(0, index)
+        } else fieldName
+      }
     }
   }
-}
-class RowIDNode(p: AnyRef, defOpen: Boolean) extends RowID(p, defOpen) {
-  override def typePrecedence: Int = 4
-}
-class RowIDScenarioStack(stack: ScenarioStack) extends RowIDString("Scenario", true) {
-  override def typePrecedence: Int = -1
-  override def foreground: Color = if (stack._cacheID.isInstanceOf[MutableSSCacheID]) Color.red else null
-}
-object RowIDScenario extends RowIDString("Scenario", true) {
-  override def typePrecedence: Int = -1
-}
-object RowID {
-  def apply(v: Int): RowID = new RowIDInt(v)
-  def apply(v: String): RowID = new RowIDString(v, false)
-  def apply(v: Field): RowID = new RowIDField(v)
-  def apply(v: AnyRef, defOpen: Boolean): RowID = new RowIDNode(v, defOpen)
-  def apply(v: ScenarioStack): RowID = new RowIDScenarioStack(v)
+  def ofField(f: Field) = new OfField(f)
+
+  final class OfNode(p: AnyRef, override val defOpen: Boolean) extends RowID(p) {
+    override def typePrecedence: Int = 4
+  }
+  def ofNode(node: AnyRef, defOpen: Boolean) = new OfNode(node, defOpen)
+
+  final class OfScenarioStack(stack: ScenarioStack) extends StringId("Scenario", true) {
+    override def title(raw: Boolean): String = super.title(raw)
+    override def typePrecedence: Int = -1
+    override def foreground: Color = if (stack._cacheID.isInstanceOf[MutableSSCacheID]) Color.red else null
+  }
+  def ofScenarioStack(stack: ScenarioStack) = new OfScenarioStack(stack)
+
+  final object OfScenario extends StringId("Scenario", true) {
+    override def typePrecedence: Int = -1
+  }
+
 }
 
-class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, var level: Int) extends NPTreeNode {
+class ValueViewRow(id: RowID, val values: Seq[ValueMaybe], val diffs: SelectionFlag, var level: Int)
+    extends NPTreeNode {
   var children: Array[ValueViewRow] = _
   def rowID: RowID = id
   open = id.defOpen
@@ -110,21 +123,21 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
 
   override def title: String = rowID.title(ValueTreeTable.showRawNames.get)
 
-  private def extractValues(v: Any, fields: m.HashMap[RowID, Any]): Unit = {
+  private def extractValues(v: Any, fields: ColumnBuilder): Unit = {
     v match {
       case e: Entity =>
         // two entities are only the same if they have the same storage info
-        fields.put(RowID("storageInfo"), e.dal$storageInfo)
+        fields.put(RowID.ofString("storageInfo"), e.dal$storageInfo)
         // For entities, we always want to see their fields, even if they eg extend Iterable
         ValueTreeTable.fieldExpander(v, fields)
       case arr: Array[_] =>
         for (idx <- arr.indices) {
-          val rowIndex = RowID(idx)
+          val rowIndex = RowID.ofInt(idx)
           fields.put(rowIndex, arr(idx))
         }
       case seq: Iterable[_] =>
         for ((elem, idx) <- seq.zipWithIndex) {
-          val name = RowID(idx)
+          val name = RowID.ofInt(idx)
           fields.put(name, elem)
         }
       case v if !ValueTreeTable.showRawValues.get && v != null && ValueTreeTable.customExpander.contains(v.getClass) =>
@@ -136,9 +149,9 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
         ValueTreeTable.fieldExpander(node, fields)
         if (!ValueTreeTable.showInternalValues.get) {
           if (node.isDoneWithException)
-            fields.put(RowID("Exception"), node.exception())
+            fields.put(RowID.ofString("Exception"), node.exception())
           else
-            fields.put(RowID("Result"), node.resultObjectEvenIfIncomplete())
+            fields.put(RowID.ofString("Result"), node.resultObjectEvenIfIncomplete())
         }
       case v if (v != null) && !ValueTreeTable.ignoreClasses.contains(v.getClass) =>
         ValueTreeTable.fieldExpander(v, fields)
@@ -146,51 +159,51 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
     }
   }
 
-  def refreshChildren(currentRowStates: Map[RowID, RowState] = Map.empty[RowID, RowState]): Unit = {
-    val idSet = m.HashSet.empty[RowID]
-    val fieldMapForColumn = new Array[m.HashMap[RowID, Any]](values.length)
-    for (vi <- values.indices) { // For each column (ie each node we are comparing)
-      val fields = m.HashMap.empty[RowID, Any] // Buckets of values (ie fields to display for each node)
-      fieldMapForColumn(vi) = fields
-      extractValues(values(vi), fields) // this is the field expansion that depends on selected config
-      idSet ++= fields.keys
+  def refreshChildren(currentRowStates: Map[RowID, RowState] = Map.empty): Unit = {
+    val builder = TableBuilder.create(values.length)
+    values.zipWithIndex.foreach {
+      case (ValuePresent(v), i) =>
+        extractValues(v, builder.column(i))
+      case ow => ()
     }
+    children = builder
+      .result { row =>
+        val currentRowState = currentRowStates.get(row.id)
+        // Walk through all the values on the row, and compare them until one of the comparison produces something other
+        // than "not flagged".
+        val valsDiffer =
+          if (row.values.isEmpty) SelectionFlags.NotFlagged
+          else {
+            val (head, others) = (row.values.head, row.values.tail)
 
-    val unsortedChildren = idSet.iterator.map { rowID =>
-      val newValues = new Array[Any](values.length)
-      val currentRowState = currentRowStates.get(rowID)
-      var valsDiffer = SelectionFlags.NotFlagged
-      for (vi <- values.indices) {
-        val valueOfCurrentRow = fieldMapForColumn(vi).get(rowID)
-        if (valueOfCurrentRow.isDefined) {
-          val fld = valueOfCurrentRow.get
-          newValues(vi) = fld
-          newValues(vi) match {
-            case value: AnyRef =>
-              for (v <- values if v.isInstanceOf[AnyRef])
-                if (v.asInstanceOf[AnyRef] eq value) newValues(vi) = null // avoid endless recursion
-            case _ =>
+            currentRowState match {
+              // Don't re-diff if we already did it.
+              case Some(state) => state.hasDiffs
+              case None =>
+                others
+                  .foldLeft((SelectionFlags.NotFlagged, head)) {
+                    case ((SelectionFlags.NotFlagged, prevOrNone), valueOrNone) =>
+                      (prevOrNone, valueOrNone) match {
+                        case (ValueMissing, ValueMissing) =>
+                          (SelectionFlags.NotFlagged, ValueMissing)
+                        case (ValuePresent(_), ValueMissing) | (ValueMissing, ValuePresent(_)) =>
+                          (SelectionFlags.EqualDiff, ValueMissing) // We may want to use a different flag in that case?
+                        case (ValuePresent(prev), ValuePresent(value)) =>
+                          (ValueTreeTable.rowsAreDifferent(value, prev), ValuePresent(value))
+                      }
+                    case ((flagged, _), v) => (flagged, v)
+                  }
+                  ._1
+            }
           }
 
-          if (currentRowState.isDefined) // don't redo the comparison if we already have it for a given row
-            valsDiffer = currentRowState.get.hasDiffs
-          else if (vi > 0 && valsDiffer == SelectionFlags.NotFlagged) {
-            val currentValue = newValues(vi)
-            val compareTo = newValues(0)
-            valsDiffer = ValueTreeTable.rowsAreDifferent(currentValue, compareTo)
-          }
-        } else if (vi > 0 && newValues(0) != null) {
-          valsDiffer = SelectionFlags.EqualDiff
-        }
+        val newRow = new ValueViewRow(row.id, row.values, valsDiffer, level + 1)
+        // if we had a corresponding previous child, keep its expanded/collapsed state, otherwise take the rowID default
+        currentRowState.foreach { current => newRow.open = current.open }
+        newRow
       }
-      val newRow = new ValueViewRow(rowID, newValues, valsDiffer, level + 1)
-      // if we had a corresponding previous child, keep its expanded/collapsed state, otherwise take the rowID default
-      if (currentRowState.isDefined)
-        newRow.open = currentRowState.get.open
-      newRow
-    }.toIndexedSeq
-
-    children = unsortedChildren.sortBy(_.rowID).toArray
+      .sortBy(_.rowID)
+      .to(Array)
   }
 
   def getChildren: Iterable[NPTreeNode] =
@@ -228,14 +241,6 @@ object ValueTreeTable {
   private[ui] var showInternalValues = DbgPreference("showInternalValues", pref)
   private[ui] var showRawNames = DbgPreference("showRawNames", pref)
 
-  def calculateAverageColumnWidth(totalColumnWidth: Int, nameColumnWidth: Int, totalColumnCount: Int): Int = {
-    if (nameColumnWidth != 0 && totalColumnCount != 1) {
-      (totalColumnWidth - nameColumnWidth) / (totalColumnCount - 1)
-    } else {
-      totalColumnWidth / totalColumnCount
-    }
-  }
-
   def hidePackage(cls: Class[_]): Boolean = {
     if (ValueTreeTable.showInternalValues.get) false
     else {
@@ -266,7 +271,7 @@ object ValueTreeTable {
       }
       .result()
 
-  type CustomExpanderF[-T] = (T, m.HashMap[RowID, Any]) => Unit
+  type CustomExpanderF[-T] = (T, ColumnBuilder) => Unit
   private[ui] val customExpander: ClassDispatcher[CustomExpanderF] = ClassDispatcher
     .newBuilder[CustomExpanderF]
     .put[NodeHash] { (nh, fields) =>
@@ -274,48 +279,48 @@ object ValueTreeTable {
         // Expand as node if possible
         ValueTreeTable.fieldExpander(nh.dbgKey, fields)
       } else {
-        fields.put(RowID("property"), nh.property.fullName())
-        fields.put(RowID("entity hash"), s"#${nh.entityHash.toHexString}")
-        fields.put(RowID("args hash"), s"#${nh.argsHash.toHexString}")
+        fields.put(RowID.ofString("property"), nh.property.fullName())
+        fields.put(RowID.ofString("entity hash"), s"#${nh.entityHash.toHexString}")
+        fields.put(RowID.ofString("args hash"), s"#${nh.argsHash.toHexString}")
       }
     }
     .put[RecordedTweakables]((rt, fields) => {
       // Compare as a set because that is how we decide to cache or not, so it's more useful in our Tweak Dependencies
       // view:
-      if (rt.tweakable.nonEmpty) fields.put(RowID("tweakable"), rt.tweakable.to(Set))
-      if (rt.tweakableHashes.nonEmpty) fields.put(RowID("tweakableHashes"), rt.tweakableHashes.to(Set))
+      if (rt.tweakable.nonEmpty) fields.put(RowID.ofString("tweakable"), rt.tweakable.to(Set))
+      if (rt.tweakableHashes.nonEmpty) fields.put(RowID.ofString("tweakableHashes"), rt.tweakableHashes.to(Set))
 
       for (ttn <- rt.tweaked) {
         val tweak = ttn.tweak
         val key = if (tweak ne null) tweak.target else ttn.key // consider underStackOf for target?
         val value = ttn
         val defOpen = if (ttn.nested eq null) false else !ttn.nested.isEmpty
-        fields.put(new RowIDNode(key, defOpen), value)
+        fields.put(RowID.ofNode(key, defOpen), value)
       }
     })
     .put[TweakTreeNode]((ttn, fields) => {
-      fields.put(RowID("tweak"), ttn.tweak)
-      if (ttn.nested != null && !ttn.nested.isEmpty) fields.put(RowIDScenario, ttn.nested)
+      fields.put(RowID.ofString("tweak"), ttn.tweak)
+      if (ttn.nested != null && !ttn.nested.isEmpty) fields.put(RowID.OfScenario, ttn.nested)
     })
     .put[Tweak]((tweak, fields) => {
-      fields.put(RowID("target"), tweak.target)
-      fields.put(RowID("tweakTemplate"), tweak.tweakTemplate)
+      fields.put(RowID.ofString("target"), tweak.target)
+      fields.put(RowID.ofString("tweakTemplate"), tweak.tweakTemplate)
     })
     .put[TweakNode[_]]((tn, fields) => {
-      fields.put(RowID("computeGenerator"), new ComputeGenViewer(tn.computeGenerator))
+      fields.put(RowID.ofString("computeGenerator"), new ComputeGenViewer(tn.computeGenerator))
     })
     .put[InstancePropertyTarget[_, _]]((ipt, fields) => {
-      fields.put(RowID("key"), ipt.key)
+      fields.put(RowID.ofString("key"), ipt.key)
     })
     .put[PredicatedPropertyTweakTarget[_, _, _, _]]((ppt, fields) => {
-      fields.put(RowID("propertyInfo"), ppt.propertyInfo)
-      fields.put(RowID("predicate"), ppt.predicate)
+      fields.put(RowID.ofString("propertyInfo"), ppt.propertyInfo)
+      fields.put(RowID.ofString("predicate"), ppt.predicate)
     })
     .put[Scenario]((scen, fields) => scenarioExpander(null, scen, fields, includeNested = true))
     .put[ScenarioStack]((ss, fields) => scenarioStackExpander(ss, fields))
     .result()
 
-  def fieldExpander(v: Any, fields: m.HashMap[RowID, Any]): Unit = {
+  def fieldExpander(v: Any, fields: ColumnBuilder): Unit = {
     var cls = v.getClass
     while (cls != classOf[Object] && !ValueTreeTable.hidePackage(cls)) {
       val flds = cls.getDeclaredFields
@@ -326,11 +331,12 @@ object ValueTreeTable {
             fld.setAccessible(true)
             val fieldValue = fld.get(v)
             fieldValue match {
-              case acpn: AlreadyCompletedPropertyNode[_] => fields.put(RowID(fld), acpn.resultObjectEvenIfIncomplete)
-              case _                                     => fields.put(RowID(fld), fieldValue)
+              case acpn: AlreadyCompletedPropertyNode[_] =>
+                fields.put(RowID.ofField(fld), acpn.resultObjectEvenIfIncomplete)
+              case _ => fields.put(RowID.ofField(fld), fieldValue)
             }
           } catch {
-            case NonFatal(e) => fields.put(RowID(fld), e.getMessage)
+            case NonFatal(e) => fields.put(RowID.ofField(fld), e.getMessage)
           }
         }
       }
@@ -338,30 +344,26 @@ object ValueTreeTable {
     }
   }
 
-  def scenarioStackExpander(ss: ScenarioStack, fields: m.HashMap[RowID, Any]): Unit = {
+  def scenarioStackExpander(ss: ScenarioStack, fields: ColumnBuilder): Unit = {
     if ((ss.topScenario ne null) && !ss.topScenario.isEmptyShallow)
       scenarioExpander(ss, ss.topScenario, fields, includeNested = false)
     else
       tweakExpander(ss, ss.expandedTweaks, fields)
 
     if (ss.parent ne null)
-      fields.put(RowID(ss.parent), ss.parent)
+      fields.put(RowID.ofScenarioStack(ss.parent), ss.parent)
   }
 
-  def scenarioExpander(
-      ss: ScenarioStack,
-      scenario: Scenario,
-      fields: m.HashMap[RowID, Any],
-      includeNested: Boolean): Unit = {
+  def scenarioExpander(ss: ScenarioStack, scenario: Scenario, fields: ColumnBuilder, includeNested: Boolean): Unit = {
     tweakExpander(ss, scenario.topLevelTweaks, fields)
     if (includeNested && scenario.nestedScenarios.nonEmpty)
-      fields.put(RowIDScenario, scenario.withNestedAsScenario)
+      fields.put(RowID.OfScenario, scenario.withNestedAsScenario)
   }
 
-  def tweakExpander(ss: ScenarioStack, tweaks: Iterable[Tweak], fields: m.HashMap[RowID, Any]): Unit =
+  def tweakExpander(ss: ScenarioStack, tweaks: Iterable[Tweak], fields: ColumnBuilder): Unit =
     DebuggerUI.underStackOf(ss) {
       for (twk <- tweaks)
-        fields.put(RowID(twk.target.toString), twk.tweakTemplate) // for toString calling onto graph
+        fields.put(RowID.ofNode(twk.target, false), twk.tweakTemplate)
     }
 
   // helper to compare arrays properly in diff view
@@ -409,17 +411,27 @@ object ValueTreeTable {
     }
 
     override def valueOf(row: ValueViewRow): ValueWithTooltip[String] = {
-      val value = row.values(index)
-      val text =
-        if (value == null) ""
-        else if (customValueToString.contains(value.getClass)) customValueToString(value)(value)
-        else CoreHelpers.safeToString(value)
+      row.values(index) match {
+        case ValueMissing =>
+          // value is missing, for example we are comparing two objects and they have different fields
+          ValueWithTooltip("", row.tooltipText)
 
-      value match {
-        case nodeTask: NodeTask if MarkObject.inMarkedObjects(nodeTask) =>
-          val labelledText = MarkObject.formatMarkedObject(nodeTask, text)
-          ValueWithTooltip(labelledText, row.tooltipText)
-        case _ => ValueWithTooltip(text, row.tooltipText)
+        case ValuePresent(null) =>
+          // value exists but is null
+          ValueWithTooltip("null", row.tooltipText)
+
+        case ValuePresent(value) =>
+          val asStr = customValueToString.get(value) match {
+            case Some(customToString) => customToString(value)
+            case None                 => CoreHelpers.safeToString(value)
+          }
+
+          val marked = value match {
+            case n: NodeTask if (MarkObject.inMarkedObjects(n)) => MarkObject.formatMarkedObject(n, asStr)
+            case _                                              => asStr
+          }
+
+          ValueWithTooltip(marked, row.tooltipText)
       }
     }
   }
@@ -593,20 +605,20 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
       setList(Array(_root))
     }
 
-  def inspect(values_suggested: Array[Any]): Unit = {
+  def inspect(suggestedValues: Array[Any]): Unit = {
     // Probably don't want to compare more than MAX_TO_COMPARE?
-    val values = values_suggested.take(MAX_TO_COMPARE)
+    val values = suggestedValues.take(MAX_TO_COMPARE)
     setView(getOrCreateColumns(values.length))
     updateSizes()
 
     val rowID =
-      if (values.length == 0) RowID(title)
+      if (values.length == 0) RowID.ofString(title)
       else
         values.head match {
-          case ss: ScenarioStack => RowID(ss) // Consider generalizing...
-          case _                 => RowID(title)
+          case ss: ScenarioStack => RowID.ofScenarioStack(ss) // Consider generalizing...
+          case _                 => RowID.ofString(title)
         }
-    _root = new ValueViewRow(rowID, values, SelectionFlags.NotFlagged, 0)
+    _root = new ValueViewRow(rowID, values.map(ValuePresent), SelectionFlags.NotFlagged, 0)
     _root.open = true // Open 1 level always
     setList(Array(_root))
   }

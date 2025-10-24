@@ -89,7 +89,8 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
         cached.jniPaths.toVector,
         cached.moduleLoads.toVector,
         cached.transitiveDependencies.map { case (k, v) => (k, v.toVector) },
-        cached.mappedDependencies.map { case (k, v) => (k, v.toVector) }
+        cached.mappedDependencies.map { case (k, v) => (k, v.toVector) },
+        cached.resolvedMetadataArtifacts.map(_.asEntity).collectInstancesOf[ExternalMetadataArtifact].toVector
       ),
       json,
       category,

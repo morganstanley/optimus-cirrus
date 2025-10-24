@@ -29,11 +29,11 @@ import scala.util.matching.Regex
  */
 private[optimus] final case class StreamsConfig(
     topicName: String,
-    partitions: Int,
-    cleanupPolicy: String,
-    retentionPeriodDays: Int,
-    deleteRetentionPeriodDays: Int,
-    config: Map[String, String])
+    partitions: Int = StreamsConfigConstants.defaultPartitions,
+    cleanupPolicy: String = StreamsConfigConstants.defaultCleanupPolicy,
+    retentionPeriodDays: Int = StreamsConfigConstants.defaultRetentionInDays,
+    deleteRetentionPeriodDays: Int = StreamsConfigConstants.defaultDeleteRetentionInDays,
+    config: Map[String, String] = Map.empty)
     extends KafkaConfiguration {
   override def toString: String = {
     val configStr = config
@@ -61,43 +61,74 @@ private[optimus] object StreamsConfig {
       Map.empty[String, String]
     )
 
-  // ensure these are consistent with one another
-  private val patternString: String =
-    """StreamsConfig\(topicName=(.*?),partitions=(.*?),cleanupPolicy=(.*?),retentionPeriodDays=(.*?),deleteRetentionPeriodDays=(.*?),config=Map\((.*?)\)\)"""
+  private val field = "field"
+  private val value = "value"
+  private val topicNameStr = "topicName"
+  private val partitionsStr = "partitions"
+  private val cleanupPolicyStr = "cleanupPolicy"
+  private val retentionPeriodDaysStr = "retentionPeriodDays"
+  private val deleteRetentionPeriodDaysStr = "deleteRetentionPeriodDays"
+  private val configStr = "config"
+
   val formatString: String =
-    "StreamsConfig(topicName=%s,partitions=%d,cleanupPolicy=%s,retentionPeriodDays=%d,deleteRetentionPeriodDays=%d,config=Map(%s))"
-  val pattern: Regex = patternString.r
+    s"StreamsConfig($topicNameStr=%s,$partitionsStr=%d,$cleanupPolicyStr=\"%s\",$retentionPeriodDaysStr=%d,$deleteRetentionPeriodDaysStr=%d,$configStr=Map(%s))"
 
   private[config] def misconfiguredException(s: String): IllegalArgumentException =
     new IllegalArgumentException(s"StreamsConfig misconfigured: $s. Expected format: $formatString")
 
-  def fromString(s: String): StreamsConfig = s match {
-    case pattern(topicName, partitions, cleanupPolicy, retentionPeriodDays, deleteRetentionPeriodDays, configStr) =>
-      val config: Map[String, String] =
-        if (configStr.trim.isEmpty) Map.empty
-        else
-          configStr
-            .split(extraConfigSeparator)
-            .map { pair =>
-              try {
-                val Array(key, value) = pair.split(extraConfigKeyValueSeparator, 2)
-                key -> value
-              } catch {
-                case _: MatchError => throw misconfiguredException(s)
-              }
-            }
-            .toMap
+  private val patternString: String =
+    s"""StreamsConfig\\((?:$topicNameStr=[^,\\)]+)(?:,(?:$partitionsStr=\\d+|$cleanupPolicyStr="[^"]+"|$retentionPeriodDaysStr=\\d+|$deleteRetentionPeriodDaysStr=\\d+|$configStr=Map\\([^)]*\\)))*\\)"""
 
-      StreamsConfig(
-        topicName = topicName,
-        partitions = partitions.toInt,
-        cleanupPolicy = cleanupPolicy,
-        retentionPeriodDays = retentionPeriodDays.toInt,
-        deleteRetentionPeriodDays = deleteRetentionPeriodDays.toInt,
-        config = config
-      )
-    case _ =>
-      throw misconfiguredException(s)
+  private val fieldPattern: String =
+    s"""(?:^StreamsConfig\\(|,)(?<$field>$topicNameStr|$partitionsStr|$cleanupPolicyStr|$retentionPeriodDaysStr|$deleteRetentionPeriodDaysStr|$configStr)=(?<$value>(?:"[^"]*"|Map\\([^)]*\\)|[^,)]+))"""
+
+  private val pattern: Regex = patternString.r
+
+  def fromString(s: String): StreamsConfig = {
+    if (!pattern.matches(s)) throw misconfiguredException(s)
+
+    val fields = fieldPattern.r.findAllMatchIn(s).map(m => m.group(field) -> m.group(value)).toMap
+
+    val topicName = fields.getOrElse(topicNameStr, throw misconfiguredException(s))
+    val partitions = fields.get(partitionsStr).map(_.toInt).getOrElse(StreamsConfigConstants.defaultPartitions)
+    val cleanupPolicy = fields
+      .get(cleanupPolicyStr)
+      .map(_.stripPrefix("\"").stripSuffix("\""))
+      .getOrElse(StreamsConfigConstants.defaultCleanupPolicy)
+    val retentionPeriodDays = fields
+      .get(retentionPeriodDaysStr)
+      .map(_.toInt)
+      .getOrElse(StreamsConfigConstants.defaultRetentionInDays)
+    val deleteRetentionPeriodDays = fields
+      .get(deleteRetentionPeriodDaysStr)
+      .map(_.toInt)
+      .getOrElse(StreamsConfigConstants.defaultDeleteRetentionInDays)
+    val config = fields
+      .get(configStr)
+      .map { c =>
+        c.stripPrefix("Map(")
+          .stripSuffix(")")
+          .split(extraConfigSeparator)
+          .filter(_.nonEmpty)
+          .map {
+            case pair if pair.contains(StreamsConfig.extraConfigKeyValueSeparator) =>
+              val Array(key, value) = pair.split(StreamsConfig.extraConfigKeyValueSeparator, 2)
+              key.trim -> value.trim
+            case _ =>
+              throw StreamsConfig.misconfiguredException(s)
+          }
+          .toMap
+      }
+      .getOrElse(Map.empty)
+
+    StreamsConfig(
+      topicName = topicName,
+      partitions = partitions,
+      cleanupPolicy = cleanupPolicy,
+      retentionPeriodDays = retentionPeriodDays,
+      deleteRetentionPeriodDays = deleteRetentionPeriodDays,
+      config = config
+    )
   }
 
   // use semicolon as the common separator for a string containing a collection of StreamsConfig

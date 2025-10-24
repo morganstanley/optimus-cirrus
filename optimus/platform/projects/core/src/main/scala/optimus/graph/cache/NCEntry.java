@@ -36,7 +36,7 @@ public class NCEntry {
   }
 
   /** Returns true if the entry was removed */
-  boolean removed() {
+  public boolean removed() {
     return value == null;
   }
 
@@ -151,6 +151,15 @@ final class NCEntryGrouped extends NCEntryV {
     super(hash, value, next);
     groupedChildren = new NCGroupedChildren(this);
   }
+
+  @Override
+  void removeValue() {
+    super.removeValue();
+    // This is race-y because we are potentially clearing while someone is holding onto the node, so
+    // we may end up inserting too few children. That's probably fine though, given that we are
+    // currently removing the node. We clearly don't care all that much.
+    groupedChildren.children().clear();
+  }
 }
 
 /** Stores extra profile data */
@@ -248,7 +257,7 @@ final class NCMarkerEntry extends NCEntryLRU {
   }
 
   @Override
-  boolean removed() {
+  public boolean removed() {
     return true;
   }
 

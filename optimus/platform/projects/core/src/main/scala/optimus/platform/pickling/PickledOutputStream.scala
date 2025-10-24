@@ -29,7 +29,13 @@ trait WriteContext {
 
 trait PickledOutputStream extends WriteContext {
   def writeStartObject(): Unit
-  def writeStartArray(): Unit
+
+  /**
+   * isUnordered should be true if the array being written represents an unordered collection (e.g. HashSet, HashMap),
+   * and false if it's an ordered collection (Seq, SortedSet etc.). The implementation may choose to sort unordered
+   * collections to produce stable output, but must not change the order of collections which were already ordered.
+   */
+  def writeStartArray(isUnordered: Boolean = false): Unit
   def writeEndObject(): Unit
   def writeEndArray(): Unit
 
@@ -48,7 +54,7 @@ trait PickledOutputStream extends WriteContext {
 abstract class AbstractPickledOutputStream extends PickledOutputStream {
   def writeFieldName(k: String): Unit = {}
   def writeStartObject(): Unit = {}
-  def writeStartArray(): Unit = {}
+  def writeStartArray(isUnordered: Boolean): Unit = {}
   def writeEndObject(): Unit = {}
   def writeEndArray(): Unit = {}
 

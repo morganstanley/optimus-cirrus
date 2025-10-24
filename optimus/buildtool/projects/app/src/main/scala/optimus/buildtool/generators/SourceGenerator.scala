@@ -11,37 +11,24 @@
  */
 package optimus.buildtool.generators
 
-import java.nio.file.FileSystems
-import java.nio.file.Files
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
-import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
-import optimus.buildtool.artifacts.GeneratedSourceMetadata
 import optimus.buildtool.config.ScopeId
-import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
-import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
-import optimus.buildtool.utils.HashedContent
-import optimus.buildtool.utils.Hashing
-import optimus.buildtool.utils.Jars
-import optimus.buildtool.utils.PathUtils
-import optimus.buildtool.utils.TypeClasses._
-import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.{IndexedSeq, Seq}
-import scala.collection.immutable.SortedMap
-import scala.reflect._
+import scala.collection.immutable.IndexedSeq
 
+/**
+ * A generator to create source files (typically scala or java sources) based on input templates and configuration.
+ */
 @entity trait SourceGenerator {
   val artifactType: GeneratedSourceArtifactType = ArtifactType.GeneratedSource
   protected def generatorType: String
@@ -51,149 +38,81 @@ import scala.reflect._
 
   @node def dependencies(scope: CompilationScope): IndexedSeq[Artifact] = Vector()
 
+  def templateType(configuration: Map[String, String]): PathFilter
+
   // Returned as a NodeFunction0 to prevent Inputs (which will often contain full sources) being inadvertently
-  // cached as an argument to other @nodes
+  // cached as an argument to other @nodes. SandboxedTemplates is a NodeFunction0 here for the same reason.
   final def inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+      templates: NodeFunction0[SandboxedInputs],
       configuration: Map[String, String],
       scope: CompilationScope
   ): NodeFunction0[Inputs] =
-    asNode(() => _inputs(name, internalFolders, externalFolders, sourceFilter, configuration, scope))
+    asNode(() => cachedInputs(templates, configuration, scope))
 
-  @node protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+  @node private def cachedInputs(
+      templates: NodeFunction0[SandboxedInputs],
+      configuration: Map[String, String],
+      scope: CompilationScope
+  ): Inputs = _inputs(templates(), configuration, scope)
+
+  /**
+   * Create (and fingerprint) the inputs needed for source generation.
+   *
+   * Note that anything which could affect the output of the generator (file contents, path to external script, etc.)
+   * must be captured as part of the fingerprint to ensure that OBT knows to regenerate the sources when it has
+   * changed. This method is async so that we don't cache the templates (which may include a large amount of hashed
+   * content) as part of a node cache key. The method itself, however, is cached by virtue of being
+   * called from [[cachedInputs]].
+   */
+  @async protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
   ): Inputs
 
-  @node def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean
+  /** True if the generator needs to run at all for a given set of inputs */
+  @node def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean = !inputs().files.isEmpty
 
-  @node def generateSource(
+  @node final def generateSource(
       scopeId: ScopeId,
       inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset
+      writer: ArtifactWriter
+  ): Option[GeneratedSourceArtifact] = _generateSource(scopeId, inputs(), writer)
+
+  // Note: This is async so that we don't cache the inputs (which may include a large amount of hashed content) as
+  // part of a node cache key
+  /**
+   * Generate sources for a given set of inputs.
+   *
+   * No reference to files or configuration that is not captured as part of the fingerprint should be made here,
+   * to avoid the possibility of OBT incorrectly returning stale generated sources when something outside the
+   * fingerprint changes. This method is async so that we don't cache the inputs (which may include a large amount
+   * of hashed content) as part of a node cache key. The method itself, however, is cached by virtue of being
+   * called from [[generateSource]].
+   */
+  @async def _generateSource(
+      scopeId: ScopeId,
+      inputs: Inputs,
+      writer: ArtifactWriter
   ): Option[GeneratedSourceArtifact]
 
 }
 
 object SourceGenerator {
+  private[buildtool] val SourcePath = RelativePath("src")
+
   trait Inputs {
-    def generatorName: String
+    def files: SandboxedFiles
     def fingerprint: FingerprintArtifact
+    def generatorId: String = files.generatorId
   }
 
-  def location[A: ClassTag]: JarAsset =
-    JarAsset(
-      PathUtils.uriToPath(
-        classTag[A].runtimeClass.getProtectionDomain.getCodeSource.getLocation.toURI.toString,
-        FileSystems.getDefault
-      )
-    )
+  import optimus.buildtool.cache.NodeCaching.reallyBigCache
 
-  @node private[generators] def templates(
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourcePredicate: PathFilter,
-      scope: CompilationScope,
-      workspaceSourceRoot: Directory,
-      fingerprintType: String,
-      fingerprintPrefix: String = ""
-  ): (SortedMap[FileAsset, HashedContent], Seq[String]) = {
-    val (ts, fingerprint) =
-      rootedTemplates(
-        internalFolders,
-        externalFolders,
-        sourcePredicate,
-        scope,
-        workspaceSourceRoot,
-        fingerprintType,
-        fingerprintPrefix
-      )
-    (ts.map(_._2).merge, fingerprint)
-  }
+  // since _inputs holds the template files and the hash, it's important that it's frozen for the duration of
+  // a compilation (so that we're sure what we hashed is what we used for generation)
+  cachedInputs.setCustomCache(reallyBigCache)
 
-  @node private[generators] def rootedTemplates(
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourcePredicate: PathFilter,
-      scope: CompilationScope,
-      workspaceSourceRoot: Directory,
-      fingerprintType: String,
-      fingerprintPrefix: String = ""
-  ): (Seq[(Directory, SortedMap[FileAsset, HashedContent])], Seq[String]) = {
-
-    val internalContent = internalFolders.apar.map(f => (f, f.findSourceFiles(sourcePredicate)))
-    val internalFileContent = internalContent.map { case (folder, sources) =>
-      // Note that there's no guarantee that these folders exist on disk (we may be reading them from git, for example),
-      // so generators will need to handle that possibility either by passing files as content or copying to a temporary
-      // directory
-      val dir = workspaceSourceRoot.resolveDir(folder.workspaceSrcRootToSourceFolderPath)
-      val files = sources.map { case (id, c) =>
-        workspaceSourceRoot.resolveFile(id.workspaceSrcRootToSourceFilePath) -> c
-      }
-      (dir, files)
-    }
-
-    val internalTemplateFingerprint =
-      scope.fingerprint(internalContent.map(_._2).merge, fingerprintType, fingerprintPrefix)
-
-    val externalFiles = externalFolders.apar.map(f => (f, f.findFiles(sourcePredicate)))
-    val externalFileContent = externalFiles.map { case (d, files) =>
-      (d, SortedMap(files.map(f => f -> Hashing.hashFileWithContent(f)): _*))
-    }
-
-    val externalTemplateFingerprint = externalFileContent.map(_._2).merge.map { case (f, c) =>
-      PathUtils.fingerprintElement(fingerprintType, f.pathFingerprint, c.hash, fingerprintPrefix)
-    }
-
-    (internalFileContent ++ externalFileContent, internalTemplateFingerprint ++ externalTemplateFingerprint)
-  }
-
-  @async private[generators] def createJar(
-      generatorType: GeneratorType,
-      generatorName: String,
-      sourcePath: RelativePath,
-      messages: Seq[CompilationMessage],
-      hasErrors: Boolean,
-      jar: JarAsset,
-      tempDir: Directory = null
-  )(f: ConsistentlyHashedJarOutputStream => Unit = _ => ()): Seq[CompilationMessage] = {
-    import optimus.buildtool.artifacts.JsonImplicits.generatedSourceMetadataValueCodec
-    Jars.createJar(
-      jar,
-      GeneratedSourceMetadata(generatorType, generatorName, sourcePath, messages, hasErrors),
-      Option(tempDir)
-    )(f)
-    messages
-  }
-
-  // Ensure files exist on disk in their declared paths, and write content to a temporary location if not
-  @node def validateFiles(
-      contentRoot: Directory,
-      content: SortedMap[FileAsset, HashedContent],
-      tempDir: Directory = Directory.temporary()
-  ): ValidatedFiles = {
-    if (content.keySet.forall(_.existsUnsafe)) ValidatedFiles(contentRoot, content.keySet.toIndexedSeq)
-    else {
-      val tempFiles = content.toIndexedSeq.apar.map { case (f, hc) =>
-        val tempFile = tempDir.resolveFile(contentRoot.relativize(f))
-        Utils.createDirectories(tempFile.parent)
-        Files.copy(hc.contentAsInputStream, tempFile.path)
-        tempFile
-      }
-      ValidatedFiles(tempDir, tempFiles.toIndexedSeq)
-    }
-  }
-
-  @node def validateFile(contentRoot: Directory, file: FileAsset, content: HashedContent): Option[FileAsset] = {
-    validateFiles(contentRoot, SortedMap(file -> content)).files.headOption
-  }
-
-  final case class ValidatedFiles(root: Directory, files: Seq[FileAsset])
+  // we want to guard against generating sources more than once
+  generateSource.setCustomCache(reallyBigCache)
 }

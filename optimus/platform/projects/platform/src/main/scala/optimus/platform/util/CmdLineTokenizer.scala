@@ -24,10 +24,10 @@ object CmdLineTokenizer {
   def tokenize(cmdStr: String): Array[String] = {
     val tokens: ArrayBuffer[String] = ArrayBuffer()
     val (time1, events) = AdvancedUtils.timed(escapeDoubleQuote(toTokenEvents(cmdStr)))
-    log.info(s"Got ${events.size} events in ${time1 / 1e6} ms")
+    log.debug(s"Got ${events.size} events in ${time1 / 1e6} ms")
     val initState = Token("", "", TokenState.Idle, TokenState.Idle)
     val (time2, unit) = AdvancedUtils.timed(events.foldLeft(initState)((b, a) => transition(b, a, tokens)))
-    log.info(s"Parse tokens in ${time2 / 1e6} ms")
+    log.debug(s"Parse tokens in ${time2 / 1e6} ms")
 
     tokens.toArray
   }

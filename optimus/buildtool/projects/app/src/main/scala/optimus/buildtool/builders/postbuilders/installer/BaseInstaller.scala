@@ -82,7 +82,12 @@ trait BaseInstaller { this: PostBuilder with Log =>
         def collectJarsPerType[T <: ArtifactType: ClassTag]: Seq[JarAsset] =
           artifactsForScope.collect { case (InternalArtifactId(_, _: T, _), jar) => jar }.toIndexedSeq
 
-        val classJars = collectJarsPerType[InternalClassFileArtifactType].sortBy(_.pathString)
+        val classJars = artifactsForScope
+          .collect {
+            case (InternalArtifactId(_, t: InternalClassFileArtifactType, _), jar) if t != ArtifactType.Sources => jar
+          }
+          .toIndexedSeq
+          .sortBy(_.pathString)
         val pathingJar = collectJarsPerType[PathingArtifactType].singleOption
         val runconfJar = collectJarsPerType[CompiledRunconfArtifactType]
 

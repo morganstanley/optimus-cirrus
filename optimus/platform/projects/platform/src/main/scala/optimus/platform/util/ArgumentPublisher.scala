@@ -20,7 +20,7 @@ import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.Properties.jenkinsAppName
 import optimus.breadcrumbs.crumbs.Properties.mergedAppName
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
-import optimus.graph.diagnostics.sampling.SamplingProfilerSource
+import optimus.platform.sampling.SamplingProfilerSource
 import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.NamedOptionDef
 

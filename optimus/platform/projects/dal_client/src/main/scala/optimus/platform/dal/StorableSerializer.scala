@@ -13,6 +13,7 @@ package optimus.platform.dal
 
 import optimus.platform.TemporalContext
 import optimus.platform._
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.StorableReference
 import optimus.platform.versioning.Shape
 import optimus.platform.versioning.TransformerRegistry
@@ -21,9 +22,9 @@ import scala.util.control.NonFatal
 private[optimus] trait StorableSerializer {
   @async final def version(
       className: String,
-      properties: Map[String, Any],
+      properties: PickledProperties,
       context: TemporalContext,
-      applyForceTransformation: Boolean = true): Map[String, Any] = {
+      applyForceTransformation: Boolean = true): PickledProperties = {
     val afterForcedTransform =
       if (applyForceTransformation) TransformerRegistry.executeForcedReadTransform(className, properties, context)
       else properties
@@ -45,8 +46,8 @@ private[optimus] trait StorableSerializer {
 
   def handleDeserializationExceptions[A](
       className: String,
-      properties: Map[String, Any],
-      versionedProperties: Map[String, Any],
+      properties: PickledProperties,
+      versionedProperties: PickledProperties,
       ref: StorableReference)(f: => A): A = {
     try {
       f

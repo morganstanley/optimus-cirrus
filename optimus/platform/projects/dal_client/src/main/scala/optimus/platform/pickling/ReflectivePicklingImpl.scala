@@ -130,8 +130,12 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       ref: Reference): Unpickled = {
     val inst = unsafe.allocateInstance(info.runtimeClass).asInstanceOf[Unpickled]
     initMetadata(inst, is, initInfo, info, ref)
-    unpickleFill(info, is.newMutStream, forceUnpickle, incomplete = false, inst)
-    inst
+    try {
+      unpickleFill(info, is.newMutStream, forceUnpickle, incomplete = false, inst)
+      inst
+    } catch {
+      case e: ExceptionWithHistory => e.rethrowWith(info.toString)
+    }
   }
 
   /**
@@ -301,9 +305,12 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
 object ReflectiveEntityPicklingImpl // used in [core]o.p.pickling.ReflectiveEntityPickling.instance
     extends ReflectivePicklingImpl[EntityInfo, StorageInfo, EntityReference, Entity]
     with ReflectiveEntityPickling {
-  override protected[optimus] def missingProperty(name: String): Nothing =
-    throw new IncompatibleVersionException(
+  override protected[optimus] def missingProperty(name: String): Nothing = {
+    val exception = new IncompatibleVersionException(
       s"Cannot deserialize entity since the property \'$name\' was not found in the pickled stream. In order to facilitate data migration define a versioning transformer. Please check codetree docs for more details on DAL versioning.")
+    exception.addSource(name)
+    throw exception
+  }
 
   protected override def initMetadata(
       inst: Entity,

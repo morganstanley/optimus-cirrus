@@ -11,6 +11,7 @@
  */
 package optimus.graph.diagnostics.trace;
 
+import static optimus.graph.DiagnosticSettings.getBoolProperty;
 import static optimus.graph.DiagnosticSettings.getDoubleProperty;
 import static optimus.graph.DiagnosticSettings.getIntProperty;
 import static optimus.graph.Settings.livePGO;
@@ -28,6 +29,7 @@ import java.lang.invoke.VarHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,6 +70,11 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
 
   // directory where to dump the collected PGO data (per cycle profiling)
   public static String livePGODataDir = System.getProperty("optimus.livePGO.dataDir");
+
+  // if this flag is true, livePGO will not make decisions about nodes in user defined caches
+  // this includes grouped caches, per property and shared unode caches
+  public static Boolean skipNodesInUserDefinedCaches =
+      getBoolProperty("optimus.livePGO.skipNodesInUserCaches", false);
 
   private static final String pgoDecisionJson = "pgo_decisions.json";
 
@@ -266,7 +273,7 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
   @Override
   public void start(OGLocalTables lCtx, NodeTask task, boolean isNew) {
     super.start(lCtx, task, isNew);
-    if (isNew && task.effectivelyCacheable()) {
+    if (isNew && isCacheControllable(task)) {
       var data = getData(task, PGOTarget.REGULAR_NODE);
       data.getAndAddStarts(1);
     }
@@ -296,12 +303,12 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
       if (trivialHit) data.getAndAddTrivialHits(1);
     }
 
-    if (applyPGO()) {
+    if (shouldApplyPGO()) {
       applyTrainedPGO(getData(key, PGOTarget.REGULAR_NODE));
     }
   }
 
-  private boolean applyPGO() {
+  private boolean shouldApplyPGO() {
     return livePGO && cycleCount.get() >= livePGOIgnoreFirstCycles;
   }
 
@@ -332,10 +339,7 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
     if (hit) data.getAndAddHits(1);
   }
 
-  @Override
-  public void markEndOfCycle() {
-    var cycle = cycleCount.incrementAndGet();
-
+  private void maybeWritePgoDecisions(int cycle) {
     // only for debugging purposes we can dump the pgo decisions in json format
     if (generateStatsEveryXCycles != 0 && cycle % generateStatsEveryXCycles == 0) {
       List<PGODecision> decisionList = new ArrayList<>();
@@ -346,6 +350,13 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
       }
       saveToJsonFile(decisionList, livePGODataDir);
     }
+  }
+
+  @Override
+  public void markEndOfCycle() {
+    var cycle = cycleCount.incrementAndGet();
+
+    maybeWritePgoDecisions(cycle);
 
     // after each cycle, maybe apply the trained PGO
     if (livePGO) {
@@ -364,7 +375,7 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
       }
     }
 
-    // also write collected data but not when we run with live pgo enabled
+    // also write collected data if optimus.livePGO.dumpConfigAfterCycles != 0
     if (cycle == livePGODumpConfigAfterCycles) {
       saveToFile(livePGODataDir);
     }
@@ -403,7 +414,10 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
       var givenData = lse.data;
       givenData.getAndAddStarts(1);
       if (hit) givenData.getAndAddHits(1);
-      else if (applyPGO() && appliesForGiven(givenData) && disablesCacheForGiven(givenData)) {
+      else if (shouldApplyPGO()
+          && givenData.isCacheable
+          && appliesForGiven(givenData)
+          && disablesCacheForGiven(givenData)) {
         givenData.isCacheable = false;
       }
     }
@@ -421,16 +435,23 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
   }
 
   public void applyTrainedPGO(Data d) {
+    if (skipNodesInUserDefinedCaches && inCustomCache(d)) return;
+
     // for given nodes we want to disable the cache only (not xsft)
-    if (appliesForGiven(d) && disablesCacheForGiven(d)) {
+    if (d.info.getCacheable() && appliesForGiven(d) && disablesCacheForGiven(d)) {
       d.info.setCacheable(false);
     } else {
-      if (disablesCache(d)) {
+      if (d.info.getCacheable() && disablesCache(d)) {
         d.info.setCachePolicy(NCPolicy.DontCache);
-      } else if (disablesXSFT(d)) {
+      } else if (d.info.cachePolicy() != NCPolicy.Basic && disablesXSFT(d)) {
         d.info.setCachePolicy(NCPolicy.Basic);
       }
     }
+  }
+
+  private Boolean inCustomCache(Data d) {
+    var underlyingProp = d.info;
+    return underlyingProp.isGroupCached() || underlyingProp.customCache() != null;
   }
 
   public static boolean disablesCache(Data data) {
@@ -502,5 +523,14 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
         currentData = currentData.prevCycleData;
       }
     }
+  }
+
+  public void resetData() {
+    this.data = new Data[1024];
+  }
+
+  /* TEST ONLY API */
+  public Data[] dbgData() {
+    return Arrays.stream(this.data).filter(d -> d != null).toArray(Data[]::new);
   }
 }

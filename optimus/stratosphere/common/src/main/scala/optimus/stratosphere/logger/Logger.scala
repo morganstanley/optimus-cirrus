@@ -68,10 +68,9 @@ abstract class Logger(colors: ConsoleColors = ConsoleColors.Disabled) {
   def error(toLog: String): Unit = info(addColorTo(printWithIndent(toLog, ErrorMarker), colors.error))
 
   private def printStackTrace(msg: String, t: Throwable, loggerLevel: String => Unit): Unit = {
-    loggerLevel(msg)
-    val byteArrayOutputStream: ByteArrayOutputStream = new ByteArrayOutputStream
-    t.printStackTrace(new PrintStream(byteArrayOutputStream))
-    loggerLevel(byteArrayOutputStream.toString)
+    val stream = new ByteArrayOutputStream
+    t.printStackTrace(new PrintStream(stream))
+    loggerLevel(msg + System.lineSeparator() + stream.toString)
   }
 
   def error(msg: String, t: Throwable): Unit = printStackTrace(msg, t, error)

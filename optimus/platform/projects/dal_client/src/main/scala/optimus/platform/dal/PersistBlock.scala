@@ -446,13 +446,16 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    *   The created asserts.
    */
   final def prepareFlush(): (Set[(EntityReference, A)], Set[EntityReference]) = {
-    val (asserts, ignoreListForReferenceResolution) = closeAndCreateAsserts()
+    val (asserts, ignoreListForReferenceResolution, needsResolution) = closeAndCreateAsserts()
     // Assigns references to temporary entities and replaces their 'cache' entries with reference entries.
     // This will throw if a temporary entity resolves to a reference that's already in the transaction with a conflicting operation.
     upgradeTemporaryEntities()
-    (
-      asserts,
-      ignoreListForReferenceResolution.map { ent => Option(ent.dal$entityRef).getOrElse(entityRefs(ent)) }.toSet)
+    val ignoredRefs = ignoreListForReferenceResolution.map { ent =>
+      Option(ent.dal$entityRef).getOrElse(entityRefs(ent))
+    }.toSet
+    val unIgnoredRefs = needsResolution.map { ent => Option(ent.dal$entityRef).getOrElse(entityRefs(ent)) }.toSet
+    log.debug(s"Ignored Refs - ${ignoredRefs.mkString(",")}")
+    (asserts, ignoredRefs -- unIgnoredRefs)
   }
 
   /**
@@ -532,12 +535,18 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    * @return
    *   The AssertEntries extracted from the cache.
    */
-  private[this] def closeAndCreateAsserts(): (Set[(EntityReference, A)], Seq[Entity]) = {
+  private[this] def closeAndCreateAsserts(): (Set[(EntityReference, A)], Seq[Entity], Seq[Entity]) = {
     // snapshot cache on entry as it will be changing from underneath us
     val ops = cache.toMap
 
     val assertOps = immutable.HashSet.newBuilder[AssertEntry]
+
+    // Keeping 2 sequences of Entities - One for entities which refer to only FinalTypedReferences and once other.
+    // For the multi-vt write case there could be an overlap in these collections - i.e one version points only to
+    // FinalTypedReferences and other version doesn't. In such a case, we cannot ignore this entity reference. Hence,
+    // we will remove the overlapping ones from ignoreList at the call site of this method.
     val ignoreListForReferenceResolution = immutable.Seq.newBuilder[Entity]
+    val needsReferenceResolution = immutable.Seq.newBuilder[Entity]
 
     class PersistVisitor(vt: A, upsert: Boolean, cmid: Option[MSUuid]) extends AbstractPickledOutputStream {
       private[this] var currentPropertyInfo: PropertyInfo[_] = _
@@ -554,6 +563,8 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
         entity.pickle(this)
         if (containsFinalTypedReferencesOnly && generateIgnoreListForReferenceResolutionEnabled) {
           ignoreListForReferenceResolution += entity
+        } else {
+          needsReferenceResolution += entity
         }
       }
 
@@ -675,7 +686,11 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
       }
     }
     // return the seq of entities that do not point to temporary entities. The entities in this skiplist could be temporary or final themselves - so no assumptions on the type of containing entity.
-    (asserts, ignoreListForReferenceResolution.result())
+    val ignoredEntities = ignoreListForReferenceResolution.result()
+    val entitiesNeedingResolution = needsReferenceResolution.result()
+    log.debug(s"This is the ignoreList - ${ignoredEntities.mkString(
+        ", ")}. This is the needsResolution List - ${entitiesNeedingResolution.mkString(", ")}")
+    (asserts, ignoredEntities, entitiesNeedingResolution)
   }
 }
 

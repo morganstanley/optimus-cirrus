@@ -15,19 +15,20 @@ import java.rmi.Remote
 import java.rmi.RemoteException
 import optimus.dsi.session.ClientSessionInfo
 import optimus.platform.dsi.bitemporal.proto.Dsi.TemporalContextProto
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.versioning.RftShape
 
 import scala.util.Try
 
 final case class VersioningRequest(
-    properties: Map[String, Any],
+    properties: PickledProperties,
     fromShape: RftShape,
     toShape: RftShape,
     loadContext: TemporalContextProto,
     sessionInfo: ClientSessionInfo,
     id: String)
 
-final case class VersioningResponse(result: Try[Map[String, Any]], id: String)
+final case class VersioningResponse(result: Try[PickledProperties], id: String)
 
 object VersioningWorkerRegistryLocatorId {
   val Id = "versioningworker"

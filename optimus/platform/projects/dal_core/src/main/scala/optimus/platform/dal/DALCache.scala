@@ -55,6 +55,7 @@ import optimus.platform.dsi.bitemporal.proto.CommandProtoSerialization
 import optimus.platform.dsi.bitemporal.proto.Dsi.CommandProto
 import optimus.platform.dsi.bitemporal.proto.Dsi.ResultProto
 import optimus.platform.dsi.bitemporal.proto.Dsi.VersioningResultProto
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.relational.ExtraCallerDetail
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.util.Log
@@ -417,11 +418,11 @@ class DALCacheImpl(
     (pe.versionedRef.toString, map.toMap)
   }
 
-  private def updatePersistentEntity(pe: PersistentEntity, bigMap: Map[String, Map[String, Any]]): PersistentEntity = {
+  private def updatePersistentEntity(pe: PersistentEntity, bigMap: Map[String, PickledProperties]): PersistentEntity = {
     bigMap
       .get(pe.versionedRef.toString)
       .map(map => {
-        val se = pe.serialized.copy(properties = map.get("props").get.asInstanceOf[Map[String, Any]])
+        val se = pe.serialized.copy(properties = map.get("props").get.asInstanceOf[PickledProperties])
         pe.copy(serialized = se)
       })
       .getOrElse(pe)
@@ -434,15 +435,15 @@ class DALCacheImpl(
         case _            => Seq()
       }
     }.toMap
-    if (bigMap.isEmpty) None else Some(PropertySerialization.propertiesToJsonString(bigMap))
+    if (bigMap.isEmpty) None else Some(PropertySerialization.mapToJsonString(bigMap))
   }
 
-  private def loadResultsJson(f: File): Option[Map[String, Map[String, Any]]] = {
+  private def loadResultsJson(f: File): Option[Map[String, PickledProperties]] = {
     if (f.exists) {
       import scala.jdk.CollectionConverters._
       import scala.util.Properties.{lineSeparator => NewLine}
       val str = Files.readAllLines(f.toPath, StandardCharsets.UTF_8).asScala.mkString(NewLine)
-      Some(PropertySerialization.fromEncodedProps(str).asInstanceOf[Map[String, Map[String, Any]]])
+      Some(PropertySerialization.fromEncodedProps(str).asInstanceOf[Map[String, PickledProperties]])
     } else {
       None
     }

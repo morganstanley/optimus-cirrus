@@ -13,7 +13,7 @@ package optimus.dsi.trace
 
 import java.net.URI
 import optimus.breadcrumbs.BreadcrumbLevel
-import optimus.breadcrumbs.crumbs.EventCrumb
+import optimus.breadcrumbs.crumbs.DeprecatedEvent
 import optimus.platform.dal.config.Host
 import optimus.platform.storable.SerializedEntity
 
@@ -87,7 +87,7 @@ object TraceEvent {
   import TraceRelevance._
   import Tracing._
 
-  sealed trait Event extends EventCrumb.EventDEPRECATED {
+  sealed trait Event extends DeprecatedEvent.EventDEPRECATED {
     def level: Level
     def phase: Phase
     def relevance: Relevance

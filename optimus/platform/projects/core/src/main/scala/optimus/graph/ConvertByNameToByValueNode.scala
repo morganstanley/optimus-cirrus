@@ -44,7 +44,7 @@ object ConvertByNameToByValueNode {
   } else false
 
   def removeRedundantTweaks(s: Scenario, ss: ScenarioStack): Scenario =
-    if (s.hasPossiblyRedundantTweaks && !s.keepRedundantTweaks)
+    if (s.hasPossiblyRedundantTweaks && !s.keepRedundantTweaks && !ss.isSelfOrAncestorScenarioIndependent)
       s.filterConserve(!isTweakRedundant(_, ss), s.flagsWithoutHasRedundant)
     else s
 }

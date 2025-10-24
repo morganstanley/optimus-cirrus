@@ -16,14 +16,12 @@ import com.sun.codemodel.writer.FileCodeWriter
 import com.sun.tools.xjc.Plugin
 
 import java.net.URI
-import java.nio.file.Files
 import java.nio.file.Paths
 import com.sun.tools.xjc.api.ErrorListener
 import com.sun.tools.xjc.api.SchemaCompiler
 import com.sun.tools.xjc.api.SpecVersion
 import com.sun.tools.xjc.api.XJC
 import com.sun.tools.xjc.api.impl.s2j.SchemaCompilerImpl
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
@@ -32,23 +30,15 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.EndsWithFilter
 import optimus.buildtool.files.Directory.NoFilter
-import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
-import optimus.buildtool.generators.JaxbGenerator.JaxbType
-import optimus.buildtool.generators.JaxbGenerator.ObtCodeWriter
-import optimus.buildtool.generators.JaxbGenerator.ObtEntityResolver
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedFiles.Template
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.GenerateSource
-import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.PathUtils
-import optimus.buildtool.utils.TypeClasses._
-import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 import org.apache.cxf.tools.common.ToolContext
@@ -74,31 +64,22 @@ import scala.xml.InputSource
 
 @entity class JaxbGenerator(directoryFactory: DirectoryFactory, workspaceSourceRoot: Directory)
     extends SourceGenerator {
-  override val generatorType: String = "jaxb"
+  import JaxbGenerator._
 
+  override val generatorType: String = "jaxb"
   override type Inputs = JaxbGenerator.Inputs
 
-  @node override protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+  override def templateType(configuration: Map[String, String]): Directory.PathFilter = {
+    val jaxbType = JaxbType.parse(configuration.get("jaxbType"))
+    JaxbGenerator.sourcePredicate(jaxbType)
+  }
+
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
   ): Inputs = {
-
     val jaxbType = JaxbType.parse(configuration.get("jaxbType"))
-    val filter = sourceFilter && JaxbGenerator.sourcePredicate(jaxbType)
-
-    val (templateFiles, templateFingerprint) = SourceGenerator.rootedTemplates(
-      internalFolders,
-      externalFolders,
-      filter,
-      scope,
-      workspaceSourceRoot,
-      s"Template:$name"
-    )
-
     val pkg = configuration.get("package")
     val pkgs = configuration.get("packages").map(_.split(",").toIndexedSeq).getOrElse(Nil)
     val plugins: Seq[Plugin] =
@@ -107,24 +88,16 @@ import scala.xml.InputSource
       }.toIndexedSeq
     val enableIntrospection = configuration.get("enableIntrospection").exists(_.toBoolean)
 
-    val (bindingFiles, bindingFingerprint) =
-      configuration
-        .get("bindings")
-        .map { b =>
-          val paths = b.split(",").map(RelativePath(_)).toIndexedSeq
-          SourceGenerator.rootedTemplates(
-            internalFolders,
-            externalFolders,
-            EndsWithFilter(paths: _*),
-            scope,
-            workspaceSourceRoot,
-            s"Binding:$name"
-          )
-        }
-        .unzipOption
+    val templatesWithBindings = configuration
+      .get("bindings")
+      .map { b =>
+        val paths = b.split(",").map(RelativePath(_)).toIndexedSeq
+        templates.withFiles(Binding, EndsWithFilter(paths: _*))
+      }
+      .getOrElse(templates)
 
     // Allow other files (which may be included by the templateFiles) to be part of the fingerprint
-    val (rootFiles, rootFingerprint) = configuration
+    val files = configuration
       .get("root")
       .map { s =>
         val p = Paths.get(s)
@@ -138,161 +111,116 @@ import scala.xml.InputSource
             val d = directoryFactory.lookupDirectory(p)
             (Nil, Seq(d))
           }
-        SourceGenerator.rootedTemplates(
+        templatesWithBindings.withFolders(
+          Include,
           internalRoots,
           externalRoots,
-          NoFilter, // deliberately use NoFilter here, to allow for non-standard filenames
-          scope,
-          workspaceSourceRoot,
-          s"Include:$name"
+          NoFilter // deliberately use NoFilter here, to allow for non-standard filenames
         )
       }
-      .unzipOption
+      .getOrElse(templatesWithBindings)
 
-    val fingerprint =
-      s"[JAXB]${SourceGenerator.location[XJC].pathFingerprint}" +: (
+    val fingerprint = files.hashFingerprint(
+      Map.empty,
+      s"[JAXB]${GeneratorUtils.location[XJC].pathFingerprint}" +: (
         pkg.map(p => s"[Package]$p").toIndexedSeq ++
           pkgs.map(p => s"[Packages]$p") ++
           plugins.map(p => s"[Plugins]${p.getOptionName}") ++
-          Seq(s"[Introspection]$enableIntrospection") ++
-          templateFingerprint ++
-          bindingFingerprint.getOrElse(Nil) ++
-          rootFingerprint.getOrElse(Nil)
+          Seq(s"[Introspection]$enableIntrospection")
       )
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
+    )
 
     JaxbGenerator.Inputs(
-      name,
       jaxbType,
       pkg,
       pkgs,
-      templateFiles,
-      bindingFiles.getOrElse(Nil),
-      rootFiles.map(_.map(_._2).merge).getOrElse(SortedMap.empty),
-      fingerprintHash,
+      files.toFiles,
+      fingerprint,
       plugins,
       enableIntrospection
     )
   }
 
-  @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
-    inputs().templateFiles.map(_._2).merge.nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset
+      inputs: Inputs,
+      writer: ArtifactWriter
   ): Option[GeneratedSourceArtifact] = JaxbGenerator.oneAtTheTime {
-    val resolvedInputs = inputs()
-    import resolvedInputs._
-    ObtTrace.traceTask(scopeId, GenerateSource) {
-      val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
-        val tempJar = JarAsset(tempOut)
-        // Use a short temp dir name to avoid issues with too-long paths for generated .java files
-        val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
-        val outputDir = tempDir.resolveDir(JaxbGenerator.SourcePath)
-        Utils.createDirectories(outputDir)
+    writer.atomicallyWrite() { context =>
+      import inputs._
 
-        val msgs = jaxbType match {
-          case JaxbType.Xsd =>
-            val compiler = createSchemaCompiler()
-            val listener = new JaxbGenerator.ObtXjcErrorListener(scopeId, generatorName)
-            compiler.setErrorListener(listener)
-            pkg.foreach(compiler.setDefaultPackageName)
-            compiler.setTargetVersion(SpecVersion.V2_1)
+      val msgs = jaxbType match {
+        case JaxbType.Xsd =>
+          val compiler = createSchemaCompiler()
+          val listener = new JaxbGenerator.ObtXjcErrorListener(scopeId, generatorId)
+          compiler.setErrorListener(listener)
+          pkg.foreach(compiler.setDefaultPackageName)
+          compiler.setTargetVersion(SpecVersion.V2_1)
 
-            // noinspection ScalaDeprecation
-            val compilerSettings =
-              compiler.getOptions: @nowarn("msg=method getOptions in trait SchemaCompiler is deprecated")
+          // noinspection ScalaDeprecation
+          val compilerSettings =
+            compiler.getOptions: @nowarn("msg=method getOptions in trait SchemaCompiler is deprecated")
 
-            // prepare jaxb2 plugins here
-            if (plugins.nonEmpty) {
-              compilerSettings.getAllPlugins.addAll(plugins.asJava)
-              plugins.foreach(plugin => compilerSettings.parseArgument(Array(s"-${plugin.getOptionName}"), 0))
+          // prepare jaxb2 plugins here
+          if (plugins.nonEmpty) {
+            compilerSettings.getAllPlugins.addAll(plugins.asJava)
+            plugins.foreach(plugin => compilerSettings.parseArgument(Array(s"-${plugin.getOptionName}"), 0))
+          }
+
+          if (enableIntrospection) {
+            compilerSettings.parseArgument(Array("-enableIntrospection"), 0)
+          }
+
+          // noinspection ScalaDeprecation
+          files.content(Binding).foreach { case (f, c) =>
+            val s = new InputSource(c.contentAsInputStream)
+            s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
+            compilerSettings.addBindFile(s)
+          }
+
+          compiler.setEntityResolver(new ObtEntityResolver(workspaceSourceRoot, files.content(Include)))
+
+          files.content(Template).foreach { case (f, c) =>
+            val s = new InputSource(c.contentAsInputStream)
+            s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
+            compiler.parseSchema(s)
+          }
+
+          val model = compiler.bind()
+
+          val success = if (model != null) {
+            val cm = model.generateCode(null, listener)
+            val writer = new ObtCodeWriter(context.outputDir.path.toFile, "UTF-8")
+            cm.build(writer)
+            true
+          } else {
+            log.debug(s"[$scopeId:$generatorId] JAXB generation failed")
+            false
+          }
+
+          if (listener.messages.nonEmpty || success) listener.messages
+          else Seq(CompilationMessage(None, "JAXB generation failed", CompilationMessage.Error))
+
+        case JaxbType.Wsdl =>
+          val templateFiles = files.files(Template)
+          val bindings = files.files(Binding)
+          templateFiles
+            .flatMap { f =>
+              val args = Seq("-autoNameResolution") ++
+                (pkgs ++ pkg.toSeq).flatMap(p => Seq("-p", p)) ++
+                bindings.flatMap(b => Seq("-b", b.pathString)) ++
+                plugins.map(p => s"-xjc-${p.getOptionName}") ++
+                Seq("-d", context.outputDir.pathString, PathUtils.mappedUriString(f.path))
+
+              val wsdlToJava = new WSDLToJava(args.toArray)
+              val c = new ToolContext
+              val listener = new JaxbGenerator.ObtWsdlErrorListener(scopeId, generatorId)
+              c.setErrorListener(listener)
+              wsdlToJava.run(c)
+              listener.messages
             }
-
-            if (enableIntrospection) {
-              compilerSettings.parseArgument(Array("-enableIntrospection"), 0)
-            }
-
-            // noinspection ScalaDeprecation
-            bindingFiles.map(_._2).merge.foreach { case (f, c) =>
-              val s = new InputSource(c.contentAsInputStream)
-              s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
-              compilerSettings.addBindFile(s)
-            }
-
-            compiler.setEntityResolver(new ObtEntityResolver(workspaceSourceRoot, rootFiles))
-
-            val allTemplates = templateFiles.map(_._2).merge
-            allTemplates.foreach { case (f, c) =>
-              val s = new InputSource(c.contentAsInputStream)
-              s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
-              compiler.parseSchema(s)
-            }
-
-            val model = compiler.bind()
-
-            val success = if (model != null) {
-              val cm = model.generateCode(null, listener)
-              val writer = new ObtCodeWriter(outputDir.path.toFile, "UTF-8")
-              cm.build(writer)
-              true
-            } else {
-              log.debug(s"[$scopeId:$generatorName] JAXB generation failed")
-              false
-            }
-
-            if (listener.messages.nonEmpty || success) listener.messages
-            else Seq(CompilationMessage(None, "JAXB generation failed", CompilationMessage.Error))
-
-          case JaxbType.Wsdl =>
-            val tempDir = Directory.temporary()
-            val validatedTemplates = templateFiles.apar.map { case (d, files) =>
-              SourceGenerator.validateFiles(d, files, tempDir)
-            }
-            val validatedTemplateFiles = validatedTemplates.flatMap(_.files)
-            val validatedBindings = bindingFiles.apar
-              .map { case (d, files) =>
-                SourceGenerator.validateFiles(d, files, tempDir)
-              }
-              .flatMap(_.files)
-            validatedTemplateFiles
-              .flatMap { f =>
-                val args = Seq("-autoNameResolution") ++
-                  (pkgs ++ pkg.toSeq).flatMap(p => Seq("-p", p)) ++
-                  validatedBindings.flatMap(b => Seq("-b", b.pathString)) ++
-                  plugins.map(p => s"-xjc-${p.getOptionName}") ++
-                  Seq("-d", outputDir.pathString, PathUtils.mappedUriString(f.path))
-
-                val wsdlToJava = new WSDLToJava(args.toArray)
-                val c = new ToolContext
-                val listener = new JaxbGenerator.ObtWsdlErrorListener(scopeId, generatorName)
-                c.setErrorListener(listener)
-                wsdlToJava.run(c)
-                listener.messages
-              }
-        }
-        val a = GeneratedSourceArtifact.create(
-          scopeId,
-          tpe,
-          generatorName,
-          outputJar,
-          JaxbGenerator.SourcePath,
-          msgs
-        )
-        SourceGenerator.createJar(
-          tpe,
-          generatorName,
-          JaxbGenerator.SourcePath,
-          a.messages,
-          a.hasErrors,
-          tempJar,
-          tempDir
-        )()
-        a
       }
-      Some(artifact)
+      context.createArtifact(msgs)
     }
   }
 
@@ -306,7 +234,6 @@ object JaxbGenerator extends Log {
   // https://discuss.gradle.org/t/parallelizable-jaxb-xjc-plugin-task/14855
   private val oneAtTheTime = AdvancedUtils.newThrottle(1)
 
-  private val SourcePath = RelativePath("src")
   private def sourcePredicate(t: JaxbType) = t match {
     case JaxbType.Xsd  => Directory.fileExtensionPredicate("xsd")
     case JaxbType.Wsdl => Directory.fileExtensionPredicate("wsdl")
@@ -319,14 +246,17 @@ object JaxbGenerator extends Log {
     new URI(ObtProtocol.Scheme, null, urlPath, null).toString
   }
 
+  case object Binding extends SandboxedFiles.FileType {
+    // Store bindings in the same location as templates
+    override def rootType: SandboxedFiles.FileType = Template
+  }
+  case object Include extends SandboxedFiles.FileType
+
   final case class Inputs(
-      generatorName: String,
       jaxbType: JaxbType,
       pkg: Option[String],
       pkgs: Seq[String],
-      templateFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      bindingFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      rootFiles: SortedMap[FileAsset, HashedContent],
+      files: SandboxedFiles,
       fingerprint: FingerprintArtifact,
       plugins: Seq[Plugin],
       enableIntrospection: Boolean
@@ -351,7 +281,7 @@ object JaxbGenerator extends Log {
       new OutputStreamWriter(openBinary(pkg, fileName), encoding)
   }
 
-  class ObtEntityResolver(
+  private class ObtEntityResolver(
       workspaceSourceRoot: Directory,
       rootFiles: SortedMap[FileAsset, HashedContent]
   ) extends EntityResolver {

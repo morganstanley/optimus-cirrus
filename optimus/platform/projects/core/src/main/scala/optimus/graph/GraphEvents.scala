@@ -59,7 +59,6 @@ private[optimus] object GraphEvents {
     if (requestsStallInfo.nonEmpty) {
       val distElems =
         stallSource.jobTaskId.map(v => Elems(DistProperties.jobId -> v.jobId, DistProperties.taskId -> v.taskId))
-      Breadcrumbs.info(ChainedID.root, EventCrumb(_, GraphCrumbSource, event))
       Breadcrumbs.info(
         ChainedID.root,
         EventPropertiesCrumb(
@@ -79,7 +78,6 @@ private[optimus] object GraphEvents {
   }
 
   private[graph] def publishStallDetectedCrumb(stallLogFile: String) = {
-    Breadcrumbs.info(ChainedID.root, EventCrumb(_, GraphCrumbSource, GraphEvents.StallDetected))
     Breadcrumbs.info(
       ChainedID.root,
       EventPropertiesCrumb(

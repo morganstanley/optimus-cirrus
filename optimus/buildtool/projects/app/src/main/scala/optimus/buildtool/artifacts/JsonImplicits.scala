@@ -94,9 +94,19 @@ private[buildtool] object JsonImplicits {
   }
 
   implicit val FileAssetFormatter: JsonValueCodec[FileAsset] = new JsonValueCodec[FileAsset] {
-    override def decodeValue(in: JsonReader, default: FileAsset): FileAsset = FileAsset(
-      pathValueCodec.decodeValue(in, null))
-    override def encodeValue(x: FileAsset, out: JsonWriter): Unit = pathValueCodec.encodeValue(x.path, out)
+    override def decodeValue(in: JsonReader, default: FileAsset): FileAsset = {
+      val path = in.readString(null)
+      if (NamingConventions.isHttpOrHttps(path))
+        BaseHttpAsset.httpAsset(new URI(path).toURL)
+      else
+        FileAsset(PathUtils.get(path))
+    }
+    override def encodeValue(x: FileAsset, out: JsonWriter): Unit = {
+      x match {
+        case httpAsset: BaseHttpAsset => out.writeVal(httpAsset.pathString)
+        case _                        => pathValueCodec.encodeValue(x.path, out)
+      }
+    }
     override def nullValue: FileAsset = null
   }
 

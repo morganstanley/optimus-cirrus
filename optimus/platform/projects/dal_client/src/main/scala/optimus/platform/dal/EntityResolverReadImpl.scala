@@ -30,11 +30,13 @@ import optimus.platform.dsi.Feature
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.platform.AsyncImplicits._
 import optimus.core.CoreAPI
-import optimus.platform.dsi.bitemporal.Query
+import optimus.platform.dsi.Feature
+import optimus.platform.dsi.bitemporal.{Query, VersionedReferenceQuery}
 
 import scala.reflect.ClassTag
 import optimus.scalacompat.collection._
 
+import scala.collection.Iterable
 import scala.collection.immutable.Map.Map1
 
 @entity class RawDataAccess(@transient val er: DSIResolver with EntityResolverReadImpl) {
@@ -148,6 +150,15 @@ import scala.collection.immutable.Map.Map1
       value
     } getOrElse Nil
   }
+
+  @node @scenarioIndependent
+  private[optimus] def findEntityByVref(vRefQuery: VersionedReferenceQuery): Option[PersistentEntity] =
+    mapResult(
+      er.executor.executeQuery(
+        er.dsi,
+        Select(vRefQuery, DSIQueryTemporality.At(vRefQuery.validTimeInterval.from, vRefQuery.txTimeInterval.from)))) {
+      case SelectResult(value) => value
+    }.getOrElse(Nil).headOption
 }
 
 object EntityResolverReadImpl {
@@ -340,6 +351,36 @@ trait EntityResolverReadImpl { this: DSIResolver =>
       entityRef: EntityReference,
       tc: TemporalContext): Option[PersistentEntity] = {
     getPersistentEntityByRefImpl(entityRef, tc)
+  }
+
+  @node @scenarioIndependent
+  private[optimus] def getEntityByVref(
+      erefHolder: EntityReferenceHolder[_ <: Entity],
+      reason: EntityReferenceQueryReason): Entity = {
+    val vInfo = erefHolder.versionInfo.get.asInstanceOf[FullVersionInfo]
+    if (dsi.serverFeatures().supports(Feature.VersionedReferenceQuery))
+      temporalContextEntityResolver.rawDataAccess
+        .findEntityByVref(
+          VersionedReferenceQuery(
+            vInfo.vReference,
+            vInfo.vtInterval,
+            vInfo.ttInterval,
+            erefHolder.payloadType.get.clazz.getTypeName,
+            false))
+        .map(pe => {
+          val updatedPe = pe.copy(lockToken = erefHolder.versionInfo.get.asInstanceOf[FullVersionInfo].lockToken)
+          erefHolder.tc.deserialize(updatedPe, DSIStorageInfo.fromPersistentEntity(updatedPe))
+        })
+        .getOrElse(throw new LinkResolutionException(erefHolder.ref, erefHolder.tc))
+    else {
+      // we are able to get from erefHolder here because EntityReferenceHolder.scala:88
+      findByReferenceWithType(
+        erefHolder.ref,
+        erefHolder.tc,
+        erefHolder.payloadType.get.clazz,
+        erefHolder.payloadType.get.concrete,
+        reason)
+    }
   }
 
   @node @scenarioIndependent

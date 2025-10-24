@@ -20,6 +20,7 @@ import optimus.entity.EntityLinkageProperty
 import optimus.platform.dsi.bitemporal.BrokerDeserializationException
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.pickling.ImmutableByteArray
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.CmReference
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.SerializedEntity
@@ -68,6 +69,16 @@ trait JsonSerializationBase {
     }
   }
 
+  protected def getPickledProperties(map: Map[String, Any], key: String): PickledProperties = {
+    try {
+      map
+        .get(key)
+        .map(TypedRefAwareJsonTypeTransformer.deserialize(_).asInstanceOf[PickledProperties])
+        .getOrElse(PickledProperties.empty)
+    } catch {
+      case NonFatal(e) => throwBadTypeException(map, key, weakTypeTag[PickledProperties].toString, Some(e))
+    }
+  }
   protected def getTypedOrElse[T](map: Map[String, Any], key: String, els: T): T = {
     try {
       map
@@ -240,8 +251,8 @@ trait JsonSerializationBase {
 trait JsonPayloadEncryptionUtil {
   def maybeEncryptFields(
       className: String,
-      allFields: Map[String, Any]
-  ): (Map[String, Any], Iterable[String])
+      allFields: PickledProperties
+  ): (PickledProperties, Iterable[String])
 
   def maybeEncryptFields(
       className: String,
@@ -249,9 +260,9 @@ trait JsonPayloadEncryptionUtil {
   ): (Seq[(String, Any)], Iterable[String])
 
   def maybeDecryptFields(
-      allFields: Map[String, Any],
+      allFields: PickledProperties,
       encryptedFieldNames: Set[String]
-  ): Map[String, Any]
+  ): PickledProperties
 
   def maybeDecryptFields(
       allFields: Seq[(String, Any)],
@@ -262,8 +273,8 @@ trait JsonPayloadEncryptionUtil {
 object NoopJsonPayloadEncryption extends JsonPayloadEncryptionUtil {
   override def maybeEncryptFields(
       className: String,
-      allFields: Map[String, Any]
-  ): (Map[String, Any], Iterable[String]) = (allFields, Nil) // noop
+      allFields: PickledProperties
+  ): (PickledProperties, Iterable[String]) = (allFields, Nil) // noop
 
   override def maybeEncryptFields(
       className: String,
@@ -271,9 +282,9 @@ object NoopJsonPayloadEncryption extends JsonPayloadEncryptionUtil {
   ): (Seq[(String, Any)], Iterable[String]) = (allFields, Nil) // noop
 
   override def maybeDecryptFields(
-      allFields: Map[String, Any],
+      allFields: PickledProperties,
       encryptedFieldNames: Set[String]
-  ): Map[String, Any] = allFields // noop
+  ): PickledProperties = allFields // noop
 
   override def maybeDecryptFields(
       allFields: Seq[(String, Any)],
@@ -303,6 +314,8 @@ trait JsonSerialization[T] extends JsonSerializationBase {
     elements.map(fromJsonMap)
   }
   def fromJsonNode[V](json: JsonNode, v: Class[V]): V = mapper.treeToValue(json, v)
+
+  def fromPickledProperties(pp: PickledProperties): T = fromJsonMap(pp.asMap)
 
   def toJsonMap(p: T): Map[String, Any]
   def fromJsonMap(map: Map[String, Any]): T
@@ -389,7 +402,7 @@ class SerializedEntitySerialization(
     val types = getTypedOrElse[Seq[String]](map, Labels.Types, Seq.empty)
     val inlinedStrings = getOrElse[Seq[String]](map, Labels.Inlined, Nil)
     val inlined = inlinedStrings.map(fromJson)
-    val props = getTypedOrElse[Map[String, Any]](map, Labels.Data, Map.empty[String, Any])
+    val props = getPickledProperties(map, Labels.Data)
     val encryptedFieldNames = getTypedOrElse[Seq[String]](map, Labels.EncryptedFields, Seq.empty[String])
     val decryptedProps =
       if (encryptedFieldNames.nonEmpty) payloadEncryption.maybeDecryptFields(props, encryptedFieldNames.toSet)
@@ -410,13 +423,15 @@ class SerializedEntitySerialization(
     val linkages: Option[SerializedEntity.LinkageMap] =
       if (hasLinkages) {
         if (includeLinkages) {
-          val linkages = getTypedOrElse[Map[String, Any]](map, Labels.EntityLinkages, Map.empty[String, Any])
-          val links = linkages.asInstanceOf[Map[String, Map[String, Any]]]
-          val resolvedLinkages = links.map { case (propName, values) =>
+          val linkages = getPickledProperties(map, Labels.EntityLinkages)
+          val resolvedLinkages = linkages.map { case (propName, vs) =>
+            val values = vs.asInstanceOf[PickledProperties].asMap
             val temps = get[Iterable[String]](values, Labels.EntityLinkageTemporaryRefs)
-            val finals = get[Map[String, Int]](values, Labels.EntityLinkageFinalRefs)
+            val finals = get[PickledProperties](values, Labels.EntityLinkageFinalRefs)
             val linkages = temps.map(EntityReference.temporaryFromString).toSet ++
-              finals.map { case (eref, typeId) => EntityReference.fromString(eref, Option(typeId)) }.toSet
+              finals.map { case (eref, typeId) =>
+                EntityReference.fromString(eref, Option(typeId.asInstanceOf[Int]))
+              }.toSet
             EntityLinkageProperty(propName, values(Labels.EntityLinkagePropertyType).asInstanceOf[String]) ->
               linkages.map(EntityLinkage.apply)
           }
@@ -458,10 +473,15 @@ object PropertySerialization {
     val propsMap = JacksonObjectMapper.mapper.readValue(encodedProps, classOf[Any])
     transformer.deserialize(propsMap).asInstanceOf[T]
   }
-  def propertiesToJsonString(
+  def mapToJsonString(
       map: Map[String, Any],
       transformer: StringTypeTransformerOps = TypedRefAwareJsonTypeTransformer): String = {
     serialize(map, transformer)
+  }
+  def propertiesToJsonString(
+      pp: PickledProperties,
+      transformer: StringTypeTransformerOps = TypedRefAwareJsonTypeTransformer): String = {
+    serialize(pp, transformer)
   }
   def propertiesToJsonBytes(
       map: Map[String, Any],
@@ -480,15 +500,13 @@ object PropertySerialization {
   def propertiesToJsonString(seq: Seq[(String, Any)], transformer: StringTypeTransformerOps): String = {
     serialize(seq, transformer)
   }
-  def fromEncodedProps(encodedProps: String, ordered: Boolean = false): Map[String, Any] = {
+  def fromEncodedProps(encodedProps: String): Map[String, Any] = {
     val propsMap = JacksonObjectMapper.mapper.readValue(encodedProps, classOf[Map[String, Any]])
-    val map = TypedRefAwareJsonTypeTransformer.deserialize(propsMap).asInstanceOf[Map[String, Any]]
-    if (ordered) SortedMap(map.toSeq: _*) else map
+    TypedRefAwareJsonTypeTransformer.deserialize(propsMap).asInstanceOf[Map[String, Any]]
   }
-  def fromByteArrayEncodedProps(encodedProps: Array[Byte], ordered: Boolean = false): Map[String, Any] = {
+  def fromByteArrayEncodedProps(encodedProps: Array[Byte]): Map[String, Any] = {
     val propsMap = JacksonObjectMapper.mapper.readValue(encodedProps, classOf[Map[String, Any]])
-    val map = TypedRefAwareJsonTypeTransformer.deserialize(propsMap).asInstanceOf[Map[String, Any]]
-    if (ordered) SortedMap(map.toSeq: _*) else map
+    TypedRefAwareJsonTypeTransformer.deserialize(propsMap).asInstanceOf[Map[String, Any]]
   }
   def fromEncodedProps(encodedProps: String, transformer: StringTypeTransformerOps): Map[String, Any] = {
     val propsMap = JacksonObjectMapper.mapper.readValue(encodedProps, classOf[Map[String, Any]])

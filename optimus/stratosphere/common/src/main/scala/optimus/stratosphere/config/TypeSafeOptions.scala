@@ -193,6 +193,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   object intellij {
     def attachAgent: Boolean = self.select("intellij.attach-agent")
     def enableStatusBanner: Boolean = self.select("intellij.enable-status-banner")
+    // TODO (OPTIMUS-79430): Remove line below when hocon plugin updated
+    def hasHoconPluginUpdated: Boolean = self.select[Option[Boolean]]("intellij.hocon-plugin-updated").getOrElse(false)
     def jdk: Option[String] = self.select("intellij.jdk")
     def licenseServer: String = self.select("intellij.license-server")
     def linuxJcefSandbox: Boolean = self.select("intellij.linux-jcef-sandbox")
@@ -589,6 +591,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def stackoverflow: String = self.select("internal.urls.stackoverflow")
       def stratoHelpForum: String = self.select("internal.urls.strato-help-forum")
       def stratoRecentIssues: String = self.select("internal.urls.strato-recent-issues")
+      def squashingGuide: String = self.select("internal.urls.squashing-guide")
 
       object bitbucket {
         def blue: HostnamePort = HostnamePort(self.select[Config]("internal.urls.bitbucket.blue"))
@@ -693,6 +696,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def privateBuildUrl: String = self.select("pr-creation-tool.private-build-url")
     def ciType: String = self.select("pr-creation-tool.ci-type")
     def shortUrl: String = self.select("pr-creation-tool.short-url")
+    def enableSquashChecks: Boolean = self.select("pr-creation-tool.enable-squash-checks")
   }
 
   object python {

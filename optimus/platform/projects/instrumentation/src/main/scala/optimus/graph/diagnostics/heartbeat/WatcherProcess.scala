@@ -40,6 +40,8 @@ import java.util.concurrent.TimeUnit
 import java.nio.file.Files
 import java.nio.file.Paths
 import com.sun.tools.attach.VirtualMachine
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
+import optimus.graph.Exceptions
 import optimus.platform.util.JExecute
 import sun.jvmstat.monitor.MonitoredHost
 import sun.jvmstat.monitor.MonitoredVm
@@ -60,6 +62,9 @@ import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Success
 import scala.util.control.NonFatal
+import optimus.platform.util.Version
+import optimus.utils.PropertyUtils
+import sun.jvmstat.monitor.Monitor
 
 class WatcherArgs {
   @ArgOption(name = "--uuid", usage = "Impersonate uuid for diag uploads")
@@ -85,14 +90,16 @@ class WatcherArgs {
 private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JExecute {
 
   private val logVmEvents = DiagnosticSettings.getBoolProperty("optimus.watcher.logVmEvents", false)
-  private val goodOldGenPct = DiagnosticSettings.getDoubleProperty("optimus.watcher.goodOldGenPct", 95.0)
+  private val goodOldGenPct = DiagnosticSettings.getDoubleProperty("optimus.watcher.goodOldGenPct", 99.0)
   private val maxGoodOldGenTimeMs =
     DiagnosticSettings.getLongProperty("optimus.watcher.maxGoodOldGenTimeSec", 300L) * 1000L
-  private val livenessTimeoutMs = DiagnosticSettings.getIntProperty("optimus.water.liveness.timeout.sec", 10) * 1000L
+  private val livenessTimeoutMs = DiagnosticSettings.getIntProperty("optimus.watcher.liveness.timeout.sec", 60) * 1000L
   private val deleteLogs = !DiagnosticSettings.getBoolProperty("optimus.watcher.retain.diag", true)
   private val doUpload = DiagnosticSettings.getBoolProperty("optimus.watcher.splunk", true)
   private val deleteCores = DiagnosticSettings.getBoolProperty("optimus.watcher.delete.cores", false)
   private val cyclePeriodSec = DiagnosticSettings.getIntProperty("optimus.watcher.cyclePeriod.sec", 5)
+  private val verbose = DiagnosticSettings.getBoolProperty("optimus.watcher.verbose", false)
+  private val heapDump = DiagnosticSettings.getBoolProperty("optimus.watcher.heap", false)
 
   val watcherArgs = new WatcherArgs
   val parser = new CmdLineParser(watcherArgs)
@@ -109,6 +116,8 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
 
   private final case class VM(hsvm: HotSpotVirtualMachine, monitoredHost: MonitoredHost, monitoredVm: LocalMonitoredVm)
   @volatile private var vm: Option[VM] = None
+
+  private def chatter(msg: => String): Unit = if (verbose) log.info(s"$wp: $msg")
 
   private def attachToParent(): Option[VM] = try {
     log.info(s"Attaching back to $pid")
@@ -132,7 +141,7 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
     Some(VM(hsvm, monitoredHost, monitoredVm))
   } catch {
     case e: Throwable =>
-      log.warn(s"Unable to connect to $pid", e)
+      logMessage(s"Unable to attach to $pid", Some(e))
       None
   }
 
@@ -144,13 +153,15 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
 
   private val parentHandle = ProcessHandle.of(pid).get
   private val parentExitFuture: CompletableFuture[ProcessHandle] = parentHandle.onExit()
-  private def checkIfDead = {
+  private var _parentIsDead = false
+  private def parentIsDead = _parentIsDead || {
     try {
       val p = parentExitFuture.get(5, TimeUnit.SECONDS)
-      !p.isAlive
+      _parentIsDead = !p.isAlive
     } catch {
-      case _: Exception => false
+      case _: Exception =>
     }
+    _parentIsDead
   }
 
   // Thread to read from stdin and push to a queue, so that we can listen with a timeout
@@ -178,7 +189,6 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
     override def run(): Unit = if (!stopped) {
       log.warn(s"Shutdown hook")
       Try(vm.foreach(vm => vm.monitoredHost.detach(vm.monitoredVm)))
-      WatcherProcess.checkCores()
       WatcherProcess.stop()
     }
   })
@@ -189,54 +199,136 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
     System.exit(0)
   }
 
+  private val wp = Watcher.wp
   private val parentId = ChainedID(uuid)
-  private val prefix = s"watcher-$uuid"
+  private val prefix = s"$wp-$uuid"
+
+  private def logMessage(msg: String, e: Option[Throwable] = None, level: String = "ERROR"): Unit = {
+    e match {
+      case Some(e) => log.error(s"$wp: $msg", e)
+      case None    => log.error(s"$wp: $msg")
+    }
+    Breadcrumbs.send(
+      PropertiesCrumb(
+        parentId,
+        ForensicSource,
+        Properties.logMsg -> s"$wp: msg" :: Properties.logLevel -> "ERROR" :: Properties.ppid -> pid :: Properties.engineRoot -> ChainedID.root.repr :: Properties.stackTrace
+          .maybe(e.map(Exceptions.minimizeTrace(_))) :: Properties.logLevel -> level ::
+          Version.properties
+      ))
+  }
 
   private var dumpIndex = 0
-  private def dump(java: Boolean, msg: String): Unit = {
+  private def dump(msg: String): Unit = {
     val sb = new StringBuilder()
     dumpIndex += 1
 
     sb.append(s"$msg\n")
     sb.append(s"Current tasks: $activeTasks\n")
 
+    val pinfo = parentHandle.info()
+    sb.append(s"cmd=${pinfo.command().orElse("??")}\n")
+    sb.append(s"opts=${pinfo.arguments().orElse(Array.empty).mkString(" ")}\n")
+
     if (isLinux) {
-      val pinfo = parentHandle.info()
-      sb.append(s"cmd=${pinfo.command().orElse("??")}\n")
-      sb.append(s"opts=${pinfo.arguments().orElse(Array.empty).mkString(" ")}\n")
-      OSInformation.dumpPidInfo(sb.underlying, parentHandle.pid(), timeoutMs = 60000, stacks = false)
+      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, "/usr/bin/free")
+      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, "/usr/bin/cat", "/proc/meminfo")
+      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, "/usr/bin/ps", "auxfww")
+      // This will fail harmlessly if the pid is gone:
+      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, "/usr/bin/cat", s"/proc/$pid/status")
     }
 
-    vm.foreach { vm =>
-      jexecute(sb, vm.hsvm, "threaddump") // jstacks
-      jexecute(sb, vm.hsvm, maxLines = 200, timeoutMs = 30000, logging = true, "inspectheap", "live") // histo
-      jexecute(sb, vm.hsvm, "jcmd", "VM.info")
+    if (!parentIsDead) {
+      vm.foreach { vm =>
+        jexecute(sb, vm.hsvm, "threaddump") // jstacks
+        jexecute(sb, vm.hsvm, maxLines = 200, timeoutMs = 30000, logging = true, "inspectheap", "live") // histo
+        jexecute(sb, vm.hsvm, "jcmd", "VM.info")
+        if (heapDump) {
+          val heapFile = FileUtils.tmpPath(s"$wp-heap", "hprof.gz")
+          logMessage(s"Dumping heap to $heapFile", level = "WARN")
+          jexecute(
+            sb,
+            vm.hsvm,
+            maxLines = -1,
+            timeoutMs = 300000, // Hopefully five minutes is enough...
+            logging = true,
+            "jcmd",
+            "GC.heap_dump",
+            "-gz=1",
+            "-overwrite",
+            heapFile.toString
+          )
+        }
+      }
     }
 
-    if (isLinux) euStack.foreach { euStack =>
-      execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, euStack, "-p", pid)
+    if (isLinux) {
+      // If we found an hs_err file, but the process is still alive, wait a bit for it to terminate.
+      if (hs_err(sb)) {
+        val waitUntil = System.currentTimeMillis() + 12000L
+        while (!parentIsDead && System.currentTimeMillis() < waitUntil)
+          Thread.sleep(1000L)
+      }
+      if (parentIsDead)
+        checkCores(sb)
+      else
+        euStack.foreach { euStack =>
+          execute(sb, timeoutMs = 60000, maxLines = -1, logging = true, euStack, "-p", pid)
+        }
     }
+
+    val fname = s"$prefix-log-$dumpIndex"
+    val s = sb.toString()
+
+    log.info(s"Dumping ${s.length} bytes to $fname")
 
     for {
-      path <- writeToTmpAndLog(s"$prefix-log-$dumpIndex", ForensicSource, parentId, sb.toString, deleteLogs)
+      path <- writeToTmpAndLog(fname, ForensicSource, parentId, s, deleteLogs, doLog = true, logger = log)
       rootId <- publishDestinations
     } if (doUpload)
       upload(ForensicSource, rootId, path, deleteUncompressed = true, deleteUploadedFile = false, taskInfo)
 
   }
 
-  private def checkCores(): Boolean = {
+  private def hs_err(sb: StringBuilder): Boolean = {
+    // Try to find hs_err file
+    val pinfo = parentHandle.info()
+    val hs_err = Paths.get(
+      pinfo
+        .arguments()
+        .orElse(Array.empty)
+        .find(_.startsWith("-XX:ErrorFile="))
+        .map(_.stripPrefix("-XX:ErrorFile=").replace("%p", pid.toString))
+        .getOrElse(System.getProperty("user.dir") + "/hs_err_pid" + pid.toString + ".log"))
+
+    if (Files.exists(hs_err)) {
+      log.info(s"Found $hs_err")
+      sb.append(s"Contents of $hs_err:\n")
+      sb.append(Files.readString(hs_err))
+      true
+    } else {
+      sb.append(s"No hs_err file found at $hs_err\n")
+    }
+    false
+
+  }
+
+  private def checkCores(sb: StringBuilder): Unit = {
+
     var foundCore = false
+    def say(s: String): Unit = {
+      log.info(s)
+      sb.append(s + "\n")
+    }
     if (isLinux) euStack.foreach { euStack =>
       try {
         val oneMinuteAgo = System.currentTimeMillis() - 60000L
-        val sb = new StringBuilder()
-        log.info("Looking for core files less than a minute old")
+        say("Looking for core files less than a minute old")
         Files.walk(Paths.get("/var/tmp/cores")).iterator().asScala.foreach { p =>
           var tLast = 0L
           var t = Files.getLastModifiedTime(p).toMillis
           if (t > oneMinuteAgo && Files.isRegularFile(p) && p.getFileName.toString.contains("core")) {
-            log.info(s"$p is recent.  Loop until it's stable.")
+            say(s"$p is recent.  Loop until it's stable.")
             foundCore = true
             do {
               Thread.sleep(1000L)
@@ -245,44 +337,42 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
             } while (t != tLast)
             FileUtils.uncompress(p, deleteOld = deleteCores) match {
               case Success(pUnzipped) =>
-                sb.append(s"Extracting binary stack from $pUnzipped\n")
+                say(s"Extracting binary stack from $pUnzipped")
                 execute(sb, timeoutMs = 180000, maxLines = -1, logging = true, euStack, "--core", pUnzipped)
+                logMessage(s"Extracted core from $pUnzipped", level = "WARN")
                 Try(pUnzipped.toFile.delete())
               case Failure(e) =>
-                sb.append(s"uncompress failed: $e")
+                say(s"uncompress failed: $e")
             }
           }
         }
-        val stacks = sb.toString
-        if (stacks.nonEmpty) for {
-          path <- writeToTmpAndLog(s"$prefix-core", ForensicSource, parentId, stacks, deleteLogs)
-          root <- publishDestinations
-        } if (doUpload) upload(ForensicSource, root, path, deleteUncompressed = true, deleteUploadedFile = false, taskInfo)
+        if (!foundCore)
+          say("No recent core files found")
       } catch {
         case e: Throwable =>
-          log.error("Error extracting cores", e)
+          logMessage(s"Error extracting cores", Some(e))
+          say(s"Error extracting cores: $e")
       }
     }
-    foundCore
   }
 
   def kill(): Unit = {
-    log.error(s"Killing parent process $parentHandle")
+    logMessage(s"Killing parent process $parentHandle")
     parentHandle.destroy()
-    if (checkIfDead) return
+    if (parentIsDead) return
     log.error("Now trying destroyForcibly")
     parentHandle.destroyForcibly()
-    if (checkIfDead) return
+    if (parentIsDead) return
     if (isLinux) {
       log.error("Now trying kill -9")
       Runtime.getRuntime.exec(Array("/usr/bin/kill", "-9", parentHandle.pid.toString))
     }
-    if (checkIfDead) return
+    if (parentIsDead) return
     log.error("Giving up")
   }
 
   if (dumpNow)
-    dump(java = true, "Dump requested by --dump")
+    dump("Dump requested by --dump")
 
   if (killNow)
     kill()
@@ -302,22 +392,25 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
     (activeTasks + parentId).groupBy(_.root).values.map(_.head)
   }
 
+  private val monitors = mutable.HashMap.empty[String, () => Option[Double]]
+  private def getDoubleMaker[N](m: Monitor)(implicit n: Numeric[N]): () => Option[Double] = () =>
+    Try(n.toDouble(m.getValue.asInstanceOf[N])).toOption
+
   private def getCounterValue(name: String, default: Option[Double]): Option[Double] = vm.flatMap { vm =>
-    try {
-      val c = vm.monitoredVm.findByName(name)
-      if (Objects.nonNull(c)) c.getValue match {
-        case l: java.lang.Long    => Some(l.toDouble)
-        case d: java.lang.Double  => Some(d.toDouble)
-        case i: java.lang.Integer => Some(i.toDouble)
-        case _                    => default
+    val f: () => Option[Double] = monitors.getOrElseUpdate(
+      name,
+      Option(vm.monitoredVm.findByName(name)) match {
+        case Some(m: Monitor) =>
+          m.getValue match {
+            case _: java.lang.Long    => getDoubleMaker[scala.Long](m)
+            case _: java.lang.Double  => getDoubleMaker[scala.Double](m)
+            case _: java.lang.Integer => getDoubleMaker[scala.Int](m)
+            case _                    => () => default
+          }
+        case None => () => default
       }
-      else {
-        default
-      }
-    } catch {
-      case NonFatal(e) =>
-        None
-    }
+    )
+    f()
   }
 
   // Commands
@@ -332,11 +425,13 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
 
   if (listen) {
     vm = attachToParent()
+    logMessage(s"$wp running, vm=$vm", level = "INFO")
     var tLastGoodOg = System.currentTimeMillis()
     while (true) {
 
       // Check for liveness of parent java process.  Should respond to GC.heap_info
       vm.foreach { vm =>
+        chatter("Checking liveness of parent java process")
         val code = jexecute(
           new StringBuilder(),
           vm.hsvm,
@@ -347,9 +442,8 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
           "GC.heap_info")
         if (code == TIMEOUT) {
           val msg = s"Parent java process $pid is unresponsive to GC.heap_info after ${livenessTimeoutMs}ms; killing!"
-          log.error(msg)
-          if (!checkCores())
-            dump(java = false, msg)
+          logMessage(msg)
+          dump("unresponsive")
           kill()
           stop()
         }
@@ -370,19 +464,15 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
           val t = System.currentTimeMillis()
           val totalTimeSec = (timeMinor + timeFull + timeConc) / freq
           val oldPctUsed = (1.0 - (oldGenCapacity - oldGenUsed) / oldGenCapacity) * 100.0
-          log.debug(s"GC time=$totalTimeSec full=$numFull pctOld=$oldPctUsed")
+          chatter(s"GC time=$totalTimeSec full=$numFull pctOld=$oldPctUsed")
           if (oldPctUsed < goodOldGenPct) tLastGoodOg = t
           // maybe check for increasing time spent in GC too?
           else if ((t - tLastGoodOg) > maxGoodOldGenTimeMs) {
             val msg =
               s"Old gen usage is high: $oldPctUsed > $goodOldGenPct for ${t - tLastGoodOg}ms; gcTime=${totalTimeSec}sec; numFull=$numFull; killing process!"
-            log.error(msg)
-            if (checkIfDead)
-              checkCores()
-            else {
-              dump(java = false, msg)
-              kill()
-            }
+            logMessage(msg)
+            dump(msg)
+            kill()
             stop()
           }
         }
@@ -394,31 +484,28 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
 
       // Check for expired ping timers
       timers.iterator.minByOption(_._2.deadline).foreach { case (name, Timer(deadline, _)) =>
+        chatter(s"Checking timeout for $name")
         if (t > deadline) {
           val msg = s"Ping timeout for $name at ${Instant.ofEpochMilli(deadline)}"
-          log.error(msg)
-          dump(java = true, msg)
+          logMessage(msg)
+          dump(msg)
           kill()
           stop()
         }
       }
 
       if (Objects.nonNull(line)) {
-        log.debug(s"Got $line")
+        chatter(s"Got $line")
         line match {
           case DONE if line eq DONE => // want the exact string instance pushed by the reader thread
             log.info("End of input stream")
-            if (checkIfDead)
-              checkCores()
-            else {
-              dump(java = false, "Unexpected end of input stream")
-              kill()
-            }
+            dump("Unexpected end of input stream")
+            kill()
             stop()
           case "stop" =>
             stop()
           case "dump" =>
-            dump(java = true, "Dump requested by parent process")
+            dump("Dump requested by parent process")
           case "kill" =>
             kill()
             stop()
@@ -459,6 +546,8 @@ private[heartbeat] object WatcherProcess extends App with InfoDumpUtils with JEx
 
 object Watcher extends Log with InfoDumpUtils {
 
+  private[heartbeat] val wp = "WatcherProcess"
+
   val attachRelatedOpens = Seq(
     "--add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED",
     "--add-opens=jdk.internal.jvmstat/sun.jvmstat.monitor=ALL-UNNAMED",
@@ -466,9 +555,21 @@ object Watcher extends Log with InfoDumpUtils {
     "--add-opens=jdk.internal.jvmstat/sun.jvmstat.perfdata.monitor.protocol.local=ALL-UNNAMED"
   )
 
-  private def send(cmd: Any*) = watch().writer.foreach { w =>
-    w.write(cmd.mkString(" ") + "\n")
-    w.flush()
+  private def send(cmd: Any*): Unit = watch() match {
+    case WatcherChild(p, w) =>
+      if (!p.isAlive) {
+        log.warn("Watcher process died.  Disabling further attempts to contact it.")
+        disable()
+      } else {
+        try {
+          w.write(cmd.mkString(" ") + "\n")
+          w.flush()
+        } catch {
+          case NonFatal(e) =>
+            log.warn(s"Unable to send $cmd to watcher: $e")
+        }
+      }
+    case _ =>
   }
 
   private trait WatcherInfo {
@@ -487,16 +588,18 @@ object Watcher extends Log with InfoDumpUtils {
     watcher.updateAndGet {
       case Uninitialized =>
         val pid = ProcessHandle.current().pid
+        val moreArgs = PropertyUtils
+          .get("optimus.watcher.javaArgs")
+          .fold(Seq.empty[String])(_.split(":::").toSeq)
 
-        val moreArgs =
-          Option(System.getProperty("optimus.watcher.javaArgs")).fold(Seq.empty[String])(_.split(":::").toSeq)
-        val moreOpts =
-          Option(System.getProperty("optimus.watcher.mainOpts")).fold(Seq.empty[String])(_.split(":::").toSeq)
+        val moreOpts = PropertyUtils
+          .get("optimus.watcher.mainOpts")
+          .fold(Seq.empty[String])(_.split(":::").toSeq)
 
         val nohup = if (!DiagnosticSettings.isWindows) Seq("/usr/bin/nohup") else Seq()
 
         val watcherProperties = System.getProperties.asScala.collect {
-          case (k, v) if k.startsWith("optimus.watcher") =>
+          case (k, v) if k.startsWith("optimus.watcher") && !k.contains(".javaArgs") =>
             s"-D$k=$v"
         }
 
@@ -504,6 +607,7 @@ object Watcher extends Log with InfoDumpUtils {
           nohup ++
             Seq(
               javaExecutable,
+              s"-Dwatcher.ppid=$pid", // early on commandline to be detectable from processhandle in tests
               "-cp",
               System.getProperty("java.class.path"),
               "-Xmx300m", // can be overridden via optimus.watcher.javaArgs
@@ -531,7 +635,12 @@ object Watcher extends Log with InfoDumpUtils {
           pb.redirectInput(ProcessBuilder.Redirect.PIPE)
           val p = pb.start()
 
-          log.info(s"Created WatcherProcess ${p.pid} watching ${pid}")
+          log.info(s"Created $wp ${p.pid} watching ${pid}")
+          Breadcrumbs.send(
+            PropertiesCrumb(
+              ChainedID.root,
+              ForensicSource,
+              Properties.logMsg -> s"Started $wp" :: Properties.cpid -> p.pid :: Version.properties))
 
           Runtime.getRuntime.addShutdownHook(new Thread {
             override def run(): Unit = disable()
@@ -543,6 +652,13 @@ object Watcher extends Log with InfoDumpUtils {
         } catch {
           case e: Throwable =>
             log.error(s"Unable to register watcher", e)
+            Breadcrumbs.send(
+              PropertiesCrumb(
+                ChainedID.root,
+                ForensicSource,
+                Properties.logMsg -> s"Unable to start $wp" :: Properties.stackTrace -> Exceptions
+                  .minimizeTrace(e) :: Version.properties
+              ))
             Disabled
         }
       case w => w

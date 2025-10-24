@@ -14,4 +14,7 @@ main {
       optimus.platform.utils,
     ]
   }
+  runtime.libs = [
+    io.netty.netty-tcnative-boringssl-static
+  ]
 }

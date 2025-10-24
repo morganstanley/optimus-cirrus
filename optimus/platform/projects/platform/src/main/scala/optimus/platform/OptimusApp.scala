@@ -43,7 +43,6 @@ import optimus.graph.diagnostics.gridprofiler.Level.Level
 import optimus.graph.diagnostics.heap.HeapSampling
 import optimus.graph.diagnostics.messages.StartupEventCounter
 import optimus.graph.diagnostics.sampling.SamplingProfiler
-import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.trace.OGTraceMode
 import optimus.graph.diagnostics.tsprofiler.TemporalSurfProfilingLevel.TemporalSurfProfilingLevel
 import optimus.graph.diagnostics.tsprofiler.TemporalSurfaceProfilingUtils
@@ -80,6 +79,7 @@ import optimus.platform.installcommonpath.InstallCommonPath
 import optimus.platform.runtime.OptimusCompositeLeaderElectorClient
 import optimus.platform.runtime.OptimusEarlyInitializer
 import optimus.platform.runtime.ZkUtils
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.utils.app.DelimitedStringOptionHandler
 import optimus.platform.util.ArgumentPublisher
 import optimus.platform.util.ArgumentPublisher.parseOptimusArgsToPairs
@@ -335,7 +335,6 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
   /** Hook for sundry cleanup actions such as flushing breadcrumbs/auxscheduler/profiling data. */
   protected def flushBeforeExit(): Unit = try {
     if (Breadcrumbs.collecting) {
-      Breadcrumbs.send(OnceByCrumbEquality, ChainedID.root, new EventCrumb(_, RuntimeSource, Events.AppCompleted))
 
       val propertyMap = appLaunchContextInfo() + (BCProps.event -> Events.AppCompleted.name)
       Breadcrumbs.send(OnceByCrumbEquality, ChainedID.root, PropertiesCrumb(_, RuntimeSource, propertyMap))
@@ -684,7 +683,6 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
   def setup(): Unit = {}
   @entersGraph def preRun(): Unit = {
     val id = ChainedID.root
-    Breadcrumbs.send(OnceByCrumbEquality, id, new EventCrumb(_, RuntimeSource, Events.AppStarted))
     val truncatedOpts = LoggingInfo.getJavaOpts(2000)
     var len = 0 // (I know I can do it purely with a scanLeft but a var seems easier to read)
     val argsSeq = Option(args).map(_.toSeq).getOrElse(Seq())

@@ -20,6 +20,6 @@ private[optimus] object UUIDReferenceGenerator extends ReferenceGenerator {
 
   override def generateVersionedReference: VersionedReference = {
     val data = UUIDGenerator.freshUuid()
-    new VersionedReference(data)
+    VersionedReference(data)
   }
 }

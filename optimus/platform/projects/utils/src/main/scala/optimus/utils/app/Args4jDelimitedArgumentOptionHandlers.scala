@@ -110,6 +110,19 @@ final class DelimitedTuple2StringDoubleOptionHandler(
   }
 }
 
+final class DelimitedTuple2StringIntOptionHandler(
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Seq[(String, Int)]])
+    extends CommaDelimitedArgumentOptionHandler[(String, Int)](parser, option, setter) {
+  def convert(s: String): (String, Int) = s.split("=") match {
+    case Array(a, b) => (a, b.toInt)
+    case _ =>
+      throw new IllegalArgumentException(
+        "Unable to parse as Tuple2[String, Int]... A string of the format: A=B is expected")
+  }
+}
+
 final class DelimitedTuple3StringOptionHandler(
     parser: CmdLineParser,
     option: OptionDef,

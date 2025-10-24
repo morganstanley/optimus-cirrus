@@ -13,9 +13,6 @@ package optimus.buildtool.builders.postinstallers.apprunner
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.{Set => JSet}
-
-import optimus.buildtool.builders.BackgroundAppId
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.builders.postinstallers.PostInstaller
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
@@ -27,9 +24,11 @@ import optimus.buildtool.trace.PostInstallApp
 import optimus.buildtool.utils.BlockingQueue
 import optimus.buildtool.utils.Commit
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.util.Log
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 object PostInstallAppRunner {
@@ -51,15 +50,14 @@ class PostInstallAppRunner(
     scopeConfigSource: ScopeConfigurationSource,
     installDir: Directory,
     installVersion: String,
-    logDir: Directory,
+    processBuilder: ExternalProcessBuilder,
     latestCommit: Option[Commit],
-    bundleClassJars: Boolean,
-    useCrumbs: Boolean
+    bundleClassJars: Boolean
 ) extends PostInstaller
     with Log {
   import PostInstallAppRunner._
 
-  protected val isWindows = Utils.isWindows
+  protected val isWindows: Boolean = Utils.isWindows
 
   private val pathBuilder = InstallPathBuilder.dev(installDir, installVersion)
 
@@ -91,7 +89,7 @@ class PostInstallAppRunner(
 
     def markAsProcessed(scopeId: ScopeId): Unit = _processedScopes.add(scopeId)
 
-    def processedScopes() = _processedScopes.asScala
+    def processedScopes(): mutable.Set[ScopeId] = _processedScopes.asScala
 
     def reset(): Unit = {
       _processedScopes.clear()
@@ -149,19 +147,21 @@ class PostInstallAppRunner(
   protected def exists(appLauncherScript: FileAsset): Boolean = appLauncherScript.exists
 
   @async protected def launchProcess(scopeId: ScopeId, appName: String, cmd: Seq[String]): Unit = {
-    val id = BackgroundAppId(scopeId, appName)
-    log.info(s"[$id] Starting...")
+    log.info(s"[$scopeId:$appName] Starting...")
     val (durationInNanos, _) = AdvancedUtils.timed {
-      BackgroundProcessBuilder(
-        id,
-        id.logFile(logDir),
-        cmd,
-        envVariablesToClean = unsafeEnvVariables,
-        envVariablesToAdd = extraEnvVariables,
-        useCrumbs = useCrumbs)
-        .build(scopeId, PostInstallApp(appName), lastLogLines = 30)
+      processBuilder
+        .build(
+          scopeId,
+          appName,
+          cmd,
+          Some(PostInstallApp(appName)),
+          envVariablesToClean = unsafeEnvVariables,
+          envVariablesToAdd = extraEnvVariables,
+          lastLogLines = 30
+        )
+        .start()
     }
-    log.info(s"[$id] Completed in ${Utils.durationString(durationInNanos / 1000000L)}")
+    log.info(s"[$scopeId:$appName] Completed in ${Utils.durationString(durationInNanos / 1000000L)}")
   }
 
   @async override def complete(successful: Boolean): Unit = Tracker.reset()

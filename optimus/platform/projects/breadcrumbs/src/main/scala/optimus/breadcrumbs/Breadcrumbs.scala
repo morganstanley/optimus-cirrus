@@ -56,12 +56,18 @@ import java.util.{ArrayList => jArrayList}
 import java.util.{List => jList}
 import java.util.{Map => jMap}
 import scala.collection.mutable
+import scala.collection.concurrent
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import optimus.scalacompat.collection._
+import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.Metric
+import org.apache.kafka.common.MetricName
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.SortedMap
 
 object BreadcrumbConsts {
   val CrumbBundle = "_crumbs" // compressed, encoded stream of serialized crumbs
@@ -150,13 +156,12 @@ object Breadcrumbs extends Log {
 
   private[breadcrumbs] val knownSource = new ConcurrentHashMap[Crumb.Source, Crumb.Source]()
 
-  def getCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.sendCount.get)
+  private def countMap[T](f: Crumb.Source => T): Map[Crumb.Source, T] = knownSource.asScala.toMap.mapValuesNow(f)
 
-  def getKafkaCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.kafkaCount.get)
+  def getSourceCountAnalysis: Map[Crumb.Source, Map[String, Double]] = countMap(_.countAnalysis).filter(_._2.nonEmpty)
+  def getSourceSnapAnalysis: Map[Crumb.Source, Map[String, Double]] = countMap(_.snapAnalysis).filter(_._2.nonEmpty)
 
-  def getKafkaFailures: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.kafkaFailures.get)
-
-  def getEnqueueFailures: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.enqueueFailures.get)
+  def getEnqueueFailures: Map[Crumb.Source, Int] = countMap(_.enqueueFailures.get)
 
   private val queueMaxLength: Int =
     if (defaultResources == "none" || defaultResources == "off") 1 else PropertyUtils.get(queueLengthName, 10000)
@@ -433,7 +438,19 @@ object Breadcrumbs extends Log {
   def flush(): Unit = {
     log.debug("Breadcrumbs about to be flushed")
     impl.flush()
-    log.info("Breadcrumbs flushed")
+    val ca = getSourceCountAnalysis
+    val cs = getSourceSnapAnalysis
+    val sources = (cs.keySet ++ ca.keySet)
+    val sourceData: SortedMap[String, SortedMap[String, Double]] = sources
+      .map(s =>
+        s.toString -> ((ca.get(s).getOrElse(Map.empty) ++ cs
+          .get(s)
+          .getOrElse(Map.empty))).to(SortedMap))
+      .to(SortedMap)
+    val kafkaData = BreadcrumbsKafkaPublisher.processedStats.to(SortedMap)
+    val formatted = sourceData.mapValuesNow(_.mkString("{", ", ", "}")).mkString("{", ", ", "}") + ", " + kafkaData
+      .mkString("{", ", ", "}")
+    log.info(s"Breadcrumbs flushed: $formatted")
   }
 
   object Flush {
@@ -571,11 +588,13 @@ abstract class BreadcrumbsPublisher extends Filterable with Log {
         } else {
           val cReplicated = Breadcrumbs.replicateToUuids(c)
           val s = c.source
-          val count = s.sendCount.addAndGet(cReplicated.size)
+          val currCount = s.genericSendCount.get
+          val more = cReplicated.size
           knownSource.put(s, s)
-          if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
+          if (s.maxCrumbs < 1 || currCount + more <= s.maxCrumbs) {
+            s.genericSendCount.addAndGet(more)
             cReplicated.map(sendInternal).forall(identity)
-          else {
+          } else {
             s.shutdown()
             false
           }
@@ -723,7 +742,7 @@ private[optimus] class BreadcrumbsRouter(
         .find { _.matcher matches c }
         .map { _.publisher }
       targetPublisher getOrElse defaultPublisher
-    } else defaultPublisher
+    } else BreadcrumbsKafkaPublisher.instance.get.getOrElse(defaultPublisher)
   }
 
   protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
@@ -856,10 +875,53 @@ class BreadcrumbsLocalPublisher(gzpath: Path, flushSec: Int = 10) extends Breadc
 
 object BreadcrumbsKafkaPublisher {
   private[breadcrumbs] val TopicMapKey: String = "topicMap"
+  private[breadcrumbs] val instance = new AtomicReference[Option[BreadcrumbsKafkaPublisher]](None)
+  def stats: Option[Map[MetricName, Metric]] = for {
+    i <- instance.get()
+    p <- i.producer
+  } yield p.metrics().asScala.toMap
+  @volatile private var kafkaMetricMap = Map.empty[String, (MetricName, Double)]
+  def processedStats: Map[String, Double] = stats.fold(Map.empty[String, Double]) { stats =>
+    var metricMap: Map[String, (MetricName, Double)] = kafkaMetricMap
+    val ss = stats.toSeq.sortBy(_._1.name)
+    if (metricMap.isEmpty) {
+      // Compute metric map for fast extraction of metrics from kafka's structure
+      // To keep publication simpler, only publish snap values
+      val interesting =
+        Map(
+          "compression-rate-avg" -> ("comp", 1.0),
+          "compression-rate" -> ("comp", 1.0),
+          "outgoing-byte-rate" -> ("ombpm", 60e-6),
+          "byte-rate" -> ("mbpm", 60e-6),
+          "batch-split-rate" -> ("split", 60.0),
+          "record-error-rate" -> ("err", 60.0),
+          "record-send-rate" -> ("rec", 60.0),
+          "batch-size-avg" -> ("batch", 1e-6)
+        )
+      metricMap = stats.keySet
+        .filter(mn => interesting.contains(mn.name))
+        .flatMap { mn =>
+          val (abbrev, mult) = interesting(mn.name)
+          if (mn.group == "producer-metrics") Some(abbrev -> (mn, mult))
+          else if (mn.group == "producer-topic-metrics" && mn.tags.containsKey("topic"))
+            Some(s"$abbrev-${mn.tags.get("topic")}" -> (mn, mult))
+          else None
+        }
+        .toMap
+      kafkaMetricMap = metricMap
+    }
+    val ret = for {
+      (pubName: String, (mn: MetricName, mult)) <- metricMap
+      mv <- stats.get(mn)
+      v <- mv.metricValue().toString.toDoubleOption
+    } yield pubName -> v * mult
+    ret
+  }
+
 }
 class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object], topicProps: jMap[String, Object])
     extends BreadcrumbsPublisher {
-  import Breadcrumbs.log
+  import BreadcrumbsKafkaPublisher._
   import Breadcrumbs.runProtected
   import BreadcrumbsKafkaPublisher.TopicMapKey
   private var producer: Option[KafkaProducer[String, String]] = None
@@ -897,8 +959,32 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
               "EncryptionStringSerializer and encrypting crumbs.")
 
         }
+
+        try {
+          // Useful values for producer metrics.  Sample over a minute, but don't average over multiple minutes
+          if (!props.containsKey(ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG)) {
+            props.put(ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, Integer.valueOf(60 * 1000))
+            props.put(ProducerConfig.METRICS_NUM_SAMPLES_CONFIG, Integer.valueOf(1))
+          }
+
+          val experimentalBatching =
+            System.getProperty("optimus.breadcrumbs.kafka.experimental_batching", "false").toBoolean
+          if (experimentalBatching) {
+            props.put(ProducerConfig.BATCH_SIZE_CONFIG, Integer.valueOf(1 * 1000 * 1000))
+            props.put(ProducerConfig.LINGER_MS_CONFIG, Integer.valueOf(60 * 1000))
+            props.put(ProducerConfig.BUFFER_MEMORY_CONFIG, Integer.valueOf(10 * 1000 * 1000))
+            props.put(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, Integer.valueOf(2 * 1000 * 1000))
+            props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "gzip")
+            props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, Integer.valueOf(100))
+          }
+        } catch {
+          case t: UnsupportedOperationException =>
+            log.warn(s"Producer does not support setting metrics properties")
+        }
+
         producer = Some(new KafkaProducer[String, String](props))
         initialized = true
+        drainThread.setName("breadcrumbs-kafka-drain-thread")
         drainThread.setDaemon(true)
         drainThread.start()
       } catch {
@@ -925,6 +1011,26 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   private val isRunning = new AtomicBoolean(true)
 
   private val drainThread = new Thread {
+
+    private def sendKafka(c: Crumb): Boolean = producer.isDefined && {
+      try {
+        val s = c.asJSON.toString()
+
+        val ok = c.source.analyzeKafkaBlob(s)
+
+        // Publish if below throttling limit, or if we are in dry-run mode and just keeping stats
+        ok && {
+          val record = new ProducerRecord[String, String](topicMapper.topicForCrumb(c).topic, s)
+          producer.foreach(_.send(record, CompletionCallback))
+          true
+        }
+      } catch {
+        case NonFatal(t) =>
+          warning.foreach(_.fail(s"Unable to send $c via Kafka due to $t"))
+          c.source.kafkaFailures.incrementAndGet()
+          false
+      }
+    }
 
     override def run(): Unit = {
 
@@ -968,24 +1074,10 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
 
   private object CompletionCallback extends Callback {
     override def onCompletion(metadata: RecordMetadata, exception: Exception): Unit = {
-      if (metadata ne null)
-        warning.foreach(_.succeed(s"Successfully sent kafka message to partition ${metadata.partition()}"))
-      else
+      if (exception ne null)
         warning.foreach(_.fail(s"Failed to send kafka message: $exception"))
-    }
-  }
-
-  def sendKafka(c: Crumb): Boolean = producer.isDefined && {
-    try {
-      val record = new ProducerRecord[String, String](topicMapper.topicForCrumb(c).topic, c.asJSON.toString())
-      producer.foreach(_.send(record, CompletionCallback))
-      c.source.kafkaCount.incrementAndGet()
-      true
-    } catch {
-      case NonFatal(t) =>
-        warning.foreach(_.fail(s"Unable to send $c via Kafka due to $t"))
-        c.source.kafkaFailures.incrementAndGet()
-        false
+      else
+        warning.foreach(_.succeed(s"Successfully sent kafka message to partition ${metadata.partition()}"))
     }
   }
 
@@ -1010,6 +1102,8 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
     runProtected(() => drainThread.interrupt())
     log.info(s"Shutting down BreadcrumbsKafkaPublisher after $sentCount crumbs")
   }
+
+  instance.set(Some(this))
 }
 
 object BreadcrumbsCompositePublisher {

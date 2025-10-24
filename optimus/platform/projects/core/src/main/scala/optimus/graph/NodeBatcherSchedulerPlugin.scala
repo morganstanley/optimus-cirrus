@@ -21,7 +21,6 @@ import optimus.platform.annotations._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.{ArrayList => JArrayList}
 import java.util.{HashMap => JHashMap}
 import scala.annotation.tailrec
@@ -29,6 +28,7 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 import msjava.slf4jutils.scalalog.getLogger
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * case class to represent the result of BNode.tryToSchedule
@@ -136,11 +136,13 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
       val useScope: Boolean,
       val batchScopeKeys: Set[BatchScopeKey],
       initState: State,
-      grpKey: GroupKeyT)
+      grpKey: GroupKeyT,
+      scenarioStack: ScenarioStack)
       extends CompletableNode[Seq[T]] {
     // Set an enqueuer arbitrarily from the first node in the batch, so at least something shows up
     // in profiling.  It's misleading surprisingly infrequently.
     initState.nodes.headOption.foreach(OGTrace.enqueue(_, this, false))
+    attach(scenarioStack)
 
     def this(
         priority: Int,
@@ -148,8 +150,13 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
         batchScopeKeys: Set[BatchScopeKey],
         node: NodeT,
         groupKeyT: GroupKeyT) = {
-      this(priority, useScope, batchScopeKeys, State(count = 1, weight = 1, List(node)), groupKeyT)
-      attach(node.scenarioStack().asSiStack)
+      this(
+        priority,
+        useScope,
+        batchScopeKeys,
+        State(count = 1, weight = 1, List(node)),
+        groupKeyT,
+        node.scenarioStack().asSiStack)
     }
 
     override def executionInfo: NodeTaskInfo = batcher.propertyInfo
@@ -552,8 +559,7 @@ abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
         if (state ne null) {
           // addNode was not able to add `v` to the existing batch...
           if (state.count != 1) {
-            val nbatch = new BNode(0, false, batchScopeKeys, state, null)
-            nbatch.attach(ec.scenarioStack.asSiStack)
+            val nbatch = new BNode(0, false, batchScopeKeys, state, null, ec.scenarioStack.asSiStack)
             if (nbatch.prepareForScheduling())
               ec.enqueue(null, nbatch)
           } else {
@@ -720,19 +726,18 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
       } else {
         if (state.count == 1 && (weight < getGroupMaxBatchSize(grpKey, node))) {
           // First time with this grpKey OR failed to add to previously scheduled batch node
-          batch = new BNode(priority, scopedBatching, batchScopeKeys, state, grpKey)
+          batch = new BNode(priority, scopedBatching, batchScopeKeys, state, grpKey, ss)
           batches.put(grpKey, batch)
           batch
         } else {
           if (batch ne null) batches.remove(grpKey)
-          new BNode(-1, false, batchScopeKeys, state, grpKey)
+          new BNode(-1, false, batchScopeKeys, state, grpKey, ss)
         }
       }
     }
 
     // Enqueue outside the lock
     if (newBatch ne null) {
-      newBatch.attach(ss)
       if (newBatch.priority == -1) {
         if (newBatch.prepareForScheduling())
           eq.enqueue(null, newBatch)
@@ -777,9 +782,9 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
 
   override def onGraphStalled(scheduler: Scheduler, outstandingTasks: JArrayList[NodeTask]): Unit = {
 
-    val batchesToEnqueueResult: LinkedBlockingQueue[BNode] =
+    val batchesToEnqueueResult: ArrayBuffer[BNode] =
       batches.synchronized {
-        val batchesToBeEnqueued = new LinkedBlockingQueue[BNode]()
+        val batchesToBeEnqueued = new ArrayBuffer[BNode]()
         var shouldRegisterBack = false
         batches
           .values()
@@ -787,18 +792,14 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
             val tryScheduleOutput = batch.tryToPrepareForScheduling(scheduler, outstandingTasks)
             shouldRegisterBack |= !tryScheduleOutput.shouldNotRegisterBackToOoWL
             if (tryScheduleOutput.shouldEnqueue)
-              batchesToBeEnqueued.put(batch)
+              batchesToBeEnqueued += batch
           })
         if (shouldRegisterBack)
           scheduler.addOutOfWorkListener(this)
         batchesToBeEnqueued
       }
 
-    if (batchesToEnqueueResult ne null) {
-      while (!batchesToEnqueueResult.isEmpty) {
-        scheduler.enqueue(null, batchesToEnqueueResult.poll())
-      }
-    }
+    batchesToEnqueueResult.foreach(scheduler.enqueue(null, _))
   }
 }
 

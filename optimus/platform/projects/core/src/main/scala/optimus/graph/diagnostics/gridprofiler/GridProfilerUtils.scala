@@ -50,9 +50,9 @@ import optimus.graph.diagnostics.pgo.ConfigWriterSettings
 import optimus.graph.diagnostics.pgo.DisableCache
 import optimus.graph.diagnostics.pgo.PGOMode
 import optimus.graph.diagnostics.pgo.Profiler
-import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.trace.ReuseHistogram
 import optimus.platform.inputs.registry.ProcessGraphInputs
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
 import optimus.scalacompat.collection._
@@ -541,10 +541,14 @@ object GridProfilerUtils {
       Some(CacheFilterTweakUsageDecision.csvFormat())
     } else None
 
-  final case class CrumbStats(rootUuid: String, counts: Map[Crumb.Source, Int])
+  final case class CrumbStats(
+      rootUuid: String,
+      counts: Map[Crumb.Source, Map[String, Double]],
+      snaps: Map[Crumb.Source, Map[String, Double]])
 
   def crumbStats: Option[String] = Some(
-    JsonMapper.mapper.writeValueAsString(CrumbStats(ChainedID.root.repr, Breadcrumbs.getCounts)))
+    JsonMapper.mapper.writeValueAsString(
+      CrumbStats(ChainedID.root.repr, Breadcrumbs.getSourceCountAnalysis, Breadcrumbs.getSourceSnapAnalysis)))
 
   def sendCSVResultCrumb(csvRes: CSVResults): Unit = {
     if (Breadcrumbs.isInfoEnabled) for {

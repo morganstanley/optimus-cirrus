@@ -160,5 +160,10 @@ object Events extends KnownEvents {
   val UiFeature = event("UiFeature")
   val SessionManagerEvent = event("SessionManagerEvent")
   val UIWebSocketChannelEvent = event("UIWebSocketChannelEvent")
+  val UIBarrierMonitorEvent = event("UIBarrierMonitorEvent")
 
+}
+
+object DeprecatedEvent {
+  type EventDEPRECATED = optimus.breadcrumbs.crumbs.Event
 }

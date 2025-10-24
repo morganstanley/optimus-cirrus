@@ -12,8 +12,6 @@
 package optimus.buildtool.processors
 
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.buildtool.builders.BackgroundCmdId
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
@@ -23,6 +21,7 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Queue
 import optimus.buildtool.utils.OptimusBuildToolProperties
 import optimus.buildtool.utils.OsUtils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 
 import java.nio.file.Files
@@ -31,9 +30,8 @@ import scala.util._
 final case class DeploymentResponse(response: String)
 final case class DeploymentException(msg: String) extends RuntimeException(msg)
 
-object DeploymentScriptWriter extends DeploymentScriptWriter {
+object DeploymentScriptWriter {
   private val log = getLogger(this)
-  private val id = BackgroundCmdId("DeploymentScriptWriter")
   private val concurrentScripts = OptimusBuildToolProperties.asInt("concurrentDeploymentScripts").getOrElse(10)
   private val throttle = AdvancedUtils.newThrottle(concurrentScripts)
   private val remoteLogs = OptimusBuildToolProperties.getOrFalse("remoteDeploymentLogs")
@@ -41,21 +39,27 @@ object DeploymentScriptWriter extends DeploymentScriptWriter {
   private val env = if (remoteLogs) Map.empty[String, String] else Map(remoteLogVar -> "1")
 }
 
-class DeploymentScriptWriter {
+class DeploymentScriptWriter(processBuilder: ExternalProcessBuilder) {
   import DeploymentScriptWriter._
 
   val cmdPrefix: Seq[String] = if (OsUtils.isWindows) Seq("cmd", "/c") else Seq("sh", "-c")
   val cmdSeparator: String = if (OsUtils.isWindows) "&&" else ";"
 
-  @async protected def runCmdString(cmd: String, scopeId: ScopeId, logFile: FileAsset): Try[String] = {
+  @async protected def runCmdString(cmd: String, scopeId: ScopeId): Try[String] = {
     val queueTask = ObtTrace.startTask(scopeId, Queue(DeploymentScriptCommand))
     throttle {
       queueTask.end(success = true)
       asyncResult {
-        BackgroundProcessBuilder(id, logFile, cmdPrefix :+ cmd, useCrumbs = false, envVariablesToAdd = env)
-          .build(scopeId, DeploymentScriptCommand, lastLogLines = 100)
+        val process = processBuilder.build(
+          scopeId,
+          "deploymentScript",
+          cmdPrefix :+ cmd,
+          envVariablesToAdd = env,
+          lastLogLines = 100
+        )
+        process.start()
 
-        Files.readString(logFile.path)
+        process.logFile.map(f => Files.readString(f.path)).getOrElse("")
       }.toTry
     }
   }
@@ -76,12 +80,12 @@ class DeploymentScriptWriter {
       templateFile: FileAsset,
       paramsFile: FileAsset,
       outputDir: Directory,
-      scopeId: ScopeId,
-      logFile: FileAsset): Try[DeploymentResponse] = {
+      scopeId: ScopeId
+  ): Try[DeploymentResponse] = {
     val commands: Seq[String] =
       Seq(generateCommand(templateFile, paramsFile, outputDir))
     for {
-      cmdResponse <- runCmdString(commands.mkString(cmdSeparator), scopeId, logFile)
+      cmdResponse <- runCmdString(commands.mkString(cmdSeparator), scopeId)
       deploymentResponse <- handleCmdResponse(cmdResponse)
     } yield deploymentResponse
   }

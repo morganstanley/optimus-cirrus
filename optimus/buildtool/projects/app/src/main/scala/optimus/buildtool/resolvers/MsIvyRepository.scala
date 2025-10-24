@@ -132,6 +132,8 @@ import scala.util.Try
 
       val nonClassArtifacts = this.nonClassArtifacts(dependency, project, publications, namedArtifacts)
 
+      val metadataArtifact = this.metadataArtifact(dependency)
+
       val artifacts: Seq[CoursierArtifact] = namedArtifacts
         .flatMap(_.toOption)
         .map { artifact =>
@@ -145,7 +147,7 @@ import scala.util.Try
                 ))
             else artifact
           } else artifact
-        }
+        } ++ metadataArtifact.toSeq.filterNot(artifact => localRepo(artifact.url))
 
       val errors = namedArtifacts.collect { case e @ Left(_) => e }
 
@@ -264,6 +266,37 @@ import scala.util.Try
             Left(s"No artifact found for ${publication.name}:${publication.`type`.value}; tried ${uris.mkString(", ")}")
           )
       }
+
+    private def metadataArtifact(dependency: Dependency): Either[String, CoursierArtifact] = {
+      ivyArtifact(dependency.module, dependency.version).map(artifact =>
+        CoursierArtifact(artifact, Publication("ivy", Type("ivy"), Extension("xml"), Classifier.empty)))
+    }
+
+    private def localRepo(path: String): Boolean = path.contains("ivy_repo_fixes")
+  }
+
+  private def ivyArtifact(module: Module, version: String): Either[String, Artifact] = {
+    for {
+      url <- ivyPattern.substituteVariables(
+        variables(module, Some(version), "ivy", "ivy", "xml", None)
+      )
+    } yield {
+      var artifact = Artifact(
+        url,
+        Map.empty,
+        Map.empty,
+        changing = changing.getOrElse(version.contains("-SNAPSHOT")),
+        authentication = authentication,
+        optional = false
+      )
+
+      if (withChecksums)
+        artifact = artifact.withDefaultChecksums
+      if (withSignatures)
+        artifact = artifact.withDefaultSignature
+
+      artifact
+    }
   }
 
   def artifacts(
@@ -304,28 +337,7 @@ import scala.util.Try
       fetch: Repository.Fetch[F]
   )(implicit F: Monad[F]): EitherT[F, String, (ArtifactSource, Project)] = {
 
-    val eitherArtifact: Either[String, Artifact] =
-      for {
-        url <- ivyPattern.substituteVariables(
-          variables(module, Some(version), "ivy", "ivy", "xml", None)
-        )
-      } yield {
-        var artifact = Artifact(
-          url,
-          Map.empty,
-          Map.empty,
-          changing = changing.getOrElse(version.contains("-SNAPSHOT")),
-          authentication = authentication,
-          optional = false
-        )
-
-        if (withChecksums)
-          artifact = artifact.withDefaultChecksums
-        if (withSignatures)
-          artifact = artifact.withDefaultSignature
-
-        artifact
-      }
+    val eitherArtifact: Either[String, Artifact] = ivyArtifact(module, version)
 
     for {
       artifact <- EitherT(F.point(eitherArtifact))
@@ -427,6 +439,9 @@ private[resolvers] object MsIvyRepository {
 
   def isClassJar(tpe: Type): Boolean =
     tpe.value == "jar" || tpe.value == "bundle" // (see https://stackoverflow.com/questions/5389691/what-is-the-meaning-of-type-bundle-in-a-maven-dependency)
+
+  def isIvyMetaFile(artifact: CoursierArtifact): Boolean =
+    artifact.`type`.value == "ivy" && artifact.publication.ext.value == "xml"
 }
 
 @entity private class FileFinder(fileSystem: FileSystem) {

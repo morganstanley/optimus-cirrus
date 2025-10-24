@@ -11,20 +11,19 @@
  */
 package optimus.buildtool.builders.postbuilders.installer
 
-import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicInteger
 import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.Artifact.InternalArtifact
 import optimus.buildtool.artifacts._
 import optimus.buildtool.builders.postbuilders.PostBuilder
+import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints.Filename
 import optimus.buildtool.builders.postbuilders.installer.component._
 import optimus.buildtool.builders.postinstallers.PostInstaller
 import optimus.buildtool.config.ExternalDependenciesSource
 import optimus.buildtool.config.FingerprintsDiffConfiguration
 import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
-import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.TestplanConfiguration
@@ -40,6 +39,9 @@ import optimus.buildtool.trace._
 import optimus.buildtool.utils.GitLog
 import optimus.platform._
 import optimus.platform.util.Log
+
+import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A post-build step which copies all installable artifacts to install paths and generates location-independent pathing
@@ -229,10 +231,21 @@ class Installer(
       postInstaller.complete(successful)
 
       val totalInstalled = installedFiles.getAndSet(0)
-      val msg = s"$totalInstalled artifacts installed to $installDir"
+      // this log is meant to raise awareness for local human OBT users, since by default deleted files won't be
+      // automatically reinstalled.
+      val hintMsgOpt =
+        if (totalInstalled < 1)
+          Some(
+            "If you'd like to force reinstall, rebuild with --verifyInstall or delete the bundle fingerprints in" +
+              s" ${installDir.pathString}/*/*/$installVersion/install/common/$Filename")
+        else None
+      val summary = s"$totalInstalled artifacts installed to $installDir"
+
       ObtTrace.addToStat(ObtStats.InstalledJars, totalInstalled)
-      log.info(msg)
-      ObtTrace.info(msg)
+      (Seq(summary) ++ hintMsgOpt).foreach { msg =>
+        log.info(msg)
+        ObtTrace.info(msg)
+      }
     }
 
   override def save(successful: Boolean): Unit = {
@@ -244,6 +257,7 @@ class Installer(
 
 object Installer {
   import optimus.buildtool.utils.AssetUtils
+
   import scala.jdk.CollectionConverters._
 
   def writeFile(targetFile: FileAsset, content: Seq[String]): Unit = {

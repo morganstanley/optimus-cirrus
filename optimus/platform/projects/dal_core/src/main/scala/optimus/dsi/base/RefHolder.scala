@@ -11,7 +11,7 @@
  */
 package optimus.dsi.base
 
-import optimus.platform.storable.StorableReference
+import optimus.platform.storable.StorableReferenceArrayImpl
 
 object RefHolder {
   def apply(d: Array[Byte]) = new RefHolder(d)
@@ -21,4 +21,5 @@ object RefHolder {
 /**
  * Holds a binary blob that represents a stored reference to an entity or entity version.
  */
-class RefHolder(data: Array[Byte], val mayBeEncrypted: Option[Array[Byte]] = None) extends StorableReference(data)
+class RefHolder(data: Array[Byte], val mayBeEncrypted: Option[Array[Byte]] = None)
+    extends StorableReferenceArrayImpl(data)

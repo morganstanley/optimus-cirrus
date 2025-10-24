@@ -107,7 +107,6 @@ class StandardBuilder(
     scopeFilter: ScopeFilter = NoFilter,
     onBuildStart: Option[AsyncFunction0[Unit]] = None,
     onBuildEnd: Option[AsyncFunction0[Unit]] = None,
-    backgroundBuilder: Option[BackgroundBuilder] = None,
     defaultPostBuilder: PostBuilder = PostBuilder.zero,
     messageReporter: Option[MessageReporter] = None,
     assetUploader: Option[AssetUploader] = None,
@@ -347,10 +346,7 @@ class StandardBuilder(
 
   @async private def runBackgroundProcesses(cs: CancellationScope): Unit =
     asyncResult(cs) {
-      apar(
-        backgroundBuilder.foreach(_.build(RootScopeId, BackgroundCommand, lastLogLines = 20)),
-        if (uploadSources) assetUploader.foreach(_.scheduleUploadConfigFromSource())
-      )
+      if (uploadSources) assetUploader.foreach(_.scheduleUploadConfigFromSource())
     }.valueOrElse {
       case ex: OptimusCancellationException =>
         log.info(s"Background execution cancelled because of ${ex.getMessage}")

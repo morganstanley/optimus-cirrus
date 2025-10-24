@@ -10,6 +10,7 @@
  * limitations under the License.
  */
 package optimus.graph.diagnostics
+
 import optimus.platform.util.InfoDumpUtils
 
 /**
@@ -54,8 +55,12 @@ object OSInformation extends InfoDumpUtils {
     cheapCommands.foreach(cmd => sb.append(execute(cmd, T).output))
 
     if (stacks) {
-      sb.append(execute(List(jstack, pid.toString), T))
-      sb.append(execute(List(jmap, "-histo:live", pid.toString), timeoutMs, maxHistoLength.getOrElse(0)))
+      // jmap and jstack can deadlock (when invoked on current process) on Java 25 unless we buffer
+      val buffer = pid == ProcessHandle.current().pid
+      sb.append(execute(List(InfoDumpUtils.jstack, pid.toString), bufferWithFile = buffer).output)
+        .append(System.lineSeparator)
+      sb.append(execute(List(InfoDumpUtils.jmap, "-histo:live", pid.toString), bufferWithFile = buffer).output)
+        .append(System.lineSeparator)
     }
   }
 

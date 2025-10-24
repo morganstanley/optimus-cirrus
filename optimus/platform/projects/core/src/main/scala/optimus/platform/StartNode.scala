@@ -15,7 +15,6 @@ import msjava.tools.util.MSProcess
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs.crumbs.CrumbNodeType
-import optimus.breadcrumbs.crumbs.HostCrumb
 import optimus.breadcrumbs.crumbs.NameCrumb
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -55,7 +54,6 @@ private[optimus] class StartNode(ss: ScenarioStack) extends Node[Unit] {
         Properties.user -> LoggingInfo.getUser
       )
     )
-    Breadcrumbs.info(OnceByCrumbEquality, ss.trackingNodeID, new HostCrumb(_))
     Breadcrumbs.info(OnceByCrumbEquality, ss.trackingNodeID, new NameCrumb(_, "NullNode", CrumbNodeType.NullNode))
   }
 

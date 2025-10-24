@@ -47,10 +47,13 @@ object RestrictedUtils {
       removeKeyList: Seq[NodeKey[_]])(f: Node[T]): Node[T] = {
     val scenarios = ScenarioStackMoniker.buildSSCacheIDArray(EvaluationContext.scenarioStack)
     val allRemoveKeys = initialRuntimeNodeKeys ++ removeKeyList
+    val allRemovePropertyInfoNames = allRemoveKeys.map(_.propertyInfo.fullName())
     val cleanScenarios =
       scenarios
-        .map(
-          _.filterConserve({ twk: Tweak => twk.target.hashKey != null && !allRemoveKeys.contains(twk.target.hashKey) }))
+        .map(_.filterConserve({ twk: Tweak =>
+          if (twk.target.hashKey != null) !allRemoveKeys.contains(twk.target.hashKey)
+          else !allRemovePropertyInfoNames.contains(twk.target.propertyInfo.fullName())
+        }))
         .reverse
 
     givenFullySpecifiedScenarioWithInitialTime$newNode(

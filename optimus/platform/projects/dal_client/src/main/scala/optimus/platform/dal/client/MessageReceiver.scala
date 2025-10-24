@@ -14,7 +14,6 @@ package optimus.platform.dal.client
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
-import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.DiagnosticSettings
@@ -252,11 +251,6 @@ private[platform] abstract class MessageReceiver[Message <: DalServiceResponseMe
           s"Parsed envelope for batch ${logPrefix(requestUuid, seqId)}: ${batchContext.clientRequests.size} " +
             s"requests with ${batchContext.clientRequests.flatMap(_.commands).size} commands - " +
             s"${batchContext.numResults} results so far")
-
-        Breadcrumbs.trace(
-          OnceByCrumbEquality,
-          chainedId,
-          EventCrumb(_, DalClientCrumbSource, DalEvents.Client.ResponseReceived))
 
         def failBatch(throwable: Throwable): Unit = {
           log.error(s"${logPrefix(requestUuid, seqId)} batch failed in ${elapsed}ms", throwable)

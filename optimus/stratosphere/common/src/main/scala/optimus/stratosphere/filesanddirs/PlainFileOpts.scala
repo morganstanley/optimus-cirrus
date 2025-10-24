@@ -41,8 +41,9 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
   if (!isFile) throw new StratosphereException(s"${path.toAbsolutePath} exists, but not a file")
 
   def getFilenameNoExt: String = {
-    val name = path.getFileName.toString
-    if (name.startsWith(".")) name else name.split("\\.").dropRight(1).mkString("")
+    def getBaseName(name: String): String =
+      if (name.startsWith(".")) s".${getBaseName(name.drop(1))}" else name.split("\\.").dropRight(1).mkString(".")
+    getBaseName(path.getFileName.toString)
   }
 
   def copyTo(destinationFile: Path): Path = try {

@@ -195,7 +195,7 @@ trait EntitySerialization extends StorableSerializer {
       val afterTransforms = TransformerRegistry
         .versionToWrite(
           className,
-          out.value.asInstanceOf[Map[String, Any]],
+          out.value.asInstanceOf[PickledProperties],
           entityInfo.slot,
           TemporalSource.loadContext)
         .get
@@ -228,7 +228,7 @@ trait EntitySerialization extends StorableSerializer {
         val linkages = (out.childToParentProperties map { case l @ EntityLinkageProperty(prop, _) =>
           l -> (props(prop).asInstanceOf[Iterable[EntityReference]].toSet map SerializedEntity.EntityLinkage)
         }).toMap
-        val properties = props -- (linkages.keys map { _.propertyName })
+        val properties = props.removeAll(linkages.keys map { _.propertyName })
         (properties, if (s.$info.linkages.isEmpty) None else Some(linkages))
       }
 

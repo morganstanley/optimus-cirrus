@@ -63,7 +63,7 @@ object SerializedKeyBuilder {
         if (isExpandedIndex && !res.isInstanceOf[Iterable[_]] && !res.isInstanceOf[Array[_]])
           Seq(res)
         else res
-      val out = new PropertyMapOutputStream()
+      val out = new PropertyMapOutputStream(stableOrdering = true)
       out.writeStartArray()
       pickleRep(decoratedRes, out)
       out.writeEndArray()

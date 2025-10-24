@@ -15,6 +15,7 @@ import optimus.stratosphere.bitbucket.Project
 import optimus.stratosphere.bitbucket.Repository
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
+import optimus.stratosphere.utils.GitUtils.GitApi
 
 import java.net.URI
 import java.nio.file.Path
@@ -61,10 +62,53 @@ final case class RemoteSpec(name: String, remoteUrl: RemoteUrl, originUrl: Optio
 
 final case class GitLog(commit: String, date: String)
 
+object GitUtils {
+  final case class Branch(value: String) extends AnyVal {
+    override def toString: String = value
+  }
+
+  final case class Remote(value: String) extends AnyVal {
+    override def toString: String = value
+  }
+
+  final case class RemoteAndBranch(remote: Remote, branch: Branch) {
+    override def toString: String = s"$remote/$branch"
+  }
+
+  final case class BranchesForMerge(source: RemoteAndBranch, target: RemoteAndBranch)
+
+  trait GitApi {
+    def checkBranchExists(remoteAndBranch: RemoteAndBranch): Boolean
+
+    def fetch(remoteAndBranch: RemoteAndBranch): String
+
+    /**
+     * Returns the list of commit hashes that are present in the `source` branch but not in the `target` branch.
+     * This uses `git rev-list target..source` to compute the difference.
+     *
+     * @param branches source and target branches where 'source' is a branch to compare
+     *                 (usually the feature branch). And 'target' is a branch to compare
+     *                 against (usually the base branch).
+     * @return Sequence of commit hashes unique to `source` compared to `target`.
+     */
+    def commitsUniqueToSource(branches: BranchesForMerge): Seq[String]
+
+    /**
+     * Returns the list of commit hashes that are present in the `source` branch but not in the `target` branch.
+     * This uses `git rev-list target..source` to compute the difference.
+     *
+     * @param localSource the local branch to compare (usually the feature branch)
+     * @param target the remote and branch to compare against (usually the base branch)
+     * @return Sequence of commit hashes unique to `localSource` compared to `target`
+     */
+    def commitsUniqueToSource(localSource: Branch, target: RemoteAndBranch): Seq[String]
+  }
+}
+
 /**
  * Simple wrapper for git commands. Note: Beware git- (and not only) injection.
  */
-final case class GitUtils(workspace: StratoWorkspaceCommon) {
+final case class GitUtils(workspace: StratoWorkspaceCommon) extends GitApi {
 
   private val RemoteUrlRegex = "remote\\.(.+)\\.url\\s+(.+)".r
   private val MissingIndexRegex = """^warning: no corresponding \.idx:\s+(.+\.pack)$""".r
@@ -82,6 +126,18 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def parents(commitHash: String = "HEAD"): Array[String] = {
     val result = runGit("rev-list", "--parents", "-n", "1", commitHash)
     result.split("\\s").drop(1)
+  }
+
+  private def rawCommitsUniqueToSource(source: String, target: String): Seq[String] = {
+    runGit("rev-list", s"$target..$source").getLines()
+  }
+
+  def commitsUniqueToSource(branches: GitUtils.BranchesForMerge): Seq[String] = {
+    rawCommitsUniqueToSource(source = branches.source.toString, target = branches.target.toString)
+  }
+
+  def commitsUniqueToSource(localSource: GitUtils.Branch, target: GitUtils.RemoteAndBranch): Seq[String] = {
+    rawCommitsUniqueToSource(source = localSource.toString, target = target.toString)
   }
 
   def replace(source: String, target: String): String = runGit("replace", source, target)
@@ -154,6 +210,9 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def checkBranchExists(branchName: String): Boolean = revParse(branchName).isDefined
 
+  def checkBranchExists(remoteAndBranch: GitUtils.RemoteAndBranch): Boolean =
+    runGit("ls-remote", "--heads", remoteAndBranch.remote.value, remoteAndBranch.branch.value).trim.nonEmpty
+
   def showFileFromRevision(ref: String, filePath: String): Option[String] = {
     Try(runGit("show", s"$ref:$filePath")).map(Some(_)).getOrElse(None)
   }
@@ -217,9 +276,16 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     runGit(cmd: _*)
   }
 
+  /**
+   * @deprecated use typesafe version of fetch: `fetch(remoteAndBranch: GitUtils.RemoteAndBranch): String`
+   */
   def fetch(remoteRepo: String, branch: String): String = {
     val cmd = noGc ++ Seq("fetch", remoteRepo, branch, "--no-tags")
     runGit(cmd: _*)
+  }
+
+  def fetch(remoteAndBranch: GitUtils.RemoteAndBranch): String = {
+    fetch(remoteAndBranch.remote.value, remoteAndBranch.branch.value)
   }
 
   def fetch(remoteRepo: String, remoteBranch: String, localBranch: String, force: Boolean = false): String = {

@@ -13,14 +13,20 @@ package optimus.platform.pickling
 
 import optimus.exceptions.RTExceptionTrait
 import optimus.graph.PropertyInfo
+import optimus.graph.Settings
 import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
+import optimus.platform.pickling.WriteContextOutputStream.PickledComparator
 import optimus.platform.storable.Entity
-
-import scala.collection.mutable
-import optimus.platform.storable.ModuleEntityToken
 import optimus.platform.storable.EntityReference
+import optimus.platform.storable.ModuleEntityToken
+import optimus.platform.storable.RawReference
 import optimus.platform.storable.Storable
 
+import java.time.Period
+import java.time.ZoneId
+import java.util
+import java.util.Comparator
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 class TemporaryEntityException(val entity: Entity, val propertyName: String)
@@ -33,6 +39,7 @@ class TemporaryEntityException(val entity: Entity, val propertyName: String)
 
 abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream { os =>
   protected[this] var writeContext: WriteContextStack = ValueWriteContext
+  protected def stableOrdering = false
 
   sealed trait WriteContextStack extends WriteContext {
     def parent: WriteContextStack
@@ -58,17 +65,17 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
     def currentField: Option[String] = None
   }
 
-  // This builder retains the exact behaviour from the code prior to the refactoring to make
-  // newMapBuilder an extension point.
-  // See also comments on PicklingMapEntryOrderWorkaround
-  protected def newMapBuilder: mutable.Builder[(String, Any), Map[String, Any]] =
-    PicklingMapEntryOrderWorkaround.newBuilder[Any]
+  protected def newMapBuilder: mutable.Builder[(String, Any), PickledProperties] =
+    new PickledPropertiesBuilder(PicklingMapEntryOrderWorkaround.newBuilder[Any])
 
   final class MapWriteContext(val parent: WriteContextStack) extends WriteContextStack {
     private[this] val values = newMapBuilder
 
     private[this] var nextField: String = _
 
+    // Note that we don't sort the keys here (even in stableOrdering mode). That's because the fields have always
+    // been stored in the DAL in HashMap ordering, and changing that would change the hash of any keys/indexes (see
+    // comments on newMapBuilder)
     def flush(): Unit = parent.writeRawObject(values.result())
 
     def writeFieldName(k: String): Unit = {
@@ -99,7 +106,7 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
     def currentField: Option[String] = Option(nextField) orElse parent.currentField
   }
 
-  final class ArrayWriteContext(val parent: WriteContextStack) extends WriteContextStack {
+  final class ArrayWriteContext(val parent: WriteContextStack, isUnordered: Boolean) extends WriteContextStack {
     // If all written values are of the same primitive type, the resulting PickleSeq (which is an immutable.ArraySeq)
     // built in `flush` wraps a primitive array.
 
@@ -122,7 +129,11 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
     def flush(): Unit = {
       val res =
         if (b == null) PickleSeq.empty[Any]
-        else PickleSeq.unsafeWrapArray(b.result())
+        else {
+          val arr = b.result()
+          if (Settings.enableStableIndexKeyOrdering && isUnordered && stableOrdering) PickledComparator.sortArray(arr)
+          PickleSeq.unsafeWrapArray(arr)
+        }
       b = null
       tp = null
       parent.writeRawObject(res)
@@ -162,8 +173,8 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
 
   override def writeFieldName(k: String): Unit = writeContext.writeFieldName(k)
 
-  override def writeStartArray(): Unit = {
-    writeContext = new ArrayWriteContext(writeContext)
+  override def writeStartArray(isUnordered: Boolean = false): Unit = {
+    writeContext = new ArrayWriteContext(writeContext, isUnordered)
   }
 
   override def writeStartObject(): Unit = {
@@ -193,6 +204,86 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
   def value: A
 }
 
+private object WriteContextOutputStream {
+
+  private object PickledComparator extends Comparator[Any] {
+    def sortArray(a: Array[_]): Unit =
+      a match {
+        // all non-primitive arrays are assignable to Array[AnyRef] and we use our pickled comparison logic for these
+        case arr: Array[AnyRef] => util.Arrays.sort(arr, this)
+        // for primitive arrays we must dispatch to the correct overload of sort
+        case arr: Array[Int]     => util.Arrays.sort(arr)
+        case arr: Array[Long]    => util.Arrays.sort(arr)
+        case arr: Array[Double]  => util.Arrays.sort(arr)
+        case arr: Array[Float]   => util.Arrays.sort(arr)
+        case arr: Array[Short]   => util.Arrays.sort(arr)
+        case arr: Array[Char]    => util.Arrays.sort(arr)
+        case arr: Array[Byte]    => util.Arrays.sort(arr)
+        case arr: Array[Boolean] => sortBooleans(arr)
+      }
+
+    // no built-in sort algo is supplied for Booleans, so we roll our own
+    def sortBooleans(a: Array[Boolean]): Unit = {
+      // count how many falses
+      var falseCount = 0
+      var i = 0
+      while (i < a.length) {
+        if (!a(i)) falseCount += 1
+        i += 1
+      }
+      // rewrite array with falses at the start and trues at the end
+      i = 0
+      while (i < a.length) {
+        a(i) = i >= falseCount
+        i += 1
+      }
+    }
+
+    // Be very careful if changing this logic to preserve the current sorting order for existing types. We must stay
+    // compatible with the ordering used by indexes/keys stored in the DAL
+    override def compare(o1: Any, o2: Any): Int = (o1, o2) match {
+      case (null, null) => 0
+      case (null, _)    => -1
+      case (_, null)    => 1
+
+      // lexical comparison for Iterables - do this before checking classes so that e.g. List and Vector are treated
+      // as equivalent
+      case (x: Iterable[_], y: Iterable[_]) =>
+        // We're assuming that if these iterables are pickled representations of unordered collections, they would
+        // already have been sorted by ArrayWriteContext#flush. In all other cases they were already ordered in the user
+        // code, so we can always safely do a lexical comparison here.
+        val it1 = x.iterator
+        val it2 = y.iterator
+        while (it1.hasNext && it2.hasNext) {
+          val c = compare(it1.next(), it2.next())
+          if (c != 0) return c
+        }
+        if (it1.hasNext) 1 else if (it2.hasNext) -1 else 0
+
+      case ((x1, x2), (y1, y2)) =>
+        // tuples are produced by MapWriteContext#writeFieldName/write - we assume that calls to writeFieldName are
+        // already in deterministic order so it's safe to just compare the tuples in the order that we find them
+        val c = compare(x1, y1)
+        if (c != 0) c else compare(x2, y2)
+
+      // guard against incompatible classes which probably won't be mutually comparable
+      case (x, y) if x.getClass != y.getClass => x.getClass.getName.compareTo(y.getClass.getName)
+
+      // classes are same (due to above check) so should be safe to compare
+      case (x: Comparable[Any @unchecked], y: Comparable[Any @unchecked]) => x.compareTo(y)
+
+      // a few special cases for types that don't implement Comparable but are found in pickled data (see
+      // ProtoPickleSerializer for full list)
+      case (x: RawReference, y: RawReference)             => RawReference.ordering.compare(x, y)
+      case (x: ImmutableByteArray, y: ImmutableByteArray) => util.Arrays.compare(x.data, y.data)
+      case (x: Array[Byte], y: Array[Byte])               => util.Arrays.compare(x, y)
+      case (x: ModuleEntityToken, y: ModuleEntityToken)   => x.className.compareTo(y.className)
+      case (x: Period, y: Period)                         => x.toString.compareTo(y.toString)
+      case (x: ZoneId, y: ZoneId)                         => x.toString.compareTo(y.toString)
+    }
+  }
+}
+
 object PropertyMapOutputStream {
   // Using these aliases helps understanding / identifying code that deals with pickled entities.
   // The static types don't help there because `entity.toMap` has type `Map[String, Any]`.
@@ -208,24 +299,35 @@ object PropertyMapOutputStream {
     def unsafeWrapArray[T](x: Array[T]): PickleSeq[T] = scala.collection.immutable.ArraySeq.unsafeWrapArray(x)
   }
 
-  def pickledValue[T](value: T, pickler: Pickler[T]): Any = {
-    val os = new PropertyMapOutputStream(Map.empty)
+  def pickledValue[T](value: T, pickler: Pickler[T], stableOrdering: Boolean = false): Any = {
+    val os = new PropertyMapOutputStream(Map.empty, stableOrdering)
     pickler.pickle(value, os)
     os.value
   }
 
-  private[optimus] def pickledStorable(s: Storable, entityReferences: collection.Map[Entity, EntityReference]) = {
+  private[optimus] def pickledStorable(
+      s: Storable,
+      entityReferences: collection.Map[Entity, EntityReference]
+  ): PickledProperties = {
     val os = new PropertyMapOutputStream(entityReferences)
     os.writeStartObject()
     s.pickle(os)
     os.writeEndObject()
-    os.value
+    os.value.asInstanceOf[PickledProperties]
   }
 }
 
-class PropertyMapOutputStream(referenceMap: collection.Map[Entity, EntityReference])
+class PropertyMapOutputStream(
+    referenceMap: collection.Map[Entity, EntityReference] = Map.empty,
+    /**
+     * If stableOrdering is true, we will produce identically ordered output for equivalent inputs - for example
+     * entries in any unordered Sets or Maps will be sorted. This is important because keys and indexes in the DAL
+     * get hashed with an ordering-dependent hash, so the ordering must be well-defined.
+     *
+     * It's not necessary to sort the data in ordinary entity properties, so we don't to save the effort.
+     */
+    override protected val stableOrdering: Boolean = false)
     extends WriteContextOutputStream[Any] {
-  def this() = this(Map.empty)
   private[this] var _value: Any = _
 
   override def value_=(a: Any): Unit = { _value = a }

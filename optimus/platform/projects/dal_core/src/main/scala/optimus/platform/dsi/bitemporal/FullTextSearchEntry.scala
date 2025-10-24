@@ -13,12 +13,13 @@ package optimus.platform.dsi.bitemporal
 import optimus.dsi.base.SlottedVersionedReference
 import optimus.platform.TimeInterval
 import optimus.platform.ValidTimeInterval
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.EntityReference
 
 final case class FullTextSearchEntry(
     slottedVref: SlottedVersionedReference,
     ref: EntityReference,
-    properties: Map[String, Any],
+    properties: PickledProperties,
     className: String,
     timeSliceNumber: Int,
     vtInterval: ValidTimeInterval,

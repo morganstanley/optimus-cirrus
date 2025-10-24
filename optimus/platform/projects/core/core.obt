@@ -67,6 +67,7 @@ main {
       optimus.platform.breadcrumbs.auth, // ideally this would be an "internal" runtime dep of o.p.breadcrumbs.main but we can't do that so this instead
       optimus.platform.dal_environment.internal
       optimus.platform.java21compat
+      optimus.platform.java25compat
     ]
     libs = [
       ossjava.commons-io,

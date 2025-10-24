@@ -12,14 +12,14 @@
 package optimus.buildtool.oci
 
 import optimus.buildtool.app.OptimusBuildToolBootstrap
-import optimus.buildtool.builders.BackgroundCmdId
-import optimus.buildtool.builders.BackgroundProcessBuilder
-import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.format.docker.ExtraImageDefinition
 import optimus.buildtool.trace.DockerCommand
 import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.process.ExternalProcess
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform.util.Log
 import optimus.platform._
 
@@ -28,8 +28,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import scala.util.control.NonFatal
 
-class DockerUtils(dockerImageCacheDir: Directory, useCrumbs: Boolean) extends Log {
-  private val dockerProcessId = BackgroundCmdId("docker")
+class DockerUtils(dockerImageCacheDir: Directory, processBuilder: ExternalProcessBuilder) extends Log {
+
   private val logDir = dockerImageCacheDir.resolveDir("cmdLog")
   Files.createDirectories(logDir.path)
 
@@ -55,10 +55,11 @@ class DockerUtils(dockerImageCacheDir: Directory, useCrumbs: Boolean) extends Lo
       logFile: FileAsset = dockerCmdLogFile,
       retry: Int = 0
   ): Unit =
-    BackgroundProcessBuilder(dockerProcessId, logFile, cmds, useCrumbs = useCrumbs)
-      .buildWithRetry(ScopeId.RootScopeId, DockerCommand)(maxRetry = retry, msDelay = 0, lastLogLines = 100)
+    processBuilder
+      .build(RootScopeId, "docker", cmds, Some(DockerCommand), lastLogLines = 100)
+      .startWithRetry(maxRetries = retry, msDelay = 0)
 
-  private def getCmdOutput(logFile: FileAsset): Seq[String] = BackgroundProcessBuilder.lastLogLines(logFile, 100)
+  private def getCmdOutput(logFile: FileAsset): Seq[String] = ExternalProcess.lastLogLines(logFile, 100)
 
   @async def pullDockerImage(imageName: String): Unit = {
     runDockerProcess(Seq("docker", "pull", imageName), retry = 3)

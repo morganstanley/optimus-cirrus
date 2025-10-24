@@ -20,7 +20,6 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.zone.ZoneRulesException
-
 import optimus.dsi.util.HashMap7
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.storable.BusinessEventReference
@@ -30,6 +29,7 @@ import optimus.platform.storable.ModuleEntityToken
 import optimus.platform.storable.TemporaryReference
 import optimus.platform.storable.VersionedReference
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
+import optimus.platform.pickling.PickledProperties
 import optimus.utils.datetime.LocalDateOps
 import optimus.utils.datetime.ZoneIds
 
@@ -137,6 +137,7 @@ trait AbstractTypeTransformerOps[T] {
       case x: Option[_]                 => x.map(serialize(_)).getOrElse(null)
       case x: collection.Seq[_]         => mapToArrayList(serialize _, x)
       case x: immutable.SortedMap[_, _] => toJavaOrderedMap(x.asInstanceOf[immutable.SortedMap[String, Any]])
+      case pp: PickledProperties        => toJavaMap(pp.asMap)
       case x: Map[_, _]                 => toJavaMap(x.asInstanceOf[Map[String, Any]])
       case x: Set[_]                    => toJavaSet(x)
       case ModuleEntityToken(className) => mkArrayList(TypeMarkers.ModuleEntityToken, className)
@@ -194,8 +195,8 @@ trait AbstractTypeTransformerOps[T] {
     case x                       => x
   }
 
-  protected def fromScalaMap(sm: ScalaMap[String, _]): ScalaMap[String, Any] = {
-    val out = immutable.HashMap.newBuilder[String, Any]
+  protected def fromScalaMap(sm: ScalaMap[String, _]): PickledProperties = {
+    val out = PickledProperties.newBuilder
     sm.foreach { k =>
       out += (k._1 -> deserialize(k._2))
     }
@@ -203,9 +204,9 @@ trait AbstractTypeTransformerOps[T] {
 
   }
 
-  protected def fromJavaMap(jm: java.util.Map[String, _]): immutable.Map[String, Any] = {
+  protected def fromJavaMap(jm: java.util.Map[String, _]): PickledProperties = {
     val it = jm.entrySet.iterator
-    val bld = Map.newBuilder[String, Any]
+    val bld = PickledProperties.newBuilder
     while (it.hasNext) {
       val n = it.next
       bld += (n.getKey -> deserialize(n.getValue))

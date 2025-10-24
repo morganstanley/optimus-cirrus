@@ -15,6 +15,7 @@ import optimus.entity.EntityLinkageProperty
 import optimus.graph.DiagnosticSettings
 import optimus.platform.{TimeInterval, ValidTimeInterval}
 import optimus.platform.annotations.parallelizable
+import optimus.platform.pickling.PickledProperties
 
 import java.util.Objects
 import scala.collection.immutable
@@ -32,7 +33,7 @@ object SerializedEntity {
   }
 
   // We need a placeholder for PersistentEntity.Null.
-  private[storable] val Null = SerializedEntity(EntityReference(Array.empty[Byte]), None, "", Map.empty[String, Any])
+  private[storable] val Null = SerializedEntity(EntityReference(Array.empty[Byte]), None, "", PickledProperties.empty)
 
   private[optimus] def adjustLockTokenWithReadTxTime(lockToken: Long, readTxTimeLockToken: Option[Long]): Long = {
     // [OPTIMUS-5736] In order to stop updates based on Outdated versions of an entity, the entity lock token
@@ -49,7 +50,7 @@ object SerializedEntity {
 
 private[optimus] abstract class SerializedStorable extends Serializable {
   def className: SerializedEntity.TypeRef
-  def properties: Map[String, Any]
+  def properties: PickledProperties
   def keys: Seq[SerializedKey]
   def types: Seq[SerializedEntity.TypeRef]
   def slot: Int
@@ -61,7 +62,7 @@ final case class SerializedEntity(
     entityRef: EntityReference,
     cmid: Option[CmReference],
     className: SerializedEntity.TypeRef,
-    properties: Map[String, Any],
+    properties: PickledProperties,
     keys: Seq[SerializedKey] = Seq.empty,
     types: Seq[SerializedEntity.TypeRef] = Seq.empty,
     inlinedEntities: Seq[SerializedEntity] = Nil,
@@ -100,7 +101,7 @@ final case class SerializedEntity(
       entityRef: EntityReference = entityRef,
       cmid: Option[CmReference] = cmid,
       className: SerializedEntity.TypeRef = className,
-      properties: Map[String, Any] = properties,
+      properties: PickledProperties = properties,
       keys: Seq[SerializedKey] = keys,
       types: Seq[SerializedEntity.TypeRef] = types,
       inlinedEntities: Seq[SerializedEntity] = inlinedEntities,
@@ -121,11 +122,34 @@ final case class SerializedEntity(
 
   def getKey: Option[SerializedKey] = keys.find(_.isKey)
 
-  override def hashCode(): Int = if (SerializedEntity.useQuickHashCode) {
-    Objects.hash(entityRef, cmid, className, keys.size, inlinedEntities.size)
-  } else {
-    // This is falling back to old behavior of calculating hash based on every property (default impl) -
-    Objects.hash(entityRef, cmid, className, properties, keys, types, inlinedEntities, linkages, slot)
+  override def hashCode(): Int =
+    if (SerializedEntity.useQuickHashCode) Objects.hash(entityRef, cmid, className, keys.size, inlinedEntities.size)
+    else {
+      // This is falling back to old behavior of calculating hash based on every property (default impl) -
+      Objects.hash(entityRef, cmid, className, properties, keys, types, inlinedEntities, linkages, slot)
+    }
+
+  def equalsWithNaN(other: SerializedEntity): Boolean = {
+
+    def compareInlinedEntities: Boolean =
+      inlinedEntities.size == other.inlinedEntities.size &&
+        inlinedEntities.zip(other.inlinedEntities).forall { case (o1, o2) => o1.equalsWithNaN(o2) }
+
+    def deepEquals(a: Any, b: Any): Boolean = (a, b) match {
+      case (m1: Map[Any, Any] @unchecked, m2: Map[Any, Any] @unchecked) =>
+        m1.size == m2.size &&
+        m1.keys.forall(k => m2.contains(k) && deepEquals(m1(k), m2(k)))
+      case (s1: Set[_], s2: Set[_]) =>
+        s1.size == s2.size && s1.forall(x => s2.exists(y => deepEquals(x, y)))
+      case (seq1: Seq[_], seq2: Seq[_]) =>
+        seq1.size == seq2.size && seq1.zip(seq2).forall { case (x, y) => deepEquals(x, y) }
+      case (null, null) => true
+      case _            => optimus.scalacompat.Eq.eql(a, b)
+    }
+
+    entityRef == other.entityRef && cmid == other.cmid && className == other.className && keys == other.keys &&
+    types == other.types && linkages == other.linkages && slot == other.slot && compareInlinedEntities &&
+    deepEquals(properties, other.properties)
   }
 }
 

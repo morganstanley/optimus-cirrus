@@ -11,16 +11,15 @@
  */
 package optimus.platform.util
 
-import java.io._
-import java.lang.management.ManagementFactory
-import java.net.InetAddress
-
 import optimus.graph.DiagnosticSettings
+import optimus.graph.diagnostics.InfoDumper
 import optimus.platform.EvaluationContext
 import org.apache.commons.lang3.SystemUtils
 
+import java.io._
+import java.lang.management.ManagementFactory
+import java.net.InetAddress
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 object DiagnosticUtil extends Log {
@@ -153,15 +152,14 @@ object DiagnosticUtil extends Log {
     // be a bit excessive deciding where to try this
     if (!SystemUtils.IS_OS_WINDOWS) {
       val pid = getPID
-      val commands = List(
-        List("/usr/bin/free"),
-        List("cat", "/proc/meminfo"),
-        List("cat", s"/proc/$pid/status"),
-        List("ps", "auxfww"),
-        List("jmap", "-histo:live", pid.toString),
-        List("jstack", pid.toString)
-      )
-      commands.foreach(cmd => append(execute(cmd)))
+      val javaHome = System.getProperty("java.home")
+      executeAndAppend(sb, List("/usr/bin/free"))
+      executeAndAppend(sb, List("cat", "/proc/meminfo"))
+      executeAndAppend(sb, List("cat", s"/proc/$pid/status"))
+      executeAndAppend(sb, List("ps", "auxfww"))
+      // jmap and jstack can deadlock on Java 25 unless we buffer
+      executeAndAppend(sb, List(InfoDumper.jmap, "-histo:live", pid), bufferWithFile = true)
+      executeAndAppend(sb, List(InfoDumper.jstack, pid), bufferWithFile = true)
     }
 
     sb.toString
@@ -169,31 +167,8 @@ object DiagnosticUtil extends Log {
 
   private def getPID: Long = ProcessHandle.current().pid()
 
-  // Execute shell command
-  private def execute(cmd: List[String]): String = {
-    val sb = new StringBuilder
-    sb.append(s"Execute the command [${cmd}]${System.lineSeparator}")
-    val p = Try(Runtime.getRuntime().exec(cmd.toArray))
-    if (p.isSuccess) {
-      try {
-        val br = new BufferedReader(new InputStreamReader(p.get.getInputStream()))
-        var line = br.readLine
-        while (line != null) {
-          sb.append(line).append(System.lineSeparator)
-          line = br.readLine
-        }
-
-      } catch {
-        case NonFatal(e) => {
-          sb.append(s"Got exception while executing the command - ${e.toString}${System.lineSeparator}")
-        }
-      } finally {
-        p.get.destroy()
-      }
-    } else {
-      sb.append(
-        s"Got exception while executing the command - ${p.failed.getOrElse("").toString}${System.lineSeparator}")
-    }
-    sb.toString
+  private def executeAndAppend(sb: StringBuilder, cmd: List[Any], bufferWithFile: Boolean = false): Unit = {
+    sb.append(InfoDumper.execute(cmd.map(_.toString), bufferWithFile = bufferWithFile).output)
+    sb.append(System.lineSeparator)
   }
 }

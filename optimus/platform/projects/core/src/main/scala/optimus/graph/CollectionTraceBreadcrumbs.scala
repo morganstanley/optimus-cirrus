@@ -17,10 +17,9 @@ import java.lang.{Long => JLong, String => JString}
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.Source
-import optimus.breadcrumbs.crumbs.EventCrumb
+import optimus.breadcrumbs.crumbs.DeprecatedEvent.EventDEPRECATED
 import optimus.breadcrumbs.crumbs.{Properties => BCProps}
 import optimus.breadcrumbs.crumbs.LogPropertiesCrumb
-import optimus.breadcrumbs.crumbs.EventCrumb.EventDEPRECATED
 
 import scala.jdk.CollectionConverters._
 
@@ -42,7 +41,6 @@ object CollectionTraceBreadcrumbs {
       val traced = CollectionTraceSupport.getStatisticAndReset()
       val invoked = CollectionTraceSupport.getCallerStaticAndReset()
       val inited = CollectionTraceSupport.getCtorStaticAndReset()
-      Breadcrumbs.info(uuid, EventCrumb(_, CollectionTraceSource, event))
       publishImpl(traced, uuid, CollectionTraceSource)
       publishImpl(invoked, uuid, CollectionInvokerSource)
       publishImpl(inited, uuid, CollectionCreationSource)

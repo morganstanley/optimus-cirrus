@@ -12,6 +12,7 @@
 package optimus.platform.internal
 
 import optimus.platform._
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.Entity
 import optimus.platform.storable.Storable
 import optimus.platform.util.CopyHelper
@@ -133,16 +134,16 @@ class CopyDynamic[C <: Context](val c: C, val isEvent: Boolean = false) extends 
     args.map(processArg(_))
   }
 
-  def mkMap(extracted: Seq[(Literal, Tree)]): c.Expr[Map[String, Any]] = {
-    c.Expr[Map[String, Any]](
+  def mkMap(extracted: Seq[(Literal, Tree)]): c.Expr[PickledProperties] = {
+    c.Expr[PickledProperties](
       Apply(
-        reify(Map).tree,
+        reify(PickledProperties).tree,
         extracted map { case (k, v) =>
           Apply(reify(Tuple2).tree, k :: v :: Nil)
         } toList))
   }
 
-  def mkMapForEntityOrEvent(self: Tree, args: Seq[c.Expr[(Any, Any)]]): c.Expr[Map[String, Any]] = {
+  def mkMapForEntityOrEvent(self: Tree, args: Seq[c.Expr[(Any, Any)]]): c.Expr[PickledProperties] = {
     val extracted = extract(self, args)
     mkMap(extracted)
   }

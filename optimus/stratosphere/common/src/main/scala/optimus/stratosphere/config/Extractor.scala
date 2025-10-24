@@ -20,11 +20,13 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
 import java.time.{Duration => JDuration}
+import scala.annotation.implicitNotFound
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
+@implicitNotFound("Please implement Extractor[${A}] in optimus.stratosphere.config.LowerPriorityImplicits")
 trait Extractor[+A] {
   def extract(config: Config, property: String): A
 }

@@ -15,6 +15,7 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.ExternalArtifactId
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.ExternalHashedArtifact
+import optimus.buildtool.artifacts.ExternalMetadataArtifact
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.ModuleSet
@@ -81,7 +82,8 @@ final case class ResolutionResult(
     jniPaths: Seq[String],
     moduleLoads: Seq[String],
     finalDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
-    mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]]
+    mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
+    resolvedMetadataArtifacts: Seq[ExternalMetadataArtifact]
 ) {
   lazy val resolvedArtifacts: IndexedSeq[ExternalHashedArtifact] = resolvedArtifactsToDepInfos.map(_._1).toVector
   lazy val resolvedClassFileArtifacts: IndexedSeq[ExternalClassFileArtifact] = resolvedArtifactsToDepInfos.collect {

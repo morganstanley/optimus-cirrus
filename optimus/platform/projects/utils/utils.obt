@@ -22,6 +22,7 @@ main {
       optimus.platform.stagingplugin,
     ]
     libs = [
+      com.ms.infra.rr.kerberos
       fsf.zookeeper,
       netty-afscompat.handler,
       ossjava.args4j,

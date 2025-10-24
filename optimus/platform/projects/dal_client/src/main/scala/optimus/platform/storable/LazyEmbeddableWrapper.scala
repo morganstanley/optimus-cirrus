@@ -17,6 +17,7 @@ import optimus.platform.pickling.EmbeddablePicklers
 import optimus.platform.pickling.PickledInputStream
 import optimus.platform.pickling.PickledMapWrapper
 import optimus.platform.pickling.PickledOutputStream
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.Pickler
 import optimus.platform.pickling.PropertyMapOutputStream
 import optimus.platform.pickling.Registry
@@ -40,7 +41,7 @@ final case class LazyEmbeddableWrapper[T <: Embeddable] private (pickled: AnyRef
     if (e eq null) {
       // EmbeddablePicklers only relies on `temporalContext` from the pickled input stream, when deserializing nested
       // entities references
-      val pickledInputStream = new PickledMapWrapper(Map.empty, temporalContext = tc)
+      val pickledInputStream = new PickledMapWrapper(PickledProperties.empty, temporalContext = tc)
       // guaranteed that `knownPayloadType` is not null by `LazyEmbeddableWrapperCustomPicklingSpec.unpickler`
       val tpe = ClassUtils.classToType(knownPayloadType)
       e = EmbeddablePicklers.unpicklerForType(tpe).unpickle(pickled, pickledInputStream).asInstanceOf[T]

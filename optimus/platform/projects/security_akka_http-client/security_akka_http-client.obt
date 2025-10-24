@@ -28,6 +28,7 @@ internal {
     ]
     // Do not depend on any other modules to avoid impacting classpath on dependent projects
     libs = [
+      com.ms.infra.rr.kerberos
       ossjava.guava,
       ossjava.httpcomponents-core,
       ossjava.slf4j,
@@ -36,3 +37,6 @@ internal {
     ]
   }
 }
+
+// required temporarly so we can compile jvm_shutdown_agent with Java 11, as Jenkins does not support 12+ yet
+all.javac.release = 11

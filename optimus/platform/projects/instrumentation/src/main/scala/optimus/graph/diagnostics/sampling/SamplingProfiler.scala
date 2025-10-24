@@ -15,34 +15,34 @@ import com.sun.management.OperatingSystemMXBean
 import com.typesafe.config.ConfigFactory
 import msjava.base.slr.internal.ServiceEnvironment
 import optimus.breadcrumbs.Breadcrumbs
-import optimus.breadcrumbs.BreadcrumbsLocalPublisher
-import optimus.breadcrumbs.BreadcrumbsPublisher
+import optimus.breadcrumbs.BreadcrumbsKafkaPublisher
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
-import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.Properties.Elems.nonEmptyElems
 import optimus.breadcrumbs.crumbs.Properties._
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.AsyncProfilerIntegration
 import optimus.graph.DiagnosticSettings
 import optimus.graph.Exceptions
+import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
+import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.log
 import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.logProfireUrl
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
-import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.log
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.platform.util.InfoDump
 import optimus.platform.util.ServiceLoaderUtils
 import optimus.platform.util.Version
 import optimus.utils.MacroUtils.SourceLocation
 import optimus.utils.MiscUtils.ThenSome
 import optimus.utils.PropertyUtils
-import org.slf4j.LoggerFactory
 import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 import java.lang.management.ManagementFactory
-import java.nio.file.Paths
 import java.time.Instant
 import java.util
 import java.util.Objects
@@ -94,26 +94,8 @@ object SamplingProfilerLogger {
     }
   } else None
 }
-
-object SamplingProfilerSource extends Crumb.Source {
-  override val name: String = "SP"
-  override val flags = Set(CrumbFlag.DoNotReplicate)
-  private val localPublisher: Option[BreadcrumbsLocalPublisher] =
-    PropertyUtils.get("optimus.sampling.gzip.path").map { path =>
-      new BreadcrumbsLocalPublisher(Paths.get(path))
-    }
-  override val publisherOverride: Option[BreadcrumbsPublisher] = localPublisher
-  override def filterable = false
-
-  def flush(): Unit = localPublisher.foreach(_.flush())
-  override def sentCount: Int = localPublisher.fold(super.sentCount)(_.getPrinted)
-}
-
-object ForensicSource extends Crumb.Source {
-  override val name: String = "BB"
-  override def filterable = false
-  override val maxCrumbs: Int = 50
-}
+import optimus.platform.breadcrumbs
+object ForensicSource extends breadcrumbs.ForensicSource
 
 trait SampleCrumbConsumer {
   def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit
@@ -349,6 +331,14 @@ class SamplingProfiler private[diagnostics] (
       }
     )
 
+    ss += Diff(_ => StackAnalysis.numStacksPublished, numStacksPublished)
+    ss += Diff(_ => StackAnalysis.numStacksNonDeduped, numStacksReferenced)
+
+    ss += SnapNonZero(_ => BreadcrumbsKafkaPublisher.processedStats, kafkaMetrics)
+    ss += SnapNonZero(_ => Breadcrumbs.getEnqueueFailures.stringMap, enqueueFailures)
+    ss += DiffNonZero(_ => Breadcrumbs.getSourceCountAnalysis.stringMap, crumbCountAnalysis)
+    ss += SnapNonZero(_ => Breadcrumbs.getSourceSnapAnalysis.stringMap, crumbSnapAnalysis)
+
     // This sampler must come last
     ss += new Sampler(
       sp,
@@ -435,7 +425,7 @@ class SamplingProfiler private[diagnostics] (
   }
 
   private var skippedPublications = 0
-
+  private val publishedMetaKeyNames = ConcurrentHashMap.newKeySet[String]()
   private[sampling] def publish(): Unit = {
 
     val destinations = if (spoofRoot) publishAppInstances else Seq(defaultAppInstance)
@@ -492,12 +482,19 @@ class SamplingProfiler private[diagnostics] (
             }.unzip
 
             if (batch.nonEmpty) {
-
-              val pulseData: Elems = pulseTimeData ::: Elems(batch.toSeq: _*) // toSeq required by scala 2.13
-
+              val batchElems = nonEmptyElems(batch.toSeq: _*) // toSeq required by scala 2.13
+              val pulseData: Elems = pulseTimeData ::: batchElems
+              val newKeys: Map[String, Int] = batchElems.m.collect {
+                case newKey if !publishedMetaKeyNames.contains(newKey.k.name) =>
+                  publishedMetaKeyNames.add(newKey.k.name)
+                  newKey.k.name -> newKey.k.meta.flags
+              }.toMap
+              val dataToPublish = isCanonical.thenSome(canonicalPub -> true) :: snapBatch -> iBatch ::
+                pulse -> pulseData :: identificationData
               val toPublish: Elems =
-                isCanonical.thenSome(canonicalPub -> true) :: snapBatch -> iBatch ::
-                  pulse -> pulseData :: identificationData
+                if (newKeys.nonEmpty) pulseMeta -> newKeys :: dataToPublish
+                else
+                  dataToPublish
 
               if (isCanonical)
                 log.debug(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
@@ -509,8 +506,10 @@ class SamplingProfiler private[diagnostics] (
         }
       isCanonical = false
     }
+    val t = System.currentTimeMillis()
     crumbConsumer.flush()
     hasPublished = true
+    log.info(s"Published to ${destinations.size} destinations")
   }
 
   private def snap(): Unit = {
@@ -520,6 +519,7 @@ class SamplingProfiler private[diagnostics] (
     ss.foreach(_.snap())
     _nSnaps += 1 // 0 based
     _previousSnapTime = _currentSnapTime
+    log.info(s"Snap #${_nSnaps}, ${ss.size} samplers")
   }
 
   def snapAndPublish(msSinceLastSnap: Long): Unit = {

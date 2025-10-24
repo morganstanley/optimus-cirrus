@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Helper class to maintain tree of group dependencies see [[optimus.graph.cache.CacheGroupKey]]
  */
 //noinspection ScalaFileName
-private[cache] class NCGroupedChildren(val current: NCEntryGrouped) {
+private[optimus] class NCGroupedChildren(val current: NCEntryGrouped) {
   val children = new ConcurrentHashMap[NCEntryGrouped, NodeCacheBase]()
 
   def add(newChild: NCEntryGrouped, cache: NodeCacheBase): Unit = children.putIfAbsent(newChild, cache)

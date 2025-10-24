@@ -119,14 +119,18 @@ object AsyncCppCompiler {
 
           val internalIncludes = if (upstreamHeaders.nonEmpty) Seq(upstreamHeadersDir) else Nil
 
-          val cppSources = sandbox.sources.apar.filter { case (_, f) => !SourceFolder.isCppHeaderFile(f) }
+          val cppSources = sandbox.sources.apar.collect {
+            case (id, f) if !SourceFolder.isCppHeaderFile(f.file) => id -> f.file
+          }
           log.info(
             s"$prefix${cppSources.size}/${cppSources.size} cpp invalidations (non-incremental): ${cppSources.map(_._2.name).mkString(", ")}"
           )
 
           val headerDir = outputDir(sandbox, HeaderDir)
 
-          val cppHeaders = sandbox.sources.apar.filter { case (_, f) => SourceFolder.isCppHeaderFile(f) }
+          val cppHeaders = sandbox.sources.apar.collect {
+            case (id, f) if SourceFolder.isCppHeaderFile(f.file) => id -> f.file
+          }
           cppHeaders.foreach { case (_, f) =>
             Files.copy(f.path, headerDir.resolveFile(f.name).path)
           }

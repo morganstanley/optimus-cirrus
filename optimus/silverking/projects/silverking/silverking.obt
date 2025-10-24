@@ -28,7 +28,6 @@ main {
     ossjava.aws-java-sdk,
     ossjava.byte-buddy,
     ossjava.caffeine,
-    ossjava.caliper,
     ossjava.commons-compress,
     ossjava.commons-io,
     ossjava.curator,

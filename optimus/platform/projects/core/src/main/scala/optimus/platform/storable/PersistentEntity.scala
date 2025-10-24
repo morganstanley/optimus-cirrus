@@ -11,6 +11,7 @@
  */
 package optimus.platform.storable
 
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.{TimeInterval, ValidTimeInterval}
 
 /**
@@ -35,7 +36,7 @@ final case class PersistentEntity(
   def properties = serialized.properties
 
   def copyPersistent(
-      properties: Map[String, Any] = serialized.properties,
+      properties: PickledProperties = serialized.properties,
       linkages: Option[SerializedEntity.LinkageMap] = serialized.linkages) =
     this.copy(serialized = serialized.copy(properties = properties, linkages = linkages))
 

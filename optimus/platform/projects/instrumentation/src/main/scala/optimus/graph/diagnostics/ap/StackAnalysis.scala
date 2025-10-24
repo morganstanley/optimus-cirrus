@@ -31,8 +31,8 @@ import optimus.graph.diagnostics.sampling.ForensicSource
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SamplingProfiler
-import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.sampling.TimedStack
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.platform.util.Log
 import optimus.utils.CollectionUtils._
 
@@ -616,7 +616,9 @@ object StackAnalysis extends Log {
     }
 
     def cleanName(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, flags: Int): CleanName = {
-      def clean(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, hadLambda: Boolean): CleanName = {
+      val lambdaLess = undisambiguateLambda(frame)
+      val hadLambda = (frame ne lambdaLess)
+      def clean(frame: String): CleanName = {
         val predMask: Long = StringPredicate.getMaskForAllPredicates(frame)
 
         var i = 0
@@ -652,8 +654,7 @@ object StackAnalysis extends Log {
         }
       }
 
-      val lambdaLess = undisambiguateLambda(frame)
-      frameNameCache.get(lambdaLess, f => clean(f, hasFrameNum, abbreviate, (frame ne lambdaLess)))
+      frameNameCache.get(lambdaLess, clean)
     }
 
   }
@@ -1610,7 +1611,7 @@ class StackAnalysis(
 
       // Add live view to roots, and remove Free stub
       val origNames =
-        Seq(Cpu, Alloc, AllocNative, Adapted_DAL, Lock, Wait, Unfired_DAL, FullWait_NS_None)
+        Seq(Cpu, Alloc, AllocNative, Adapted_DAL, Lock, Wait, Unfired_DAL)
       val revTrees: Seq[(String, StackNode)] = for {
         origName <- origNames
         reversed <- addReversed(origName, roots0, s"$Rev$origName")

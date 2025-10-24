@@ -22,6 +22,7 @@ import optimus.config.RuntimeConfiguration
 import optimus.core.GraphDiagnosticsSource
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.log
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.utils.OptimusStringUtils
 import optimus.utils.zookeeper.ReadOnlyDistributedValue
 import spray.json.DefaultJsonProtocol._
@@ -194,10 +195,10 @@ object SamplingProfilerSwitch {
             SamplingProfilerSource.flush()
             // If either source is blocked, we might as well shut off profiling, since the data would never
             // escape the process.
-            if (requiredCrumbSources.exists(_.sentCount == 0)) {
+            if (requiredCrumbSources.exists(_.kafkaSentCount == 0)) {
               val noCrumbMsg =
                 s"Shutting off SamplingProfiler since we are unable to publish crumbs to ${requiredCrumbSources.mkString(", ")}! " +
-                  requiredCrumbSources.map(s => s"$s -> ${s.sentCount}").mkString(", ")
+                  requiredCrumbSources.map(s => s"$s -> ${s.kafkaSentCount}").mkString(", ")
               log.warn(noCrumbMsg)
               // Send the warning somewhere other than PROF or SP...
               Breadcrumbs.warn(

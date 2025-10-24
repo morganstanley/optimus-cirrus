@@ -100,6 +100,9 @@ public class Settings {
   public static final boolean delayResolveXSCache =
       getBoolProperty("optimus.cache.delayResolveXS", true);
 
+  // TODO(OPTIMUS-80221): remove after March 2026
+  public static boolean asyncSISupport = getBoolProperty("optimus.compat.asyncSISupport", true);
+
   public static final boolean allowCachingWithAuditorCallbackDisabled =
       getBoolProperty("optimus.audit.allowCachingWithAuditorCallbackDisabled", false);
 
@@ -689,6 +692,11 @@ public class Settings {
   public static final boolean failOnRecursiveThrottle =
       getBoolProperty("optimus.graph.failOnRecursiveThrottle", false);
 
+  // TODO (OPTIMUS-79168): This should be enabled by default once we've remediated broken indexes,
+  // and then eventually the flag should be removed
+  public static boolean enableStableIndexKeyOrdering =
+      getBoolProperty("optimus.pickling.enableStableIndexKeyOrdering", false);
+
   /**
    * We can evaluate initial time in three different ways:
    * <li>"eager" -- request it now and wait for it
@@ -703,6 +711,11 @@ public class Settings {
 
   /** Turn on additional runtime check for optimus channels. */
   public static final boolean channelAsserts = getBoolProperty("optimus.channels.asserts", false);
+
+  /** System property to control whether during case matches, we should */
+  public static final boolean allowPickledPropertiesAsMaps =
+      getBoolProperty("optimus.core.allowPickledPropertiesAsMaps", true);
+
   /**
    * System property to allow disabling strict-equality. Disabling this will turn off the unpickled
    * interning that relies on it. (see optimus.pickling.interningEnabledFor system property)

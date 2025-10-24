@@ -15,6 +15,7 @@ import optimus.graph.Node
 import optimus.platform.annotations._
 import optimus.platform.pickling.PickledInputStream
 import optimus.platform.pickling.PickledMapWrapper
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.Pickler
 import optimus.platform.pickling.PropertyMapOutputStream
 
@@ -41,7 +42,7 @@ object CoreAPIEx {
     out.value
   }
 
-  def pickledMapWrapper(properties: Map[String, Any], temporalContext: TemporalContext): PickledInputStream = {
+  def pickledMapWrapper(properties: PickledProperties, temporalContext: TemporalContext): PickledInputStream = {
     new PickledMapWrapper(properties, temporalContext)
   }
 }

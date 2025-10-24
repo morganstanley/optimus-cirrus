@@ -20,11 +20,16 @@ import optimus.platform._
 
 final case class Sandbox private (
     root: Directory,
-    sources: Seq[(SourceUnitId, FileAsset)],
-    rootSourcesPaths: Seq[(SourceUnitId, FileAsset)]) {
+    sources: Seq[(SourceUnitId, SandboxedFile)],
+    rootSourcesPaths: Seq[(SourceUnitId, SandboxedFile)]) {
   val buildDir: Directory = root.resolveDir(Sandbox.BuildDir)
   val sourceDir: Directory = root.resolveDir(Sandbox.SrcDir)
   val rootSourceDir: Directory = root.resolveDir(Sandbox.RootSrcDir)
+
+  private val sourcesById = sources.toMap
+
+  def sourceDir(contentPath: RelativePath): Directory = sourceDir.resolveDir(contentPath)
+
   def outputDir(dir: String): Directory = {
     val d = buildDir.resolveDir(dir)
     Files.createDirectories(d.path)
@@ -32,38 +37,38 @@ final case class Sandbox private (
   }
   def outputFile(file: String): FileAsset = buildDir.resolveFile(file)
 
+  def source(id: SourceUnitId): SandboxedFile = sourcesById(id)
+
   def close(): Unit = AssetUtils.recursivelyDelete(root)
 }
+
+// Note: When reading files, prefer `content` over `file` when possible to avoid unnecessary I/O
+final case class SandboxedFile(file: FileAsset, content: HashedContent)
 
 object Sandbox {
   val BuildDir = "build"
   val SrcDir = "src"
-  val RootSrcDir = "root-src"
+  private val RootSrcDir = "root-src"
 }
 
 final case class SandboxFactory(tempRoot: Directory) {
-  Files.createDirectories(tempRoot.path)
 
   def empty(name: String): Sandbox = {
     val root = Directory.temporary(name, Some(tempRoot))
     Sandbox(root, Nil, Nil)
   }
 
-  @async private def prepareSources[A <: SourceUnitId](
-      content: Map[A, HashedContent],
-      targetDir: Directory,
-      targetStrategy: A => RelativePath): Seq[(A, FileAsset)] =
-    content.toIndexedSeq.apar
-      .map { case (s, hc) =>
-        val srcFile = targetDir.resolveFile(targetStrategy(s))
-        Utils.createDirectories(srcFile.parent)
-        Files.copy(hc.contentAsInputStream, srcFile.path)
-        s -> srcFile
-      }
-
   @async def apply[A <: SourceUnitId](name: String, content: Map[A, HashedContent]): Sandbox = {
     val sandbox = empty(name)
     val sources = prepareSources(content, sandbox.sourceDir, (s: A) => s.sourceFolderToFilePath)
+    sandbox.copy(sources = sources)
+  }
+
+  @async def apply[A <: SourceUnitId](name: String, content: Seq[(RelativePath, Map[A, HashedContent])]): Sandbox = {
+    val sandbox = empty(name)
+    val sources = content.apar.flatMap { case (contentRoot, c) =>
+      prepareSources(c, sandbox.sourceDir.resolveDir(contentRoot), (s: A) => s.sourceFolderToFilePath)
+    }
     sandbox.copy(sources = sources)
   }
 
@@ -73,4 +78,16 @@ final case class SandboxFactory(tempRoot: Directory) {
     val rootSources = prepareSources(content, sandbox.rootSourceDir, (s: A) => s.localRootToFilePath)
     sandbox.copy(sources = sources, rootSourcesPaths = rootSources)
   }
+
+  @async private def prepareSources[A <: SourceUnitId](
+      content: Map[A, HashedContent],
+      targetDir: Directory,
+      targetStrategy: A => RelativePath
+  ): Seq[(A, SandboxedFile)] =
+    content.toIndexedSeq.apar.map { case (s, hc) =>
+      val file = targetDir.resolveFile(targetStrategy(s))
+      Utils.createDirectories(file.parent)
+      Files.copy(hc.contentAsInputStream, file.path)
+      s -> SandboxedFile(file, hc)
+    }
 }

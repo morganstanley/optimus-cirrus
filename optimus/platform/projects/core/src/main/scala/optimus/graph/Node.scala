@@ -257,7 +257,10 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
     // might be running in a non-optimus thread.
     val ec = OGSchedulerContext.current()
     // we're assuming that unattached nodes are not shared between threads, so this should not be racy in normal usage
-    if (scenarioStack() == null) attach(ec.scenarioStack)
+    if (scenarioStack() == null)
+      attach(
+        if (Settings.asyncSISupport && executionInfo.isScenarioIndependent) ec.scenarioStack.asSiStack(this)
+        else ec.scenarioStack)
     ec.runAndWait(this)
     ec.getCurrentNodeTask.combineInfo(this, ec)
     result
@@ -287,6 +290,10 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
     // only attach if not already attached (matches behavior of #getInternal).
     // we're assuming that unattached nodes are not shared between threads, so this should not be racy in normal usage
     if (scenarioStack() == null) attach(EvaluationContext.scenarioStack)
+    // SamplingProfiler will see the first waiter as having "enqeueued" it.  Not worried
+    // about a race condition, since this is arbitrary.
+    if (Objects.isNull(getLauncher))
+      AwaitStackManagement.setLaunchData(EvaluationContext.currentNode, this, false, 0)
     enqueueAttached
   }
 
@@ -300,7 +307,9 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   final def enqueue: Node[T] = {
     if (!isDone) {
       val ec = OGSchedulerContext.current()
-      attach(ec.scenarioStack)
+      attach(
+        if (Settings.asyncSISupport && executionInfo.isScenarioIndependent) ec.scenarioStack.asSiStack(this)
+        else ec.scenarioStack)
       ec.enqueueDirect(this)
     }
     this
@@ -838,6 +847,8 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
   // would result in a null EvaluationContext.scenarioStack.
   private[this] val promisedNode = new PromisedNode
 
+  def enqueuerChain: String = promisedNode.enqueuerChain
+
   // Install the timeout if necessary. At this point we know for a fact that the node is initialized, which is important
   // because the timeout might immediately complete it in another thread.
   timeoutMillis.foreach(t =>
@@ -853,6 +864,9 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
   private[this] class PromisedNode extends CompletableNode[A] {
     initAsRunning(ScenarioStack.constantNC)
     override def executionInfo: NodeTaskInfo = outer.executionInfo
+    markAsHavingPluginType()
+    PluginType.setPluginType(this, NodePromise.promisePluginType)
+    PluginType.fire(this)
 
     private val cancelHandler = (cs: CancellationScope) => completeWithTry(Failure(cs.cancellationCause), None): Unit
     // Note that this might run completeWithTry in the same thread right now if the CS is already cancelled!
@@ -873,6 +887,7 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
 object NodePromise {
   private def currentCScopeOrNullScope =
     Option(EvaluationContext.scenarioStackOrNull).map(_.cancelScope).getOrElse(NullCancellationScope)
+  val promisePluginType = PluginType("NodePromise")
 
   /**
    * Create a NodePromise.

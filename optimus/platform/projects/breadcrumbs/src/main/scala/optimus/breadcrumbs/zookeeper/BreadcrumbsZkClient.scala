@@ -20,10 +20,13 @@ import msjava.zkapi.internal.ZkaData
 import msjava.zkapi.internal.ZkaPropertySource
 import optimus.breadcrumbs.Breadcrumbs.SetupFlags
 import optimus.breadcrumbs._
+import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.filter.CrumbFilter
 import optimus.breadcrumbs.routing.CrumbRoutingRule
+import optimus.platform.breadcrumbs.ForensicSource
 import optimus.platform.util.Log
+import optimus.platform.util.Version
 import optimus.utils.PropertyUtils
 import org.slf4j.LoggerFactory
 
@@ -32,6 +35,8 @@ import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
 import optimus.scalacompat.collection._
+
+import scala.collection.mutable.ArrayBuffer
 
 object BreadcrumbsPropertyConfigurer extends Log {
 
@@ -72,7 +77,9 @@ object BreadcrumbsPropertyConfigurer extends Log {
       ps: PropertySource,
       property: String,
       customizationKeys: Map[String, String],
-      verbose: Boolean = false): Option[A] = {
+      verbose: Boolean = false,
+      trail: Option[ArrayBuffer[String]] = None
+  ): Option[A] = {
     val data = ps.getProperty(property)
     if (data eq null) return None
     val cases = data.asInstanceOf[JavaMap[String, JavaList[JavaMap[String, AnyRef]]]].get("cases")
@@ -94,7 +101,9 @@ object BreadcrumbsPropertyConfigurer extends Log {
                 "fallback"
               else ""
             val matched = if (exists) "MATCHED" else "did not match"
-            log.info(s"configuration for $property $matched $maybeFallback case $zkCase")
+            val msg = s"configuration for $property $matched $maybeFallback case $zkCase"
+            log.info(msg)
+            trail.foreach(_ += msg)
           }
           exists
         }
@@ -106,8 +115,11 @@ object BreadcrumbsPropertyConfigurer extends Log {
       }
   }
 
-  def getBCConfig(ps: PropertySource, keys: Map[String, String]): Option[BreadcrumbConfig] = {
-    findCase[JavaMap[String, Any]](ps, "bcparams", keys)
+  def getBCConfig(
+      ps: PropertySource,
+      keys: Map[String, String],
+      trail: Option[ArrayBuffer[String]]): Option[BreadcrumbConfig] = {
+    findCase[JavaMap[String, Any]](ps, "bcparams", keys, trail = trail)
       .map(_.asScala.toMap.mapValuesNow(_.toString))
       .map(new BreadcrumbConfigFromMap(_))
   }
@@ -120,9 +132,12 @@ object BreadcrumbsPropertyConfigurer extends Log {
   private[this] def pathToPS(
       czkc: CachedZkaContext,
       path: String,
-      nAliasRecursion: Int = maxAliasingLevels): Option[PropertySource] = {
+      nAliasRecursion: Int = maxAliasingLevels,
+      trail: Option[ArrayBuffer[String]]
+  ): Option[PropertySource] = {
     val p = if (path.length > 1) s"/breadcrumbs/$path" else "/breadcrumbs"
     log.info(s"Looking for configuration in $p")
+    trail.foreach(_ += s"Check $p")
 
     lazy val ctx = {
       val result = ZkaContext.contextForSubPath(czkc.context, p)
@@ -141,7 +156,8 @@ object BreadcrumbsPropertyConfigurer extends Log {
         alias match {
           case a: String if a.nonEmpty =>
             log.info(s"Following alias $a")
-            pathToPS(czkc, a, nAliasRecursion - 1)
+            trail.foreach(_ += s" -> alias $a")
+            pathToPS(czkc, a, nAliasRecursion - 1, trail)
           case _ =>
             val ps =
               if (useFlatConfig)
@@ -154,6 +170,7 @@ object BreadcrumbsPropertyConfigurer extends Log {
       } orElse {
         // Nothing here at all, not even an alias.
         log.info(s"Didn't find any configuration at $p")
+        trail.foreach(_ += "none")
         None
       }
     }
@@ -162,8 +179,10 @@ object BreadcrumbsPropertyConfigurer extends Log {
   private[this] def findFilterConfigs(
       czkc: CachedZkaContext,
       ps: PropertySource,
-      keys: Map[String, String]): Option[Map[String, Seq[JavaMap[String, AnyRef]]]] = {
-    findParamsRecursivelyEx(czkc, ps, keys, FilterParamsKey, FilterKey).flatMap { config =>
+      keys: Map[String, String],
+      trail: Option[ArrayBuffer[String]]
+  ): Option[Map[String, Seq[JavaMap[String, AnyRef]]]] = {
+    findParamsRecursivelyEx(czkc, ps, keys, FilterParamsKey, FilterKey, trail = trail).flatMap { config =>
       Option(config.get(FilterKey)).map {
         // as consistent with other cases, for any breadcrumbs config related ZK node, the data has to be json
         // object convertible if they ever exist. (i.e., the cast will fail if the node exists but empty)
@@ -186,17 +205,19 @@ object BreadcrumbsPropertyConfigurer extends Log {
       keys: Map[String, String],
       property: String,
       nestedArrayProperty: String = "",
-      nMaxRecursion: Int = maxMergeDepth): Option[JavaMap[String, AnyRef]] = {
+      nMaxRecursion: Int = maxMergeDepth,
+      trail: Option[ArrayBuffer[String]]
+  ): Option[JavaMap[String, AnyRef]] = {
     if (nMaxRecursion <= 0)
       None
     else
       findCase[JavaMap[String, Object]](ps, property, keys).map { props: JavaMap[String, Object] =>
         Option(props.get(MergeKey))
           .flatMap { mergeValue =>
-            pathToPS(czkc, mergeValue.toString)
+            pathToPS(czkc, mergeValue.toString, trail = trail)
           }
           .flatMap { ps =>
-            findParamsRecursivelyEx(czkc, ps, keys, property, nestedArrayProperty, nMaxRecursion - 1)
+            findParamsRecursivelyEx(czkc, ps, keys, property, nestedArrayProperty, nMaxRecursion - 1, trail = trail)
           }
           .fold {
             // Nothing to merge with
@@ -234,8 +255,11 @@ object BreadcrumbsPropertyConfigurer extends Log {
   private[breadcrumbs] def implFromConfig(
       zkc: ZkaContext,
       appKeys: Map[String, String] = Map(),
-      setupFlags: SetupFlags = SetupFlags.None
+      setupFlags: SetupFlags = SetupFlags.None,
   ): BreadcrumbsPublisher = {
+
+    val trail = ArrayBuffer.empty[String]
+    val ST = Some(trail)
 
     CachedZkaContext.withCache(zkc) { czkc =>
       /**
@@ -248,11 +272,11 @@ object BreadcrumbsPropertyConfigurer extends Log {
        */
       def findPS(appKeys: Map[String, String]): Option[PropertySource] = {
         try {
-          PropertyUtils.get("breadcrumb.config.location").flatMap(pathToPS(czkc, _)) orElse
-            appKeys.get("breadcrumb.config").flatMap(pathToPS(czkc, _)) orElse
-            appKeys.get("rtcEnv").flatMap(pathToPS(czkc, _)) orElse
-            appKeys.get("rtcMode").flatMap(pathToPS(czkc, _)) orElse
-            appKeys.get("zkMode").flatMap(pathToPS(czkc, _)) orElse
+          PropertyUtils.get("breadcrumb.config.location").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+            appKeys.get("breadcrumb.config").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+            appKeys.get("rtcEnv").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+            appKeys.get("rtcMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+            appKeys.get("zkMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
             // The uri could take the forms
             //     foo://bar/wiz/env
             //     foo://bar/wiz?blip=env
@@ -260,8 +284,8 @@ object BreadcrumbsPropertyConfigurer extends Log {
             appKeys
               .get("optimus.dsi.uri")
               .map(_.replaceFirst(".*:\\/\\/(.*\\?\\w+=)?", ""))
-              .flatMap(pathToPS(czkc, _)) orElse
-            pathToPS(czkc, "").map { ps =>
+              .flatMap(pathToPS(czkc, _, trail = ST)) orElse
+            pathToPS(czkc, "", trail = ST).map { ps =>
               closeablePropertySources += ps
               ps
             }
@@ -350,7 +374,7 @@ object BreadcrumbsPropertyConfigurer extends Log {
         try {
           (for (
             ps <- maybePropertySource;
-            routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey)
+            routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey, trail = ST)
           )
             yield {
               Option(routing.get(RuleKey))
@@ -364,7 +388,7 @@ object BreadcrumbsPropertyConfigurer extends Log {
             Seq.empty
         }
 
-      val rules =
+      val rules: collection.Seq[CrumbRoutingRule] =
         try {
           routingConfiguration.map { r =>
             val filters = r.get(FilterKey).asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
@@ -380,7 +404,11 @@ object BreadcrumbsPropertyConfigurer extends Log {
             log.debug("Exception:", ex)
             Seq.empty
         }
-
+      trail += s"rules: $rules"
+      // This will get enequeued and published eventually by any publisher other than the ignorer.
+      Breadcrumbs.info(
+        ChainedID.root,
+        PropertiesCrumb(_, ForensicSource, Properties.crumbConfig -> trail.toSeq :: Version.properties))
       new BreadcrumbsRouter(rules.toSeq, configuredPublisher)
     }
   }
@@ -389,15 +417,18 @@ object BreadcrumbsPropertyConfigurer extends Log {
       czkc: CachedZkaContext,
       ps: PropertySource,
       publisher: String,
-      keys: Map[String, String]) = {
+      keys: Map[String, String],
+      trail: Option[ArrayBuffer[String]] = None
+  ) = {
 
     val zkc = czkc.context
     publisher match {
       case KafkaPublisherKey =>
-        val topicParams: JavaMap[String, Object] = findParamsRecursivelyEx(czkc, ps, keys, TopicParamsKey)
-          .getOrElse(new JavaHashMap[String, Object]())
-        findParamsRecursivelyEx(czkc, ps, keys, KafkaParamsKey).fold(ignorer(czkc, keys)) { props =>
-          findFilterConfigs(czkc, ps, keys) flatMap { filterConfigs =>
+        val topicParams: JavaMap[String, Object] =
+          findParamsRecursivelyEx(czkc, ps, keys, TopicParamsKey, trail = trail)
+            .getOrElse(new JavaHashMap[String, Object]())
+        findParamsRecursivelyEx(czkc, ps, keys, KafkaParamsKey, trail = trail).fold(ignorer(czkc, keys)) { props =>
+          findFilterConfigs(czkc, ps, keys, trail = trail) flatMap { filterConfigs =>
             filterConfigs.get(KafkaPublisherKey).map { configs =>
               val crumbFilter = CrumbFilter.createFilter(configs.map(_.asScala.toMap))
               new BreadcrumbsKafkaPublisher(props, topicParams) {
@@ -413,8 +444,8 @@ object BreadcrumbsPropertyConfigurer extends Log {
         }
 
       case LogPublisherKey =>
-        getBCConfig(ps, keys).fold(ignorer(czkc, keys)) { conf =>
-          findFilterConfigs(czkc, ps, keys) flatMap { filterConfigs =>
+        getBCConfig(ps, keys, trail).fold(ignorer(czkc, keys)) { conf =>
+          findFilterConfigs(czkc, ps, keys, trail = trail) flatMap { filterConfigs =>
             filterConfigs.get(LogPublisherKey).map { configs =>
               val crumbFilter = CrumbFilter.createFilter(configs.map(_.asScala.toMap))
               new BreadcrumbsLoggingPublisher(conf) {

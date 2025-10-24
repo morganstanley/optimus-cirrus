@@ -14,6 +14,7 @@ package optimus.platform.storable
 import java.time.Instant
 import optimus.platform.dsi.bitemporal.MicroPrecisionInstant
 import optimus.platform.dsi.bitemporal.ValidTimeHolder
+import optimus.platform.pickling.PickledProperties
 
 sealed trait OptionalBusinessEvent extends ValidTimeHolder {
   def id: BusinessEventReference
@@ -30,7 +31,7 @@ object SerializedBusinessEvent {
       id: BusinessEventReference,
       cmid: Option[CmReference],
       className: String,
-      properties: Map[String, Any],
+      properties: PickledProperties,
       keys: Seq[SerializedKey],
       types: Seq[String],
       validTime: Instant,
@@ -62,7 +63,7 @@ final case class SerializedBusinessEvent private (
     id: BusinessEventReference,
     cmid: Option[CmReference],
     className: String,
-    properties: Map[String, Any],
+    properties: PickledProperties,
     keys: Seq[SerializedKey],
     types: Seq[String],
     versionId: Int,

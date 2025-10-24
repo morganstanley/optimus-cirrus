@@ -154,7 +154,7 @@ object EmbeddablePicklers extends StorableSerializer {
   def extractSimpleClassname(pickled: Any): String = {
     val clsName = pickled match {
       // @embeddable case classes get pickled as a map with _tag containing the simple classname
-      case m: SlottedBufferAsMap             => m.tag
+      case m: PickledProperties              => m.tag
       case m: Map[String, String] @unchecked => m(Tag)
       // @embeddable case object is pickled as a bare String of the simple classname (see EmbeddableObjectPickler)
       case objName: String => objName
@@ -221,7 +221,7 @@ object EmbeddablePicklers extends StorableSerializer {
        * Check and apply write time versioning, if any.
        */
       val versionedPropMap = {
-        val propMap = tmpOutStrm.value.asInstanceOf[Map[String, Any]]
+        val propMap = tmpOutStrm.value.asInstanceOf[PickledProperties]
         val slot = 0 // Slot versioning is not implemented.
         TransformerRegistry
           .versionToWrite(ecb.shapeName, propMap, slot, TemporalSource.loadContext)
@@ -271,29 +271,25 @@ object EmbeddablePicklers extends StorableSerializer {
         new CompletableNodeM[Embeddable] {
           private var waitingOn = 0 // Current/last sub unpickler we are waiting on....
           private var arr: Array[AnyRef] = _ // Waiting on list to resolve values
-          private var versionResolver: Node[Map[String, Any]] = _
-          private var propMap: Map[String, Any] = _
+          private var versionResolver: Node[PickledProperties] = _
+          private var propMap: PickledProperties = _
 
           enqueueChildrenOrComplete()
 
           def enqueueChildrenOrComplete(): Unit = {
+            def complete(properties: PickledProperties) = {
+              initAsRunning(EvaluationContext.scenarioStack)
+              arr = new Array[AnyRef](unpicklers.length)
+              propMap = properties.untagged
+              versionResolver = NodeAPI.queuedNodeOf(
+                version(ecb.shapeName, propMap, is.temporalContext, applyForceTransformation = false))
+              versionResolver.continueWith(this, OGSchedulerContext.current())
+            }
             pickled match {
+              case m: PickledProperties =>
+                complete(m)
               case m: Map[String, Any] @unchecked =>
-                initAsRunning(EvaluationContext.scenarioStack)
-                arr = new Array[AnyRef](unpicklers.length)
-                propMap = m match {
-                  case sb: SlottedBufferAsMap =>
-                    // We need to remove the tag from the map so that we can use it to resolve the fields
-                    // in the constructor. The tag is already in the shape.
-                    sb.untagged
-                  case m: Map[String, Any] @unchecked =>
-                    // We need to remove the tag from the map so that we can use it to resolve the fields
-                    // in the constructor. The tag is already in the shape.
-                    m - Tag
-                }
-                versionResolver = NodeAPI.queuedNodeOf(
-                  version(ecb.shapeName, propMap, is.temporalContext, applyForceTransformation = false))
-                versionResolver.continueWith(this, OGSchedulerContext.current())
+                complete(PickledProperties(m))
               case o: Embeddable => initAsCompleted(o) // Assume it's already the right type
             }
           }
@@ -335,7 +331,14 @@ object EmbeddablePicklers extends StorableSerializer {
                 val res = EvaluationContext.asIfCalledFrom(this, eq)(ecb.fromArray(arr))
                 completeWithResult(res, eq)
               }
-            } catch { case e: Throwable => completeWithException(e, eq) }
+            } catch {
+              case e: ExceptionWithHistory =>
+                val (field, _) = unpicklers(waitingOn)
+                e.addSource(field)
+                e.addSource(name)
+                completeWithException(e, eq)
+              case e: Throwable => completeWithException(e, eq)
+            }
           }
         }
     }
@@ -368,8 +371,11 @@ final class IncompatibleEmbeddableVersionException private (
     val foundFields: SortedSet[String],
     val requiredFields: SortedSet[String])
 // extends NoSuchElementException to preserve client incompatible versions handling code
-    extends NoSuchElementException(details)
-    with RTExceptionTrait {
+    extends NoSuchElementException
+    with RTExceptionTrait
+    with ExceptionWithHistory {
+  override protected val lineage = new ExceptionLineage
+  override def getMessage: String = details + lineage.lineageString
 
   // using chaining ctor rather than companion apply as exceptions are very commonly instantiated in throw new E pattern
   // so it's likely the apply method will go unnoticed and clients will be constructing strings manually

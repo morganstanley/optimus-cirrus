@@ -16,6 +16,7 @@ import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.graph.JobForwardingPluginTagKey
 import optimus.graph.Node
 import optimus.graph.NodeTask
+import optimus.platform.BatchLevelPluginTagKey
 import optimus.scalacompat.collection._
 
 object DistPluginTags extends KnownProperties {
@@ -34,7 +35,7 @@ object DistPluginTags extends KnownProperties {
     private[dist] def cacheKey: (String, String) = (jobId, taskId)
     def fullyQualified = s"$jobId.$taskId"
   }
-  object JobTaskIdTag extends JobForwardingPluginTagKey[JobTaskIdTag] {
+  object JobTaskIdTag extends JobForwardingPluginTagKey[JobTaskIdTag] with BatchLevelPluginTagKey[JobTaskIdTag] {
     def apply(jobId: String, taskId: String): JobTaskIdTag = JobTaskIdTag(jobId, taskId, s"$jobId.$taskId")
   }
 

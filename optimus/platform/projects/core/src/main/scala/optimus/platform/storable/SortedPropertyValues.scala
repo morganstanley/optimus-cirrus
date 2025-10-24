@@ -11,6 +11,8 @@
  */
 package optimus.platform.storable
 
+import optimus.platform.pickling.PickledProperties
+
 import java.util.{Arrays => JArrays}
 import scala.collection.AbstractIterator
 import scala.collection.immutable.SortedSet
@@ -18,7 +20,7 @@ import scala.collection.immutable.SortedSet
 object SortedPropertyValues {
   val empty = new SortedPropertyValues(new Array[String](0), new Array[Any](0))
 
-  def apply(properties: Map[String, Any]): SortedPropertyValues = apply(properties.toSeq)
+  def apply(properties: PickledProperties): SortedPropertyValues = apply(properties.toSeq)
   def apply(properties: Seq[(String, Any)]): SortedPropertyValues = {
     val sortedPV = properties.sortBy(_._1)
     val size = sortedPV.size
@@ -57,7 +59,7 @@ object SortedPropertyValues {
 }
 
 final class SortedPropertyValues(private val names: Array[String], private val vals: Array[Any])
-    extends SortedPropertyValuesBase
+    extends PickledProperties
     with Serializable {
 
   override def iterator: Iterator[(String, Any)] = new AbstractIterator[(String, Any)] {

@@ -17,7 +17,7 @@ import optimus.platform.storable.StorableReference
 
 // This class is Serializable only to enable inlined entities to be serialized.
 final class PickledMapWrapper(
-    val properties: Map[String, Any],
+    val properties: PickledProperties,
     val temporalContext: TemporalContext = null,
     val reference: StorableReference = null,
     override val inlineEntitiesByRef: InlineEntityHolder = InlineEntityHolder.empty)
@@ -25,16 +25,54 @@ final class PickledMapWrapper(
     with Serializable {
 
   def newMutStream: PickledInputStreamMut = new PickledInputStreamMut(properties, this)
+
+  def this(properties: PickledProperties) = {
+    this(properties, null, null, InlineEntityHolder.empty)
+  }
+
+  def this(properties: PickledProperties, temporalContext: TemporalContext) = {
+    this(properties, temporalContext, null, InlineEntityHolder.empty)
+  }
+
+  def this(properties: PickledProperties, temporalContext: TemporalContext, reference: StorableReference) = {
+    this(properties, temporalContext, reference, InlineEntityHolder.empty)
+  }
+
+  def this(properties: Map[String, Any]) = {
+    this(PickledProperties(properties), null, null, InlineEntityHolder.empty)
+  }
+
+  def this(properties: Map[String, Any], temporalContext: TemporalContext) = {
+    this(PickledProperties(properties), temporalContext, null, InlineEntityHolder.empty)
+  }
+
+  def this(properties: Map[String, Any], temporalContext: TemporalContext, reference: StorableReference) = {
+    this(PickledProperties(properties), temporalContext, reference, InlineEntityHolder.empty)
+  }
+
+  def this() = this(Map.empty[String, Any])
+
+  def this(
+      properties: Map[String, Any],
+      temporalContext: TemporalContext,
+      reference: StorableReference,
+      inlineEntitiesByRef: InlineEntityHolder) = {
+    this(PickledProperties(properties), temporalContext, reference, inlineEntitiesByRef)
+  }
 }
 
 class PickledInputStreamMut(properties: Map[String, Any], context: PickledInputStream) {
   @inline private[this] def setIfFound(key: String, set: Any => Unit): Boolean = {
-    val a = properties.get(key)
-    if (a.isDefined) {
-      set(a.get)
-      true
-    } else {
-      false
+    try {
+      val a = properties.get(key)
+      if (a.isDefined) {
+        set(a.get)
+        true
+      } else {
+        false
+      }
+    } catch {
+      case e: ExceptionWithHistory => e.rethrowWith(key)
     }
   }
 

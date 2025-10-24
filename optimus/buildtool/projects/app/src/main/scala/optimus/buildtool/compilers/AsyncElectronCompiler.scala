@@ -11,23 +11,21 @@
  */
 package optimus.buildtool.compilers
 
-import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilationMessage._
 import optimus.buildtool.artifacts.ElectronArtifact
 import optimus.buildtool.artifacts.ElectronMetadata
 import optimus.buildtool.artifacts.MessagesArtifact
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.compilers.AsyncElectronCompiler.Inputs
 import optimus.buildtool.compilers.npm.AsyncNpmCommandRunner
 import optimus.buildtool.config.ElectronConfiguration
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
-import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.SourceUnitId
+import optimus.buildtool.scope.sources.WebCompilationSources.NodeModules
 import optimus.buildtool.trace.Electron
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
@@ -37,6 +35,7 @@ import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.SandboxFactory
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.exceptions.RTException
 import optimus.platform._
 
@@ -71,13 +70,8 @@ object AsyncElectronCompilerImpl {
 @entity private[buildtool] class AsyncElectronCompilerImpl(
     pnpmStoreDir: Directory,
     sandboxFactory: SandboxFactory,
-    logDir: Directory,
-    useCrumbs: Boolean)
-    extends AsyncElectronCompiler {
-
-  // one log file per scopeID, only be used for load debugging msg
-  private def electronCmdLogFile(logDir: Directory, id: ScopeId): FileAsset =
-    logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$id.electronCmd.log")
+    processBuilder: ExternalProcessBuilder
+) extends AsyncElectronCompiler {
 
   @node def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): ElectronArtifact = {
     val resolvedInputs = inputs()
@@ -85,7 +79,6 @@ object AsyncElectronCompilerImpl {
 
     val prefix = Utils.logPrefix(scopeId, Electron)
     val trace = ObtTrace.startTask(scopeId, Electron)
-    val logFile = electronCmdLogFile(logDir, scopeId)
 
     NodeTry {
       log.info(s"${prefix}Starting compilation")
@@ -110,20 +103,16 @@ object AsyncElectronCompilerImpl {
                 nodeVersion,
                 pnpmVersion,
                 npmBuildCommands,
+                processBuilder,
                 sandbox.sourceDir,
-                pnpmStoreDir,
-                logFile,
-                useCrumbs
+                pnpmStoreDir
               )
-              BackgroundProcessBuilder
-                .lastLogLines(logFile, 500)
-                .foreach(log.debug(_)) // print max 500 lines for debugging
               writeNpmMetadata(sandbox.sourceDir, nodeVersion, pnpmVersion)
               executedCmdMsgs
             }
 
           // This is needed for special case when npm generates links between folders
-          AssetUtils.recursivelyDelete(sandbox.sourceDir.resolveDir("node_modules"), throwOnFail = true)
+          AssetUtils.recursivelyDelete(sandbox.sourceDir.resolveDir(NodeModules), throwOnFail = true)
 
           val hasErrors = MessagesArtifact.hasErrors(compiledMessages)
 

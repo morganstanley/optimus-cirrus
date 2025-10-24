@@ -34,6 +34,7 @@ import java.time.ZoneOffset
 import net.iharder.base64.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.Settings
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.PicklingConstants
 import optimus.platform.pickling.Shape
 import optimus.platform.pickling.SlottedBufferAsEmptySeq
@@ -61,6 +62,7 @@ object ProtoPickleSerializer {
       builder.setAssociatedKey(associatedKey.get)
     }
 
+    // IMPORTANT! If adding new non-Comparable types here, consider strongly also adding them to PickledComparator.compare
     o match {
       case x: Int                => builder.setType(FieldProto.Type.INT).setIntValue(x)
       case x: String             => builder.setType(FieldProto.Type.STRING).setStringValue(x)
@@ -75,7 +77,14 @@ object ProtoPickleSerializer {
       case x: collection.Seq[_] =>
         val seq = (x map (propertiesToProto(_, None))).asJava
         builder.setType(FieldProto.Type.SEQ).addAllChildren(seq)
-      case x: Map[_, _] =>
+      case x: PickledProperties =>
+        val values = x.map(v => propertiesToProto(v._2, Some(v._1))).toSeq.asJava
+        val keys = x.map(k => k._1).toSeq.asJava
+        // TODO (OPTIMUS-13435): When we serialize map values, we serialize the associated key, too.
+        // So the value serialization contains sufficient information about the map. For backward compatibility, we still serialize the
+        // keys with addAllFields. When all the clients have upgraded to the new code base, we need to remove the redundant key fields.
+        builder.setType(FieldProto.Type.MAP).addAllChildren(values).addAllFields(keys)
+      case x: Map[_, _] if PickledProperties.checkPickledPropertiesAsMapsAllowed(x) =>
         val values = x.map(v => propertiesToProto(v._2, Some(v._1.asInstanceOf[String]))).toSeq.asJava
         val keys = x.map(k => k._1.asInstanceOf[String]).toSeq.asJava
         // TODO (OPTIMUS-13435): When we serialize map values, we serialize the associated key, too.
@@ -142,6 +151,8 @@ object ProtoPickleSerializer {
               .build)
       case null  => builder.setType(FieldProto.Type.NULL)
       case other => throw new IllegalArgumentException(s"Cannot serialize ${other.getClass}")
+
+      // IMPORTANT! If adding new non-Comparable types here, consider strongly also adding them to PickledComparator.compare
     }
 
     builder.build
@@ -192,7 +203,7 @@ object ProtoPickleSerializer {
     val sortedList = new util.ArrayList(rawValues)
     var tag: String = Shape.NoTag
     if (sortedList.isEmpty) {
-      if (isMap) Map.empty else Seq.empty
+      if (isMap) PickledProperties.empty else Seq.empty
     } else {
       var i = 0
       var tagIndex = -1

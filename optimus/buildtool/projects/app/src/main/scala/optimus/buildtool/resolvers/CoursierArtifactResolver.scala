@@ -30,6 +30,7 @@ import optimus.buildtool.artifacts.ExternalArtifactType
 import optimus.buildtool.artifacts.ExternalBinaryArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.ExternalHashedArtifact
+import optimus.buildtool.artifacts.ExternalMetadataArtifact
 import optimus.buildtool.artifacts.VersionedExternalArtifactId
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore
@@ -49,6 +50,8 @@ import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
 import optimus.buildtool.config.PublicationSettings
 import optimus.buildtool.config.Substitution
+import optimus.buildtool.files.BaseHttpAsset
+import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.HttpFileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
@@ -802,6 +805,18 @@ object CoursierArtifactResolver {
               Right(
                 ExternalBinaryArtifact(vid, hasMavenArtifacts, HttpFileAsset(new URI(artifact.url).toURL()))
               )
+            case Right(artifact) if MsIvyRepository.isIvyMetaFile(artifact) || MavenUtils.isMavenPomFile(artifact) =>
+              val vid = VersionedExternalArtifactId(
+                group = proj.module.organization.value,
+                name = proj.module.name.value,
+                version = proj.actualVersion,
+                artifactName = artifact.url.split("/").last,
+                ExternalArtifactType.MetadataXml,
+                MavenUtils.isMavenPomFile(artifact)
+              )
+              Right(
+                ExternalMetadataArtifact(vid, hasMavenArtifacts, toFileAsset(artifact.value))
+              )
             case Left(error) =>
               Left(CompilationMessage.error(s"Failed to resolve ${proj.module.orgName}#${proj.version}: $error"))
           }
@@ -813,6 +828,10 @@ object CoursierArtifactResolver {
   private def toAsset(a: Artifact): JarAsset =
     if (NamingConventions.isHttpOrHttps(a.url)) JarAsset(new URI(a.url).toURL())
     else JarAsset(PathUtils.uriToPath(a.url, fileSystem))
+
+  private def toFileAsset(a: Artifact): FileAsset =
+    if (NamingConventions.isHttpOrHttps(a.url)) BaseHttpAsset.httpAsset(new URI(a.url).toURL())
+    else FileAsset.apply(PathUtils.uriToPath(a.url, fileSystem))
 
   @node private def downloadMavenSrcDocClassifier(
       source: ArtifactSource,
@@ -919,7 +938,8 @@ object CoursierArtifactResolver {
     val resolvedJniPaths: Seq[String] = resolvedDependencies.flatMap(jniPathsForDependency(resolution, _))
     val resolvedModuleLoads: Seq[String] = resolvedDependencies.flatMap(moduleLoadsForDependency(resolution, _))
 
-    val allArtifacts = (requestedArtifacts ++ resolvedArtifacts).distinct
+    val (allArtifacts, ivyMetadataArtifacts) = (requestedArtifacts ++ resolvedArtifacts).distinct.partition(
+      _._2.toOption.filter(_.isInstanceOf[ExternalMetadataArtifact]).isEmpty)
     val allJniPaths = (requestedJniPaths ++ resolvedJniPaths).distinct
     val allModuleLoads = (requestedModuleLoads ++ resolvedModuleLoads).distinct
 
@@ -989,7 +1009,35 @@ object CoursierArtifactResolver {
 
     val directMappedDependencies = mappedDeps.map { case (afs, equivalents) =>
       definitionToInfo(afs) -> equivalents.map(definitionToInfo)
-    }.toMap
+    }
+
+    def pomPath(proj: Project, root: String) = {
+      val groupPath = proj.module.organization.value.replace(".", "/")
+      val artifact = proj.module.name.value
+      val version = proj.actualVersion
+      s"$root/$groupPath/$artifact/$version/$artifact-$version.pom"
+    }
+
+    val mavenMetadataArtifacts = resolution.projectCache.toSeq
+      .collect { case ((_, _), (repo: MavenRepository, proj: Project)) => (repo, proj) }
+      .distinct
+      .map { case (repo, proj) =>
+        val pomPathStr = pomPath(proj, repo.root)
+        val vid = VersionedExternalArtifactId(
+          group = proj.module.organization.value,
+          name = proj.module.name.value,
+          version = proj.actualVersion,
+          artifactName = pomPathStr.split("/").last,
+          ExternalArtifactType.MetadataXml,
+          true
+        )
+        ExternalMetadataArtifact(vid, true, BaseHttpAsset.httpAsset(new URI(pomPathStr).toURL()))
+      }
+
+    val allMetadataArtifacts =
+      ivyMetadataArtifacts
+        .flatMap { case (_, artifactEither) => artifactEither.toSeq }
+        .collectInstancesOf[ExternalMetadataArtifact] ++ mavenMetadataArtifacts
 
     val transitiveMappedDependencies =
       externalDependencies.multiSourceDependencies.collect {
@@ -1006,7 +1054,8 @@ object CoursierArtifactResolver {
       jniPaths = allJniPaths,
       moduleLoads = allModuleLoads,
       finalDependencies = finalDependencies,
-      mappedDependencies = directMappedDependencies ++ transitiveMappedDependencies
+      mappedDependencies = directMappedDependencies ++ transitiveMappedDependencies,
+      resolvedMetadataArtifacts = allMetadataArtifacts
     )
   }
 }

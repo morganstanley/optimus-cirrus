@@ -24,6 +24,7 @@ import optimus.platform.dal.config.HostPort
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.dsi.bitemporal.proto.Peer.EntityTimeSliceReferenceProto
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
 import optimus.platform.storable._
 
@@ -240,7 +241,7 @@ object SerializedEntitySerializer
   }
 
   override def deserialize(proto: SerializedEntityProto): SerializedEntity = {
-    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[Map[String, Any]]
+    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[PickledProperties]
     val keyIterator = proto.getKeysList.asScala.iterator map { fromProto(_) }
     val keys = ProtoSerialization
       .distinctBy(keyIterator, (s: SerializedKey) => (s.unique, s.indexed, s.refFilter, s))
@@ -341,7 +342,7 @@ object VersionedReferenceSerializer
   }
 
   override def deserialize(proto: VersionedReferenceProto): VersionedReference = {
-    new VersionedReference(proto.getData.toByteArray)
+    VersionedReference(proto.getData.toByteArray)
   }
 }
 
@@ -355,10 +356,8 @@ object StorableReferenceSerializer
       .build
   }
 
-  override def deserialize(proto: StorableReferenceProto): StorableReference = {
-    val bytes = proto.getData.toByteArray
-    new StorableReference(bytes)
-  }
+  override def deserialize(proto: StorableReferenceProto): StorableReference =
+    StorableReference(proto.getData.toByteArray)
 }
 
 object EntityTimeSliceReferenceSerializer
@@ -527,7 +526,7 @@ object SerializedBusinessEventSerializer
   }
 
   override def deserialize(proto: SerializedBusinessEventProto): SerializedBusinessEvent = {
-    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[Map[String, Any]]
+    val properties = ProtoPickleSerializer.protoToProperties(proto.getProperties).asInstanceOf[PickledProperties]
     val keys = proto.getKeysList.asScala map { fromProto(_) }
     val types = proto.getTypesList.asScala
     val appEventRef = if (proto.hasAppeventRef()) fromProto(proto.getAppeventRef()) else null

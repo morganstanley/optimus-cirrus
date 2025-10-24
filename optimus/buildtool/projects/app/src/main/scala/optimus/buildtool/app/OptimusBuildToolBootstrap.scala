@@ -61,7 +61,7 @@ object OptimusBuildToolBootstrap extends Log {
 
   private val timer = new Timer
 
-  def generateLogFilePrefix() = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now)
+  def generateLogFilePrefix(): String = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now)
 
   def initLogging(logDir: Directory, debug: Boolean, bspDebug: Boolean, histoFreqSecs: Option[Int] = None): Unit = {
     Files.createDirectories(logDir.path)

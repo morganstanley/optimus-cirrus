@@ -28,7 +28,7 @@ import scala.collection.immutable.IndexedSeq
 ) extends CachedPartialScopedCompilation {
   import scope._
 
-  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq.empty
   @node override protected def containsRelevantSources: Boolean = scope.config.webConfig.isDefined && !sources.isEmpty
 
   @node def artifacts: Seq[Artifact] =
@@ -49,8 +49,7 @@ import scala.collection.immutable.IndexedSeq
       pathBuilder.resourceOutPath(id, sources.compilationFingerprint.hash),
       webConfig,
       nodeVersion,
-      pnpmVersion,
-      upstreamArtifacts
+      pnpmVersion
     )
   }
 }

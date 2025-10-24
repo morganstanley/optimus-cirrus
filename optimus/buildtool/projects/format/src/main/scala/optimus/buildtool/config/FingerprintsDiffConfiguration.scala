@@ -52,10 +52,7 @@ object FingerprintsDiffConfiguration {
 
     Result.tryWith(origin, config) {
       Success(
-        FingerprintsDiffConfiguration(
-          stringSet(supportedExtensionsKey).map(ext => s".$ext"),
-          stringSet(unsupportedFilesKey),
-          ignoredDiffs))
+        FingerprintsDiffConfiguration(stringSet(supportedExtensionsKey), stringSet(unsupportedFilesKey), ignoredDiffs))
     }
   }
 

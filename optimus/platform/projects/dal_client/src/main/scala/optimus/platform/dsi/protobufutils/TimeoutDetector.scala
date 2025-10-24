@@ -13,7 +13,6 @@ package optimus.platform.dsi.protobufutils
 
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
-import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.platform.dal.DalTimedoutException
 import optimus.platform.internal.SimpleStateHolder
@@ -80,7 +79,6 @@ class TimeoutDetector(
               timedOut.foreach {
                 case entry @ TimeoutEntry(bc, seqId) if !alreadyNotified.contains(entry) =>
                   log.warn(s"${logPrefix(bc.requestUuid, seqId)} batch timed out (${timedOut.size} in total currently)")
-                  Breadcrumbs.trace(bc.chainedId, EventCrumb(_, DalClientCrumbSource, DalEvents.Client.RequestTimedOut))
                   Breadcrumbs.warn(
                     bc.chainedId,
                     PropertiesCrumb(

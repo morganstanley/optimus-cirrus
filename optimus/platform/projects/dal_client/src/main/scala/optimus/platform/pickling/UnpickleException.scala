@@ -14,5 +14,5 @@ package optimus.platform.pickling
 import optimus.exceptions.RTExceptionTrait
 
 class UnpickleException(obj: Any, val clsName: String)
-    extends Exception(s"Unable to unpickle $obj into an instance for $clsName")
+    extends BaseExceptionWithHistory(s"Unable to unpickle $obj into an instance for $clsName")
     with RTExceptionTrait

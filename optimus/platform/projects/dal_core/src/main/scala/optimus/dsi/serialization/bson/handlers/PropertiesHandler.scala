@@ -12,8 +12,7 @@
 package optimus.dsi.serialization.bson.handlers
 
 import optimus.dsi.serialization.bson.BSONCallback
-
-import scala.collection.immutable.HashMap
+import optimus.platform.pickling.PickledProperties
 
 /**
  * Used to handle a map of String to Any for nested object representation.
@@ -32,12 +31,12 @@ class PropertiesHandler(
     initHandlerStack: PropertiesMapHandlerStack)
     extends BSONCallback
     with PropertyHolder {
-  private var builder = HashMap.newBuilder[String, Any]
+  private val builder = PickledProperties.newBuilder
   var parentName = initParentName
   var parent = initParent
   private var handlerStack = initHandlerStack
 
-  def getProps = builder.result()
+  def getProps: PickledProperties = builder.result()
 
   def reinit(
       reinitParentName: String,

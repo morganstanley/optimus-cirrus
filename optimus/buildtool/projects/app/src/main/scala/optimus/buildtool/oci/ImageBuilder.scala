@@ -79,6 +79,7 @@ import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.PosixPermissionUtils
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.isWindows
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.util.Log
 import optimus.platform.util.Version
@@ -155,11 +156,11 @@ class ImageBuilder(
     val stripDependencies: Boolean,
     val latestCommit: Option[Commit],
     val directoryFactory: DirectoryFactory,
+    val processBuilder: ExternalProcessBuilder,
     val layersForDependencies: Int = 30,
     val useMavenLibs: Boolean,
     val dockerImageCacheDir: Directory,
     val depCopyDir: Directory,
-    val useCrumbs: Boolean,
     val minimalInstallScopes: Option[Set[ScopeId]],
     val genericRunnerGenerator: DockerGenericRunnerGenerator,
     val gitLog: Option[GitLog],
@@ -191,27 +192,27 @@ class ImageBuilder(
 abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with SymLinkSearch with Log {
   import AbstractImageBuilder._
 
-  val sourceDir: WorkspaceSourceRoot
-  val workDir: Directory
-  val scopedCompilationFactory: ScopedCompilationFactory
-  val dockerImage: DockerImage
-  val stripDependencies: Boolean
-  val latestCommit: Option[Commit]
-  val scopeConfigSource: ScopeConfigurationSource with DockerConfigurationSupport
-  val layersForDependencies: Int
-  val directoryFactory: DirectoryFactory
-  val useMavenLibs: Boolean
-  val dockerImageCacheDir: Directory
-  val depCopyDir: Directory
+  protected val sourceDir: WorkspaceSourceRoot
+  protected val workDir: Directory
+  protected val scopedCompilationFactory: ScopedCompilationFactory
+  protected val dockerImage: DockerImage
+  protected val stripDependencies: Boolean
+  protected val latestCommit: Option[Commit]
+  protected val scopeConfigSource: ScopeConfigurationSource with DockerConfigurationSupport
+  protected val layersForDependencies: Int
+  protected val directoryFactory: DirectoryFactory
+  protected val processBuilder: ExternalProcessBuilder
+  protected val useMavenLibs: Boolean
+  protected val dockerImageCacheDir: Directory
+  protected val depCopyDir: Directory
+  protected val minimalInstallScopes: Option[Set[ScopeId]]
+  protected val genericRunnerGenerator: DockerGenericRunnerGenerator
+  protected val gitLog: Option[GitLog]
+
   val dstImage: ImageLocation = dockerImage.location
   private val relevantScopes: Set[ScopeId] = dockerImage.relevantScopeIds
-  val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
-  val useCrumbs: Boolean
-  val minimalInstallScopes: Option[Set[ScopeId]]
-  val genericRunnerGenerator: DockerGenericRunnerGenerator
-  val gitLog: Option[GitLog]
+  private val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
 
-  private val relevantBundles: Set[MetaBundle] = relevantScopes.map(_.metaBundle)
   private val stagingDir = Directory.temporary()
   protected val pathBuilder: InstallPathBuilder = InstallPathBuilder.dist(installVersion)
   protected def dynamicDependencyDetector: DynamicDependencyDetector
@@ -314,7 +315,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   AbstractImageBuilder.initSpecialSystemProperties()
 
   // This part require docker daemon to download source images
-  private val dockerUtils = new DockerUtils(dockerImageCacheDir, useCrumbs)
+  private val dockerUtils = new DockerUtils(dockerImageCacheDir, processBuilder)
 
   private def getExtraImageNameFromCachePath(path: Path): String = {
     val imageName = "([^/]+)".r.findFirstIn(s"/$path".replace(dockerImageCacheDir.pathString, "")) match {

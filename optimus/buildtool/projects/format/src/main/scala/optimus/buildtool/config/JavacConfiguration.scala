@@ -22,10 +22,8 @@ final case class JavacConfiguration(
     jdkHome: Directory,
     warnings: WarningsConfiguration) {
 
-  def resolvedOptions: Seq[String] = {
-    val filteredOptions = JavaOpts.filterJavacOptions(release, options, _ => ())
-    filteredOptions ++ List("--release", release.toString)
-  }
+  def releaseOptions: Seq[String] = Seq("--release", release.toString)
+  def resolvedOptions: Seq[String] = JavaOpts.filterJavacOptions(release, options, _ => ()) ++ releaseOptions
 
   def asJson =
     // jdkHome is not included since it's derived from release and is not valid to include in the actual scope .obt file

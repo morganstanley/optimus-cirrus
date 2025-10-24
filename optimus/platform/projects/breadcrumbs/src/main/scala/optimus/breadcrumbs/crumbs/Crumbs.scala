@@ -187,55 +187,6 @@ object EdgeType extends Enumeration {
   Batching = Value // Parent is part of the batch represented by the child
 }
 
-class EdgeCrumb(val child: ChainedID, val parent: ChainedID, val edge: EdgeType.EdgeType, source: Crumb.Source)
-    extends Crumb(child, source) {
-  def this(child: ChainedID, parent: ChainedID, edge: EdgeType.EdgeType) =
-    this(child, parent, edge, Crumb.OptimusSource)
-  override def toString = s"$baseString, parent=$parent, edge=$edge)"
-  override def stringProperties: Map[String, String] =
-    Map(Headers.Parent -> parent.toString, Headers.ParentVertexId -> parent.vertexId, "edgeType" -> edge.toString)
-  // Equality method ignores time
-  override def equals(that: Any): Boolean =
-    that match {
-      case that: EdgeCrumb => uuid == that.uuid && parent == that.parent && edge == that.edge
-      case _               => false
-    }
-  override def hashCode: Int = uuid.hashCode ^ parent.hashCode ^ edge.hashCode
-}
-
-class HostCrumb(child: ChainedID, host: InetAddress, source: Crumb.Source = OptimusSource)
-    extends EdgeCrumb(child, new ChainedID(host), EdgeType.HostedBy, source) {
-  // Caching "InetAddress.getLocalHost" avoids unnecessary DNS lookups and should be fine as hostname is not
-  // expected to change during app runtime.
-  def this(child: ChainedID) = this(child, LoggingInfo.getHostInetAddr)
-}
-object HostCrumb {
-  def apply(child: ChainedID, host: InetAddress) = new HostCrumb(child, host)
-  def apply(child: ChainedID) = new HostCrumb(child, InetAddress.getLocalHost)
-  def apply(child: ChainedID, source: Crumb.Source) = new HostCrumb(child, InetAddress.getLocalHost, source)
-}
-
-class EventCrumb(uuid: ChainedID, source: Crumb.Source, val event: Event) extends Crumb(uuid, source) {
-  def this(uuid: ChainedID, event: Event) = this(uuid, Crumb.OptimusSource, event)
-  override def toString = s"$baseString, $event)"
-  override def stringProperties: Map[String, String] = Map("event" -> event.name)
-  override def equals(that: Any): Boolean = that match {
-    case that: EventCrumb => uuid == that.uuid && event == that.event
-    case _                => false
-  }
-  override def hashCode: Int = uuid.hashCode ^ event.hashCode
-}
-
-object EventCrumb {
-
-  // This is here temporarily until we move all events under a sealed Event trait.
-  type EventDEPRECATED = optimus.breadcrumbs.crumbs.Event
-
-  def apply(uuid: ChainedID, event: Event) = new EventCrumb(uuid, event)
-  def apply(source: Crumb.Source, event: Event) = new EventCrumb(ChainedID.root, source, event)
-  def apply(uuid: ChainedID, source: Crumb.Source, event: Event) = new EventCrumb(uuid, source, event)
-}
-
 class PropertiesCrumb(
     uuid: ChainedID,
     source: Crumb.Source,
@@ -538,13 +489,11 @@ object Crumb {
     @volatile final private var _shutdown = false
     final def shutdown(): Unit = _shutdown = true
     final def isShutdown: Boolean = _shutdown
-    final private[breadcrumbs] val kafkaCount = new AtomicInteger(0)
-    final private[breadcrumbs] val kafkaFailures = new AtomicInteger(0)
-    final private[breadcrumbs] val enqueueFailures = new AtomicInteger()
-    final private[breadcrumbs] val sendCount = new AtomicInteger(0)
-    final def getCount: Int = sendCount.get()
-    def sentCount: Int = kafkaCount.get()
-    final def getKafkaFailures: Int = kafkaFailures.get()
+    // these atomics should be private[breadcrumbs] but inheritors will need setters, which won't get synthesized
+    // properly in obt under some circumstances
+    final val enqueueFailures = new AtomicInteger(0)
+    final val genericSendCount = new AtomicInteger(0)
+    final def getGenericSendCount: Int = genericSendCount.get()
     final def getEnqueueFailures: Int = enqueueFailures.get()
     final override def equals(obj: Any): Boolean = obj match {
       case s: AnyRef => s eq this

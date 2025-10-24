@@ -149,7 +149,8 @@ class CatchUp(
       val mergeRebaseMsg =
         if (isMerge) s"Do you want to merge changes from $branchToUse' into your local '$currBranch' branch anyway?"
         else s"Do you want to rebase your '$currBranch' branch on top of '$branchToUse' branch anyway?"
-      val questionMsg = s"You have ${otherFiles.size} uncommitted file(s). $mergeRebaseMsg"
+      val questionMsg =
+        s"You have ${otherFiles.size} uncommitted file(s). This may cause losing your changes if rebase fails. $mergeRebaseMsg"
       if (!doUserConfirm(questionMsg)) abort("Abort requested by user", abortedByUser = true)
     }
   }
@@ -182,12 +183,14 @@ class CatchUp(
       }
     } catch {
       case NonFatal(e) =>
-        abort(s"""Catchup failed, please resolve the conflicts and proceed as advised by Git:
-                 |${e.getMessage}""".stripMargin)
+        abort(s"""Catchup failed:
+                 |${e.getMessage}
+                 |
+                 |To abort and go back to state from before catchup please run: 'git rebase --abort'
+                 |To continue please resolve the conflict and run 'git rebase --continue'.""".stripMargin)
     } finally {
       logger.info(s"""
                      |Previous state of your workspace was tagged as $backupTag.
-                     |If needed you can run `git checkout $backupTag` to get it back.
                      |""".stripMargin)
     }
 

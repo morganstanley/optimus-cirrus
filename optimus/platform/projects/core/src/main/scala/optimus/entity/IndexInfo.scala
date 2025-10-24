@@ -12,6 +12,7 @@
 package optimus.entity
 
 import optimus.platform.pickling.PickledOutputStream
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.pickling.Pickler
 import optimus.platform.pickling.PropertyMapOutputStream
 import optimus.platform.pickling.PropertyMapOutputStream.PickleSeq
@@ -46,15 +47,14 @@ abstract class IndexInfo[A <: Storable, K](
   protected def KeyImpl(p: K): Key[A]
 
   def storableClass: Class[A]
-  def isEntityIndex: Boolean = classOf[Entity] isAssignableFrom storableClass
 
-  override def toString = s"IndexInfo(${storableClass.getSimpleName}:${name},U:${unique},D:${default})"
+  override def toString = s"IndexInfo(${storableClass.getSimpleName}:$name,U:$unique,D:$default)"
 
   final def entityToString(e: A): String = {
     val bldr = new PropertyMapOutputStream {
 
-      override protected def newMapBuilder: mutable.Builder[(String, Any), Map[String, Any]] =
-        SeqMap.newBuilder
+      override protected def newMapBuilder: mutable.Builder[(String, Any), PickledProperties] =
+        new SeqPickledPropertiesBuilder
 
       override def writeEntity(e: Entity): Unit =
         if (e.dal$entityRef eq null)
@@ -70,15 +70,19 @@ abstract class IndexInfo[A <: Storable, K](
     propertyNames.iterator.zip(values.iterator).map { case (k, v) => s"$k -> $v" }.mkString(", ")
   }
 
-  private final class SeqMap[K, V](entries: Seq[(K, V)]) extends AbstractImmutableMap[K, V] {
-    override def removed(elem: K): Map[K, V] = throw new UnsupportedOperationException()
-    override def updated[V1 >: V](k: K, v: V1): Map[K, V1] = throw new UnsupportedOperationException()
-    override def get(key: K): Option[V] = entries.find(_._1 == key).map(_._2)
-    override def iterator: Iterator[(K, V)] = entries.iterator
+  private final class SeqPickledProperties(entries: Seq[(String, Any)]) extends PickledProperties {
+    override def get(key: String): Option[Any] = entries.find(_._1 == key).map(_._2)
+    override def iterator: Iterator[(String, Any)] = entries.iterator
   }
 
-  private object SeqMap {
-    def newBuilder[K, V]: mutable.Builder[(K, V), SeqMap[K, V]] = Vector.newBuilder[(K, V)].mapResult(new SeqMap(_))
+  private class SeqPickledPropertiesBuilder extends mutable.Builder[(String, Any), PickledProperties] {
+    private val builder = Vector.newBuilder[(String, Any)]
+    override def clear(): Unit = builder.clear()
+    override def result(): PickledProperties = new SeqPickledProperties(builder.result())
+    override def addOne(elem: (String, Any)): SeqPickledPropertiesBuilder.this.type = {
+      builder.addOne(elem)
+      this
+    }
   }
 
   def underlyingPicklerSeq: Seq[Pickler[_]]

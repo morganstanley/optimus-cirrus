@@ -1317,6 +1317,7 @@ sealed trait TimestampedResult extends Result {
 sealed trait AppEventWriteResult extends TimestampedResult with HasResultStats[AppEventWriteResult] {
   def putResults: Seq[PutResult]
   def invResults: Seq[InvalidateAfterResult]
+  def revResults: Seq[RevertResult]
   def assertResults: Seq[AssertValidResult]
   override lazy val weight = (putResults ++ invResults ++ assertResults).map(_.weight).sum
 
@@ -1327,9 +1328,12 @@ sealed trait AppEventWriteResult extends TimestampedResult with HasResultStats[A
           putResults.flatMap(r => r.permRef.getTypeId).groupBy(identity).mapValuesNow(_.length.toLong)
         val entEvtInvStats =
           invResults.flatMap(r => r.permRef.getTypeId).groupBy(identity).mapValuesNow(_.length.toLong)
+        val entEvtRevStats =
+          revResults.flatMap(r => r.permRef.getTypeId).groupBy(identity).mapValuesNow(_.length.toLong)
         val putStats = ResultStatsByInt(entEvtPutStats)
         val invStats = ResultStatsByInt(entEvtInvStats)
-        val statsOpt = Option(WriteResultStatsByInt(putStats, invStats))
+        val revStats = ResultStatsByInt(entEvtRevStats)
+        val statsOpt = Option(WriteResultStatsByInt(putStats, invStats, revStats))
         setResultStats(statsOpt)
         statsOpt
       case statsOpt => statsOpt
@@ -1384,7 +1388,7 @@ final case class RevertResult(
     types: Seq[SerializedEntity.TypeRef],
     keys: Seq[SerializedKey],
     txTime: Instant
-)
+) extends TimestampedResult
 
 // WriteBusinessEventResult is only used within the broker
 final case class WriteBusinessEventResult(
@@ -1402,6 +1406,7 @@ final case class PutApplicationEventResult(appEvent: SerializedAppEvent, beResul
   override def putResults: Seq[PutResult] = beResults flatMap (_.putResults)
   override def invResults: Seq[InvalidateAfterResult] = beResults flatMap (_.invResults)
   override def assertResults: Seq[AssertValidResult] = beResults flatMap (_.assertResults)
+  override def revResults: Seq[RevertResult] = beResults flatMap (_.revertResults)
 }
 object PutApplicationEventResult {
   def empty(
@@ -1478,6 +1483,8 @@ final case class GeneratedAppEventResult(
     invResults: Seq[InvalidateAfterResult])
     extends AppEventWriteResult {
   def txTime: Instant = appEvent.tt
+  // GeneratedAppEventResult does not support revert commands
+  override def revResults: Seq[RevertResult] = Seq.empty
   override def logDisplay(level: Int): String = {
     if (il(level)) {
       val assertString = iterDisplay[Result](
@@ -1527,7 +1534,10 @@ trait ResultStats {
 
 final case class ResultStatsByInt(cnIdtoCount: Map[Int, Long]) extends ResultStats
 final case class ResultStatsByString(cnIdtoCount: Map[String, Long]) extends ResultStats
-final case class WriteResultStatsByInt(putStats: ResultStatsByInt, invalidateStats: ResultStatsByInt)
+final case class WriteResultStatsByInt(
+    putStats: ResultStatsByInt,
+    invalidateStats: ResultStatsByInt,
+    revertStats: ResultStatsByInt)
     extends ResultStats
 
 sealed trait HasResultStats[T <: Result] { self: T =>

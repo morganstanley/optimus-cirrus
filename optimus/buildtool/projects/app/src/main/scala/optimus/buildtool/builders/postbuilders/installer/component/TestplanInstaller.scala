@@ -19,6 +19,7 @@ import optimus.buildtool.builders.postbuilders.installer.component.testplans.Git
 import optimus.buildtool.builders.postbuilders.installer.component.testplans._
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.Directory.PathRegexFilter
 import optimus.buildtool.files.FileAsset
@@ -340,7 +341,22 @@ final class TestplanInstaller(
   }
 
   @node private def validateTestplanEntries(scopeIds: Set[ScopeId], testData: Seq[TestplanEntry]): Unit = {
+    val testScopeIds = scopeIds.filter(_.isTest)
     val runConfNames = testRunConfNames(scopeIds)
+
+    val testRunConfs = testScopeIds.apar.map(id => id -> testRunConfNames(Set(id)))
+    val missingRunConfs = testRunConfs.filter { case (_, confs) => confs.isEmpty }
+    if (missingRunConfs.nonEmpty) {
+      val scopeIdsText = missingRunConfs.map { case (name, _) => name.properPath }.toSeq.sorted.mkString(",")
+      val helpUrl =
+        s"${StaticConfig.string("codetreeDocsUrl")}/optimus/docs/Stratosphere/StratosphereFaq#how-do-i-add-a-new-test-group"
+      val msg =
+        s"""Test scope(s) '$scopeIdsText' are missing an associated runconf!
+           |
+           |To find how to configure tests correctly, please check: $helpUrl""".stripMargin
+      // TODO (OPTIMUS-79609): make fatal
+      log.error(msg)
+    }
 
     val allTestTasks = testData.flatMap(_.testTasks).toSet
     val allTestTaskOverrides = testData
@@ -358,10 +374,11 @@ final class TestplanInstaller(
     val missingTestNames = runConfNames -- allTestplanTestNames -- allTestTaskOverrides
     if (missingTestNames.nonEmpty) {
       val missing = missingTestNames.map(_.properPath).to(Seq).sorted.mkString(", ")
+      val helpUrl = s"${StaticConfig.string("codetreeDocsUrl")}/profiles/testGroups/README"
       val msg =
         s"""Test(s) '$missing' are not included in any of the downstream test groups!
            |
-           |To find how to add test to downstream test groups please check /profiles/testGroups/README.MD on local machine or on stash.""".stripMargin
+           |To find how to add test to downstream test groups please check: $helpUrl""".stripMargin
       throw new IllegalStateException(msg)
     }
 

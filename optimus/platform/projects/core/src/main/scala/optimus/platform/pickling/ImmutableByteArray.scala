@@ -11,9 +11,9 @@
  */
 package optimus.platform.pickling
 
-import java.util.Arrays
-
 import net.iharder.base64.Base64
+
+import java.util.Arrays
 
 object ImmutableByteArray {
   def apply(data: Array[Byte]) = new ImmutableByteArray(data)

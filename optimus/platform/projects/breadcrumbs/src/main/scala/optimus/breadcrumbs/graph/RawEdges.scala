@@ -17,7 +17,6 @@ import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.CrumbNodeType
-import optimus.breadcrumbs.crumbs.EdgeCrumb
 import optimus.breadcrumbs.crumbs.EdgeType
 import optimus.breadcrumbs.crumbs.NameCrumb
 
@@ -37,7 +36,6 @@ object RawEdges {
       Breadcrumbs.collecting && doSend(source)
       && (parent ne null) && (parent != child)
     ) {
-      Breadcrumbs.info(OnceBy(child, parent), child, new EdgeCrumb(_, parent, edge, source))
       Breadcrumbs.info(OnceByCrumbEquality, child, new NameCrumb(_, source, name, tpe))
     }
     child

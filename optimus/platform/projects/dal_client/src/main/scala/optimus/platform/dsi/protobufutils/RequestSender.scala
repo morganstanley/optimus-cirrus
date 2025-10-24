@@ -25,7 +25,6 @@ import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.CrumbNodeType
 import optimus.breadcrumbs.crumbs.EdgeType
-import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.breadcrumbs.crumbs.LogPropertiesCrumb
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -289,10 +288,6 @@ final class RequestSender(
       ClientRequestTracker.add(rc)
 
       assertConnected
-      Breadcrumbs.trace(
-        OnceByCrumbEquality,
-        rc.chainedId,
-        EventCrumb(_, DalClientCrumbSource, DalEvents.Client.RequestSubmitted))
       impl.asyncSend(message)
 
     } catch {

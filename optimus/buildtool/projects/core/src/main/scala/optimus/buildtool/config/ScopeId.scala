@@ -74,7 +74,7 @@ final case class ScopeId(meta: String, bundle: String, module: String, tpe: Stri
   def tuple: (String, String, String, String) = (meta, bundle, module, tpe)
   override def elements: Seq[String] = Seq(meta, bundle, module, tpe)
   def isMain: Boolean = tpe == "main"
-  def isTest: Boolean = tpe.toLowerCase contains "test"
+  def isTest: Boolean = tpe.toLowerCase.contains("test") && tpe.toLowerCase != "testutil"
   def isRoot: Boolean = this == ScopeId.RootScopeId
   def metaBundle: MetaBundle = MetaBundle(meta, bundle)
   override def fullModule: ModuleId = ModuleId(meta, bundle, module)

@@ -25,7 +25,11 @@ import scala.util.Try
 
 final case class CurrentlyRunningEntry(taskId: String, depth: Int, crumbLevel: Int, vertexId: String)
 final case class TimePulse(pulseMap: Map[String, Double], currentlyRunning: Seq[CurrentlyRunningEntry], snapTime: Long)
-final case class TimeSample(pulse: TimePulse, engineRoot: String, gsfEngineId: Option[String])
+final case class TimeSample(
+    pulse: TimePulse,
+    engineRoot: String,
+    gsfEngineId: Option[String],
+    pulseMeta: Map[String, Int])
 final case class HotspotRow(uuid: String, other: Map[String, String]) {
   override def toString: String = s"$uuid, $other"
   def getBytes: Long = (uuid + other.mkString(",")).getBytes.length

@@ -12,7 +12,6 @@
 package optimus.platform.storable
 
 import java.nio.ByteBuffer
-import java.util.Arrays
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import com.eaio.uuid.UUIDGen
@@ -23,6 +22,10 @@ import optimus.exceptions.RTExceptionTrait
 import optimus.graph.DiagnosticSettings
 import optimus.platform.pickling.ContainsUnresolvedReference
 
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.VarHandle
+import java.nio.ByteOrder
+import java.util
 import scala.annotation.tailrec
 import scala.util.Random
 import scala.util.hashing.MurmurHash3
@@ -159,9 +162,15 @@ object UUIDGenerator {
     }
     out
   }
+
+  private[optimus] def freshUuidAsUuid(): RawReference.LongLong =
+    RawReference.bytesToLongLong(freshUuid(), classOf[RawReference])
 }
 
 object UUIDConversions {
+  // [Note 1]: the conversion methods put the least significant long first but this is not even
+  // LITTLE_ENDIAN because we aren't reversing the bytes within each long. This was probably
+  // not intended but we're keeping it as is for back compatibility
   def uuidToBytes(uuid: UUID): Array[Byte] = {
     val bb = ByteBuffer.allocate(16)
     bb.putLong(uuid.getLeastSignificantBits)
@@ -178,50 +187,77 @@ object UUIDConversions {
 }
 
 object RawReference {
-  def uuidToBytes(uuid: UUID): Array[Byte] = UUIDConversions.uuidToBytes(uuid)
-  private[optimus] def stringToBytes(rep: String): Array[Byte] = Base64.decode(rep, Base64.DONT_GUNZIP)
+  type LongLong = (Long, Long)
+  private[storable] val NilUUID = new LongLong(0L, 0L)
   private val hashing = Hashing.murmur3_128()
+  def uuidToBytes(uuid: UUID): Array[Byte] = UUIDConversions.uuidToBytes(uuid)
+  private[storable] val arrView_vh: VarHandle = {
+    // See [Note 2] for why the ByteOrder is LITTLE_ENDIAN
+    MethodHandles.byteArrayViewVarHandle(classOf[Array[Long]], ByteOrder.LITTLE_ENDIAN)
+  }
+  private[optimus] def stringToBytes(rep: String): Array[Byte] = Base64.decode(rep, Base64.DONT_GUNZIP)
+  private[optimus] def bytesToLongLong(bytes: Array[Byte], cls: Class[_]): LongLong = {
+    if (bytes.length != 16) {
+      throw InvalidRawReferenceException(
+        s"${cls.getSimpleName} Given data has length ${bytes.length} byte(s), " +
+          s"but length must be 16.")
+    }
+    // Since we're LITTLE_ENDIAN per [Note 2], least significant goes into hi, most significant goes to lo
+    (arrView_vh.get(bytes, 8).asInstanceOf[Long], arrView_vh.get(bytes, 0).asInstanceOf[Long])
+  }
 
   /**
    * To be in line with how mongo and PG sort, this ordering sorts references as arrays of unsigned bytes
    */
-  implicit def ordering[T <: RawReference]: Ordering[T] = new Ordering[T] {
-    override def compare(x: T, y: T): Int = {
-      def checkLength(ref: T): Unit =
-        require(ref.data.length == 16, s"entity references should be 16 bytes, $ref is ${ref.data.length} bytes")
-      checkLength(x)
-      checkLength(y)
-
-      @tailrec def sort(i: Int): Int = {
-        def toUnsigned(b: Byte) = (b + 128).toByte
-        if (i == 16) 0
-        else
-          toUnsigned(x.data(i)).compareTo(toUnsigned(y.data(i))) match {
-            case 0 => sort(i + 1)
-            case n => n
-          }
-      }
-      sort(0)
-    }
+  implicit def orderingFixed[T <: StorableReferenceFixedImpl]: Ordering[T] = (x: T, y: T) => {
+    import java.lang.{Long => JLong}
+    // We're little endian, compare lo to hi
+    val loRes = JLong.compareUnsigned(JLong.reverseBytes(x.lo), JLong.reverseBytes(y.lo))
+    if (loRes == 0)
+      JLong.compareUnsigned(JLong.reverseBytes(x.hi), JLong.reverseBytes(y.hi))
+    else
+      loRes
   }
+
+  implicit def ordering[T <: RawReference]: Ordering[T] = (x: T, y: T) => {
+    def checkLength(ref: T): Unit =
+      require(ref.data.length == 16, s"entity references should be 16 bytes, $ref is ${ref.data.length} bytes")
+    checkLength(x)
+    checkLength(y)
+
+    @tailrec def sort(i: Int): Int = {
+      def toUnsigned(b: Byte) = (b + 128).toByte
+      if (i == 16) 0
+      else
+        toUnsigned(x.data(i)).compareTo(toUnsigned(y.data(i))) match {
+          case 0 => sort(i + 1)
+          case n => n
+        }
+    }
+    sort(0)
+  }
+
 }
 
-abstract class RawReference(val data: Array[Byte]) extends Serializable {
+trait RawReference extends Serializable {
+  def data: Array[Byte]
   // we allow the access to the hashcode to be racey
   // if two threads compete, the result will be consistent
   // we don't need to sent the data down the wie as it is cheap enough to re-calculate after deserialisation
   // This hashCode need to be stable, please do not change the implementation, as we are using it for hash based sharding
   @transient private[this] var cachedHashcode = 0
-  override def hashCode: Int = {
+  override final def hashCode: Int = {
     var res = cachedHashcode
     if (res == 0) {
-      res = MurmurHash3.bytesHash(data, 0)
+      res = calcHashCode
       if (res == 0)
         res = -1
       cachedHashcode = res
     }
     res
   }
+
+  protected def calcHashCode: Int = MurmurHash3.bytesHash(data, 0)
 
   /**
    * Calculate a hash hex for hash based sharding.
@@ -231,7 +267,7 @@ abstract class RawReference(val data: Array[Byte]) extends Serializable {
   def hashHex: String = f"$hashCode%08x"
 
   override def equals(rhs: Any): Boolean = rhs match {
-    case r: RawReference => (this.getClass == r.getClass) && Arrays.equals(data, r.data)
+    case r: RawReference => (this.getClass == r.getClass) && util.Arrays.equals(data, r.data)
     case _               => false
   }
 
@@ -242,56 +278,101 @@ abstract class RawReference(val data: Array[Byte]) extends Serializable {
   def toUuid: UUID = UUIDConversions.bytesToUUID(data)
 }
 
-class StorableReference(d: Array[Byte]) extends RawReference(d)
+trait StorableReference extends RawReference
+
+class StorableReferenceArrayImpl(override val data: Array[Byte]) extends StorableReference
+
+// For the time being, there are code-paths that create what ought to be 16 byte entity references
+// with empty byte arrays. In order to support backward compatibility, we need to differentiate
+// between using arrays of 16 zeros versus empty arrays. To do this, we declare these constants
+// that we can use to do reference comparisons such that def data returns empty array as expected.
+private[optimus] object EmptyArrayReferenceCompatibility {
+  private[optimus] val emptyFixed = new StorableReferenceFixedImpl(0L, 0L)
+  private[optimus] val emptyFinal = new FinalReference(0L, 0L, None)
+  private[optimus] val emptyFinalTyped = new FinalTypedReference(0L, 0L, None, 0)
+  private[optimus] val emptyTemporary = new TemporaryReference(0L, 0L)
+  private[optimus] val emptyVersioned = new VersionedReference(0L, 0L)
+}
+
+class StorableReferenceFixedImpl(private[storable] val hi: Long, private[storable] val lo: Long)
+    extends StorableReference {
+
+  protected def empty: StorableReferenceFixedImpl = EmptyArrayReferenceCompatibility.emptyFixed
+  override def data: Array[Byte] = {
+    if (this eq empty)
+      Array.emptyByteArray
+    else {
+      val result = new Array[Byte](16)
+      // Since we are LITTLE_ENDIAN per [Note 2], lo goes first:
+      RawReference.arrView_vh.set(result, 0, lo)
+      RawReference.arrView_vh.set(result, 8, hi)
+      result
+    }
+  }
+
+  protected def bytesEqual(other: StorableReferenceFixedImpl): Boolean =
+    (this ne empty) && (other ne empty) && hi == other.hi && lo == other.lo
+
+  override def calcHashCode: Int = {
+    // Below implementation keeps the calculated hash
+    // consistent with the base class implementation
+    // which uses MurmurHash3.bytesHash(data, 0) but
+    // avoids creating the array.
+    // Per the comment in the base class, it is important
+    // that we preserve the same hashcode as in the past
+    //
+    // [Note 2]: MurmurHash.bytesHash goes through
+    // the bytes in a little-endian way so in order to
+    // avoid switching the order for each of the ints we
+    // obtain, we set the arrView_vh to use LITTLE_ENDIAN
+    // such that the longs are already in the format
+    // we need
+    var h = 0
+    h = MurmurHash3.mix(h, (lo & 0xffffffff).toInt)
+    h = MurmurHash3.mix(h, (lo >>> 32).toInt)
+    h = MurmurHash3.mix(h, (hi & 0xffffffff).toInt)
+    h = MurmurHash3.mix(h, (hi >>> 32).toInt)
+    MurmurHash3.finalizeHash(h, 16)
+  }
+}
 
 object StorableReference {
-  def fromString(rep: String): StorableReference = new StorableReference(RawReference.stringToBytes(rep))
+  def apply(bytes: Array[Byte]): StorableReference = {
+    if (bytes.length == 16) apply(RawReference.bytesToLongLong(bytes, classOf[StorableReference]))
+    else new StorableReferenceArrayImpl(bytes)
+  }
+  def apply(uuid: RawReference.LongLong): StorableReference =
+    new StorableReferenceFixedImpl(uuid._1, uuid._2)
+
+  def fromString(rep: String): StorableReference = {
+    apply(RawReference.stringToBytes(rep))
+  }
 }
 
 private[optimus] final class StorableReferenceWrapper(val ref: StorableReference) {
   override def hashCode(): Int = ref.hashCode
   override def equals(obj: Any): Boolean = obj match {
-    case that: StorableReferenceWrapper => Arrays.equals(ref.data, that.ref.data)
+    case that: StorableReferenceWrapper => util.Arrays.equals(ref.data, that.ref.data)
     case _                              => false
   }
 }
 
 final case class InvalidRawReferenceException(msg: String) extends IllegalArgumentException(msg) with RTExceptionTrait
 
-object StrictDataSizeReference {
-  // We have seen malformatted UUIDs in stored data that may affect clients
-  // and/or the DAL server. By default, we no longer allow invalid references.
-  // If this causes a problem, add the flag
-  // -Doptimus.platform.permitInvalidReferences=true and restart the brokers.
-  private[storable] val permitInvalidReferences = DiagnosticSettings
-    .getBoolProperty("optimus.platform.permitInvalidReferences", false)
-  protected val requiredReferenceBytes: Set[Int] = Set(0, 16)
-}
-sealed trait StrictDataSizeReference {
-  import StrictDataSizeReference.permitInvalidReferences
-  import StrictDataSizeReference.requiredReferenceBytes
-  if (!permitInvalidReferences && !requiredReferenceBytes.contains(data.length)) {
-    throw InvalidRawReferenceException(
-      s"${this.getClass.getSimpleName} Given data has length ${data.length} byte(s), but length must be one of $requiredReferenceBytes.")
-  }
-  def data: Array[Byte]
-}
-
 /**
  * A reference to an entity, stable across temporal updates.
  */
-sealed abstract class EntityReference protected (d: Array[Byte])
-    extends StorableReference(d)
-    with StrictDataSizeReference
+sealed abstract class EntityReference protected (hi: Long, lo: Long)
+    extends StorableReferenceFixedImpl(hi, lo)
     with ContainsUnresolvedReference {
   def isTemporary: Boolean
   def getTypeId: Option[Int] = None
 
+  def uuid: RawReference.LongLong = (hi, lo)
   override def equals(rhs: Any): Boolean = rhs match {
-    case r: EntityReference => (this eq r) || Arrays.equals(data, r.data)
+    case r: EntityReference => (this eq r) || bytesEqual(r)
     case _                  => false
   }
-
 }
 
 // If unresolvedReference is set, it indicates that this FinalReference was constructed through resolution of the given
@@ -300,10 +381,12 @@ sealed abstract class EntityReference protected (d: Array[Byte])
 // its lineage is not preserved. NB since this field is essentially only for use in the DAL server we don't bother to
 // serialize it in the client/server protocol
 private[optimus] sealed class FinalReference private[storable] (
-    d: Array[Byte],
+    hi: Long,
+    lo: Long,
     val unresolvedReference: Option[TemporaryReference])
-    extends EntityReference(d) {
+    extends EntityReference(hi, lo) {
   override def isTemporary = false
+  override protected def empty: FinalReference = EmptyArrayReferenceCompatibility.emptyFinal
 }
 
 sealed trait TypedReference {
@@ -311,70 +394,135 @@ sealed trait TypedReference {
 }
 
 private[optimus] final class FinalTypedReference private[storable] (
-    d: Array[Byte],
+    hi: Long,
+    lo: Long,
     unresolvedReference: Option[TemporaryReference],
     val typeId: Int)
-    extends FinalReference(d, unresolvedReference)
+    extends FinalReference(hi, lo, unresolvedReference)
     with TypedReference {
   override def isTemporary = false
+  override protected def empty: FinalTypedReference = EmptyArrayReferenceCompatibility.emptyFinalTyped
   override def getTypeId: Option[Int] = Some(typeId)
   // TODO (OPTIMUS-20613): Remove comment of toString method once typed refs is enabled in all DAL envs
   // override def toString = s"${Base64.encodeBytes(data)}:$typeId"
-  private[optimus] def asFinalRef = new FinalReference(d, unresolvedReference)
+  private[optimus] def asFinalRef = new FinalReference(hi, lo, unresolvedReference)
 }
 
-private[optimus] final class TemporaryReference private[storable] (d: Array[Byte]) extends EntityReference(d) {
+private[optimus] final class TemporaryReference private[storable] (hi: Long, lo: Long) extends EntityReference(hi, lo) {
   override def isTemporary = true
+  override protected def empty: TemporaryReference = EmptyArrayReferenceCompatibility.emptyTemporary
 }
 
 object EntityReference {
-  def fresh: FinalReference = finalRef(UUIDGenerator.freshUuid(), None)
-  def freshTemporary: TemporaryReference = temporary(UUIDGenerator.freshUuid())
+  def fresh: FinalReference = finalRefFromUuid(UUIDGenerator.freshUuidAsUuid(), None)
+  def freshTemporary: TemporaryReference = temporary(UUIDGenerator.freshUuidAsUuid())
 
-  private[optimus] def freshFinal(tempRef: Option[TemporaryReference]): FinalReference =
-    new FinalReference(UUIDGenerator.freshUuid(), tempRef)
-  private[optimus] def freshFinalTyped(typeId: Int, tempRef: Option[TemporaryReference]): FinalTypedReference =
-    new FinalTypedReference(UUIDGenerator.freshUuid(), tempRef, typeId)
+  private[optimus] def freshFinal(tempRef: Option[TemporaryReference]): FinalReference = {
+    val (hi, lo) = UUIDGenerator.freshUuidAsUuid()
+    new FinalReference(hi, lo, tempRef)
+  }
+  private[optimus] def freshFinalTyped(typeId: Int, tempRef: Option[TemporaryReference]): FinalTypedReference = {
+    val (hi, lo) = UUIDGenerator.freshUuidAsUuid()
+    new FinalTypedReference(hi, lo, tempRef, typeId)
+  }
 
-  def fromString(rep: String): EntityReference = new FinalReference(RawReference.stringToBytes(rep), None)
+  def fromString(rep: String): EntityReference = apply(RawReference.stringToBytes(rep))
   def fromString(rep: String, typeId: Option[Int]): EntityReference = typeId match {
     case Some(t) => typedFromString(rep, t)
     case None    => fromString(rep)
   }
-  def typedFromString(rep: String, typeId: Int): FinalTypedReference =
-    new FinalTypedReference(RawReference.stringToBytes(rep), None, typeId)
-  def temporaryFromString(rep: String): TemporaryReference = new TemporaryReference(RawReference.stringToBytes(rep))
 
-  def apply(d: Array[Byte]): EntityReference = finalRef(d, None)
-  def apply(d: Array[Byte], typeId: Option[Int]): FinalReference =
-    typeId.map(t => finalTypedRef(d, t)).getOrElse(finalRef(d))
+  def typedFromString(rep: String, typeId: Int): FinalTypedReference = {
+    finalTypedRef(RawReference.stringToBytes(rep), typeId, None)
+  }
 
-  def finalRef(d: Array[Byte], tempRef: Option[TemporaryReference] = None): FinalReference =
-    new FinalReference(d, tempRef)
-  def finalTypedRef(d: Array[Byte], typeId: Int, tempRef: Option[TemporaryReference] = None): FinalTypedReference =
-    new FinalTypedReference(d, tempRef, typeId)
+  def temporaryFromString(rep: String): TemporaryReference = temporary(RawReference.stringToBytes(rep))
 
-  def temporary(d: Array[Byte]): TemporaryReference = new TemporaryReference(d)
-  def typedFromEref(eref: EntityReference, typeId: Int): FinalTypedReference = finalTypedRef(eref.data, typeId)
+  def apply(d: Array[Byte]): EntityReference = apply(d, None)
+  def apply(d: Array[Byte], typeId: Option[Int]): FinalReference = {
+    if (d.isEmpty)
+      EmptyArrayReferenceCompatibility.emptyFinal
+    else
+      apply(RawReference.bytesToLongLong(d, classOf[FinalReference]), typeId)
+  }
+  def apply(uuid: RawReference.LongLong): EntityReference = finalRefFromUuid(uuid, None)
+  def apply(uuid: RawReference.LongLong, typeId: Option[Int]): FinalReference = {
+    typeId.map(t => finalTypedRefFromUuid(uuid, t)).getOrElse(finalRefFromUuid(uuid))
+  }
+
+  def finalRef(d: Array[Byte], tempRef: Option[TemporaryReference] = None): FinalReference = {
+    if (d.isEmpty)
+      EmptyArrayReferenceCompatibility.emptyFinal
+    else {
+      val uuid = RawReference.bytesToLongLong(d, classOf[FinalReference])
+      finalRefFromUuid(uuid, tempRef)
+    }
+  }
+  private def finalRefFromUuid(
+      uuid: RawReference.LongLong,
+      tempRef: Option[TemporaryReference] = None): FinalReference = {
+    val (hi, lo) = uuid
+    new FinalReference(hi, lo, tempRef)
+  }
+  def finalTypedRef(d: Array[Byte], typeId: Int, tempRef: Option[TemporaryReference] = None): FinalTypedReference = {
+    if (d.isEmpty)
+      EmptyArrayReferenceCompatibility.emptyFinalTyped
+    else {
+      val uuid = RawReference.bytesToLongLong(d, classOf[FinalTypedReference])
+      finalTypedRefFromUuid(uuid, typeId, tempRef)
+    }
+  }
+  private def finalTypedRefFromUuid(
+      uuid: RawReference.LongLong,
+      typeId: Int,
+      tempRef: Option[TemporaryReference] = None): FinalTypedReference = {
+    val (hi, lo) = uuid
+    new FinalTypedReference(hi, lo, tempRef, typeId)
+  }
+
+  def temporary(d: Array[Byte]): TemporaryReference = {
+    if (d.isEmpty)
+      EmptyArrayReferenceCompatibility.emptyTemporary
+    else
+      temporary(RawReference.bytesToLongLong(d, classOf[TemporaryReference]))
+  }
+  def temporary(uuid: RawReference.LongLong): TemporaryReference = {
+    val (hi, lo) = uuid
+    new TemporaryReference(hi, lo)
+  }
+  def typedFromEref(eref: EntityReference, typeId: Int): FinalTypedReference =
+    finalTypedRefFromUuid(eref.uuid, typeId)
 }
 
 private[optimus] final case class EntityTimeSliceReference(
-    val entityRef: EntityReference,
-    val timeSliceNumber: Int,
-    val isInfiniteTxtoAtCreation: Boolean)
+    entityRef: EntityReference,
+    timeSliceNumber: Int,
+    isInfiniteTxtoAtCreation: Boolean)
 
 /**
  * A reference to a specific bitemporal version of an entity.
  */
-final class VersionedReference(d: Array[Byte]) extends RawReference(d) with StrictDataSizeReference {
-  def isEmpty: Boolean = this == VersionedReference.Nil
+final class VersionedReference(hi: Long, lo: Long) extends StorableReferenceFixedImpl(hi, lo) {
+  def isNil: Boolean = this == VersionedReference.Nil
+  override protected def empty: VersionedReference = EmptyArrayReferenceCompatibility.emptyVersioned
 }
 
 object VersionedReference {
-  def fresh = new VersionedReference(UUIDGenerator.freshUuid())
-  def fromString(rep: String): VersionedReference = new VersionedReference(RawReference.stringToBytes(rep))
-  val Nil = new VersionedReference(new Array[Byte](16))
-  def apply(d: Array[Byte]) = new VersionedReference(d)
+  def fresh: VersionedReference = apply(UUIDGenerator.freshUuidAsUuid())
+  def fromString(rep: String): VersionedReference = {
+    apply(RawReference.stringToBytes(rep))
+  }
+  val Nil: VersionedReference = apply(RawReference.NilUUID)
+  def apply(d: Array[Byte]): VersionedReference = {
+    if (d.isEmpty)
+      EmptyArrayReferenceCompatibility.emptyVersioned
+    else
+      apply(RawReference.bytesToLongLong(d, classOf[VersionedReference]))
+  }
+  def apply(uuid: RawReference.LongLong): VersionedReference = {
+    val (hi, lo) = uuid
+    new VersionedReference(hi, lo)
+  }
 }
 
 object BusinessEventReference {
@@ -393,11 +541,10 @@ object BusinessEventReference {
   def apply(d: Array[Byte]) = new BusinessEventReference(d)
 }
 
-sealed class BusinessEventReference(d: Array[Byte]) extends StorableReference(d) {
+sealed class BusinessEventReference(d: Array[Byte]) extends StorableReferenceArrayImpl(d) {
   def getTypeId: Option[Int] = None
-
   override def equals(rhs: Any): Boolean = rhs match {
-    case r: BusinessEventReference => (this eq r) || Arrays.equals(data, r.data)
+    case r: BusinessEventReference => (this eq r) || util.Arrays.equals(data, r.data)
     case _                         => false
   }
 }
@@ -426,7 +573,7 @@ object CmReference {
   val Nil = new CmReference(new Array[Byte](16))
 }
 
-final class CmReference(d: Array[Byte]) extends StorableReference(d)
+final class CmReference(d: Array[Byte]) extends StorableReferenceArrayImpl(d)
 
 object AppEventReference {
   def fresh = new AppEventReference(UUIDGenerator.freshUuid())
@@ -438,9 +585,9 @@ object AppEventReference {
   val Nil = new AppEventReference(new Array[Byte](16))
 }
 
-final class AppEventReference(d: Array[Byte]) extends StorableReference(d)
+final class AppEventReference(d: Array[Byte]) extends StorableReferenceArrayImpl(d)
 
-final class LinkageReference(d: Array[Byte]) extends StorableReference(d)
+final class LinkageReference(d: Array[Byte]) extends StorableReferenceArrayImpl(d)
 
 object LinkageReference {
   def fresh = new LinkageReference(UUIDGenerator.freshUuid())
@@ -448,8 +595,8 @@ object LinkageReference {
 }
 
 // Following class is used by test only, do not attempt to use it in broker code.
-private[optimus] sealed class ForTestsOnlyEref(d: Array[Byte], callCounter: AtomicInteger)
-    extends FinalReference(d, None) {
+private[optimus] sealed class ForTestsOnlyEref(uuid: RawReference.LongLong, callCounter: AtomicInteger)
+    extends FinalReference(uuid._1, uuid._2, None) {
   override def isTemporary = true
 
   override def equals(rhs: Any): Boolean = {

@@ -71,7 +71,6 @@ import optimus.buildtool.compilers.zinc.ScalacProvider
 import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
-import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleSet
@@ -85,16 +84,16 @@ import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files._
+import optimus.buildtool.generators.AvroSchemaGenerator
 import optimus.buildtool.generators.CppBridgeGenerator
+import optimus.buildtool.generators.DomainGenerator
 import optimus.buildtool.generators.FixGenerator
 import optimus.buildtool.generators.FlatbufferGenerator
 import optimus.buildtool.generators.JaxbGenerator
 import optimus.buildtool.generators.JsonSchemaGenerator
 import optimus.buildtool.generators.JxbGenerator
-import optimus.buildtool.generators.ProtobufGenerator
-import optimus.buildtool.generators.AvroSchemaGenerator
 import optimus.buildtool.generators.PodcastGenerator
-import optimus.buildtool.generators.DomainGenerator
+import optimus.buildtool.generators.ProtobufGenerator
 import optimus.buildtool.generators.ScalaxbGenerator
 import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.processors.FreemarkerProcessor
@@ -103,6 +102,7 @@ import optimus.buildtool.processors.VelocityProcessor
 import optimus.buildtool.resolvers.CoursierArtifactResolverSource
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.DependencyMetadataResolvers
+import optimus.buildtool.resolvers.MavenUtils.checkCredentials
 import optimus.buildtool.resolvers.WebDependencyResolver
 import optimus.buildtool.resolvers.WebScopeInfo
 import optimus.buildtool.rubbish.ArtifactRecency
@@ -116,6 +116,8 @@ import optimus.buildtool.trace._
 import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils._
+import optimus.buildtool.utils.process.BackgroundProcessBuilder
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.graph.Settings
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.platform._
@@ -160,7 +162,7 @@ object OptimusBuildToolImpl {
   private val generatePoms = cmdLine.generatePoms
   private val enableMappingValidation = cmdLine.enableMappingValidation
 
-  private val useCrumbs = cmdLine.breadcrumbs
+  private val sendCrumbs = cmdLine.breadcrumbs
   private val version: String =
     if (cmdLine.artifactVersionSuffix.isEmpty) cmdLine.artifactVersion
     else s"${cmdLine.artifactVersion}-${cmdLine.artifactVersionSuffix}"
@@ -176,12 +178,14 @@ object OptimusBuildToolImpl {
   private val sandboxDir: Directory =
     cmdLine.sandboxDir.asDirectory.getOrElse(buildDir.resolveDir(Sandboxes))
 
+  private val processBuilder: ExternalProcessBuilder = new BackgroundProcessBuilder(logDir, sendCrumbs)
+
   private val compilerThrottle = new CompilerThrottle(cmdLine.maxZincCompileBytes, cmdLine.maxNumZincs)
 
   private val traceRecorder = new TraceRecorder(cmdLine.traceFile.asDirectory)
   private val timingsRecorder = new TimingsRecorder(logDir)
   val countingTrace = new CountingTrace(Some(cmdLine.statusIntervalSec))
-  private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = useCrumbs)
+  private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = sendCrumbs)
   private val buildSummaryRecorder = new BuildSummaryRecorder(cmdLine.statsDir.asDirectory, compilerThrottle)
 
   private val memoryMonitor = FreeMemoryMonitor.fromProperties()
@@ -461,19 +465,32 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def stratoWorkspace(): StratoWorkspace =
     StratoConfig.stratoWorkspace(workspaceRoot)
 
-  @node @scenarioIndependent private def credentials: Seq[Credential] =
+  private def existingCredentialFile(ws: StratoWorkspace): Option[Credential] =
+    Credential.fromJfrogConfFile(ws.internal.jfrog.configFile)
+
+  @async @scenarioIndependent private def createCredentials(): Seq[Credential] = {
+    val ws = stratoWorkspace()
+    ArtifactoryToolInstaller.setupUser(ws)
+    val initMsg = "New credential file initialized!"
+    log.info(initMsg)
+    ObtTrace.info(initMsg)
+    existingCredentialFile(ws).to(Seq)
+  }
+
+  @async @scenarioIndependent private def getLocalCredentials(): Seq[Credential] = {
+    val ws = stratoWorkspace()
+    existingCredentialFile(ws) match {
+      case Some(defaultCredFile) => Seq(defaultCredFile)
+      case None =>
+        log.warn(s"No credential files defined! OBT will try to generate one now.")
+        createCredentials()
+    }
+  }
+
+  @async @scenarioIndependent private def credentials: Seq[Credential] =
     if (cmdLine.credentialFiles == NoneArg && !requireCredentials) Nil
-    else if (cmdLine.credentialFiles == NoneArg) {
-      val ws = stratoWorkspace()
-      def existCredentialFile: Option[Credential] = Credential.fromJfrogConfFile(ws.internal.jfrog.configFile)
-      existCredentialFile match {
-        case Some(file) => Seq(file)
-        case None =>
-          log.warn(s"No credential files defined! obt will try generate one now")
-          ArtifactoryToolInstaller.presetArtifactoryCredentials(ws)
-          existCredentialFile.to(Seq)
-      }
-    } else
+    else if (cmdLine.credentialFiles == NoneArg) getLocalCredentials()
+    else
       cmdLine.credentialFiles
         .split(",")
         .toIndexedSeq
@@ -483,12 +500,42 @@ object OptimusBuildToolImpl {
           else Credential.fromPropertiesFile(Paths.get(p))
         }
 
+  @node @scenarioIndependent def validatedCredentials: Seq[Credential] =
+    if (requireCredentials) {
+      val loaded = credentials
+      if (loaded.isEmpty) {
+        val withRemoteCache = remoteCaches.remoteBuildCache.nonEmpty
+        val withLocalCache =
+          Files.exists(depCopyRoot.resolveDir("https").path) || Files.exists(depCopyRoot.resolveDir("http").path)
+        (withRemoteCache, withLocalCache) match {
+          case (false, false) =>
+            throw new IllegalArgumentException(
+              s"Build failed: no credential and cache available, unable to download remote maven libraries!")
+          case _ =>
+            log.warn(
+              s"Maven server offline mode: no credential found! local cache: $withLocalCache, remote cache: $withRemoteCache")
+            Seq.empty
+        }
+      } else {
+        val checkedRes = checkCredentials(loaded)
+        checkedRes match {
+          case Some(res) if res.inputStream.isLeft =>
+            val e = res.inputStream.left.toOption.map(_.toString).getOrElse("")
+            val errorMsg = s"OBT detected invalid credentials! $e"
+            log.error(errorMsg)
+            ObtTrace.error(errorMsg)
+            createCredentials()
+          case _ => loaded
+        }
+      }
+    } else Seq.empty
+
   // This is used for maven url file cache into remote store.
   @node @scenarioIndependent private def remoteAssetStore: RemoteAssetStore =
     remoteCaches.remoteBuildCache.map(_.store).getOrElse(NoOpRemoteAssetStore)
 
-  @node @scenarioIndependent private def dependencyCopier = {
-    DependencyCopier(depCopyRoot, credentials, remoteAssetStore, depCopyFileSystemAsset)
+  @node @scenarioIndependent def dependencyCopier: DependencyCopier = {
+    DependencyCopier(depCopyRoot, validatedCredentials, remoteAssetStore, depCopyFileSystemAsset)
   }
 
   // This hasher is only used for the obt configuration files.
@@ -497,31 +544,13 @@ object OptimusBuildToolImpl {
 
   @node def dependencyResolver: CoursierArtifactResolverSource = externalDependencyResolver(dependencyMetadataResolvers)
 
-  @node private def validateCredentials(
-      loaded: Seq[Credential],
-      externalDependencies: ExternalDependencies): Seq[Credential] = {
-    val mavenLibs = externalDependencies.mavenDependencies.allMavenDeps
-    val withMavenLibs = mavenLibs.nonEmpty
-    val withRemoteCache = remoteCaches.remoteBuildCache.nonEmpty
-    val withLocalCache =
-      Files.exists(depCopyRoot.resolveDir("https").path) || Files.exists(depCopyRoot.resolveDir("http").path)
-
-    if (requireCredentials && withMavenLibs && loaded.isEmpty && !withRemoteCache && !withLocalCache)
-      throw new IllegalArgumentException(
-        s"Build failed: no credential and cache available, unable to download ${mavenLibs.size} maven libraries!")
-    else if (requireCredentials && withMavenLibs && loaded.isEmpty && (withRemoteCache || withLocalCache))
-      log.warn(
-        s"Maven server offline mode: no credential found! maven libs: ${mavenLibs.size}, local cache: $withLocalCache, remote cache: $withRemoteCache")
-    loaded
-  }
-
   @node private def externalDependencyResolver(resolvers: DependencyMetadataResolvers): CoursierArtifactResolverSource =
     CoursierArtifactResolverSource(
       resolvers = resolvers,
       dependencies = obtConfig.jvmDependencies,
       dependencyCopier = dependencyCopier,
       globalExcludes = obtConfig.globalExcludes,
-      credentials = validateCredentials(credentials, obtConfig.jvmDependencies.allExternalDependencies),
+      credentials = validatedCredentials,
       remoteAssetStore = remoteAssetStore,
       enableMappingValidation = enableMappingValidation,
       throttle = Some(AdvancedUtils.newThrottle(cmdLine.resolverThrottle))
@@ -539,31 +568,32 @@ object OptimusBuildToolImpl {
   @node private def sourceGenerators =
     Seq(
       CppBridgeGenerator(scalaCompiler, pathBuilder),
-      FlatbufferGenerator(workspaceSourceRoot),
+      FlatbufferGenerator(),
       JaxbGenerator(directoryFactory, workspaceSourceRoot),
-      JxbGenerator(workspaceSourceRoot),
-      JsonSchemaGenerator(directoryFactory, workspaceRoot),
-      PodcastGenerator(workspaceSourceRoot, obtConfig),
-      ProtobufGenerator(dependencyResolver.resolver(ModuleSet.empty), dependencyCopier, workspaceSourceRoot),
-      ScalaxbGenerator(workspaceSourceRoot),
-      AvroSchemaGenerator(workspaceSourceRoot),
-      FixGenerator(workspaceSourceRoot),
-      DomainGenerator(workspaceSourceRoot)
+      JxbGenerator(),
+      JsonSchemaGenerator(),
+      PodcastGenerator(workspaceSourceRoot, obtConfig, directoryFactory, processBuilder),
+      ProtobufGenerator(dependencyResolver.resolver(ModuleSet.empty), dependencyCopier),
+      ScalaxbGenerator(),
+      AvroSchemaGenerator(),
+      FixGenerator(),
+      DomainGenerator()
     ).map(g => g.tpe -> g).toMap
 
   @node private def processors =
     Seq(
       VelocityProcessor(),
-      OpenApiProcessor(logDir, useCrumbs),
+      OpenApiProcessor(processBuilder),
       FreemarkerProcessor(),
-      DeploymentScriptProcessor(sandboxFactory, logDir))
+      DeploymentScriptProcessor(sandboxFactory, processBuilder))
       .map(g => g.tpe -> g)
       .toMap
 
   @node @scenarioIndependent private def sandboxFactory: SandboxFactory = SandboxFactory(sandboxDir)
   @node private def scalaCompiler: AsyncScalaCompiler = AsyncScalaCompiler(underlyingCompilerFactory)
   @node private def javaCompiler: AsyncJavaCompiler = AsyncJavaCompiler(underlyingCompilerFactory)
-  @node @scenarioIndependent private def jmhCompiler = AsyncJmhCompilerImpl(sandboxFactory, dependencyCopier)
+  @node @scenarioIndependent private def jmhCompiler =
+    AsyncJmhCompilerImpl(sandboxFactory, processBuilder, dependencyCopier)
   @node @scenarioIndependent private def cppCompiler =
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
@@ -575,9 +605,9 @@ object OptimusBuildToolImpl {
       asNode(() => globalConfig.pythonEnabled),
       asNode(() => globalConfig.buildAfsMapping))
   @node @scenarioIndependent private def webCompiler =
-    AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
+    AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, processBuilder)
   @node @scenarioIndependent private def electronCompiler =
-    AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
+    AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, processBuilder)
   @node private def stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
   @node private def runconfCompiler = AsyncRunConfCompilerImpl.load(obtConfig, stratoConfig, dependencyCopier)
   @node @scenarioIndependent private def resourcePackager = JarPackager()
@@ -669,6 +699,7 @@ object OptimusBuildToolImpl {
           cache = buildCache,
           factory = this,
           directoryFactory = directoryFactory,
+          sandboxFactory = sandboxFactory,
           mischief = mischiefOpts.mischief(id),
           buildAfsMapping = globalConfig.buildAfsMapping
         )
@@ -859,7 +890,7 @@ object OptimusBuildToolImpl {
   ): (Boolean, Option[BuildStatistics]) = {
     val buildId = s"$implId-$buildCount"
     val crumbListener = BreadcrumbTraceListener(
-      useCrumbs,
+      sendCrumbs,
       workspaceRoot,
       buildId,
       sendSummaryToLongTermIndex = cmdLine.sendLongTermBreadcrumbs,
@@ -951,7 +982,7 @@ object OptimusBuildToolImpl {
       stdin = stdin,
       stdout = stdout,
       clientInitializationTimeoutMs = cmdLine.bspClientInitializationTimeoutMs,
-      sendCrumbs = useCrumbs,
+      sendCrumbs = sendCrumbs,
       installerFactory = asNode(bspInstaller),
       scalaVersionConfig = asNode(() => scalaResolver.scalaVersionConfig),
       pythonBspConfig = PythonBspConfig(
@@ -987,10 +1018,6 @@ object OptimusBuildToolImpl {
 
     val scopeFilter = ScopeFilter(cmdLine.scopeFilter)
 
-    val backgroundBuilder = if (cmdLine.backgroundCmd != NoneArg) {
-      Some(BackgroundProcessBuilder.onDemand(logDir, cmdLine.backgroundCmd, useCrumbs))
-    } else None
-
     val bundleFingerprintsCache = new BundleFingerprintsCache(installPathBuilder, cmdLine.verifyInstall)
 
     val assetUploader: Option[AssetUploader] = if (uploadLocations.nonEmpty) {
@@ -1005,18 +1032,17 @@ object OptimusBuildToolImpl {
           uploadDir = uploadDir,
           sourceDir = workspaceSourceRoot,
           installDir = installDir,
-          logDir = logDir,
+          processBuilder = processBuilder,
           toolsDir = cmdLine.toolsDir.map(d => Directory(Paths.get(d))),
           uploadLocations,
           maxConcurrentUploads = cmdLine.maxConcurrentUploads,
           minBatchSize = cmdLine.minUploadBatchSize,
           maxBatchSize = cmdLine.maxUploadBatchSize,
           maxBatchBytes = cmdLine.maxUploadBatchBytes,
-          maxRetry = cmdLine.maxUploadRetry,
+          maxRetries = cmdLine.maxUploadRetry,
           srcPrefix = srcPrefix,
           srcFilesToUpload = globalConfig.defaultSrcFilesToUpload,
           cmdLine.uploadFormat,
-          useCrumbs = useCrumbs,
           filesToExclude = globalConfig.filesToExcludeFromUpload,
         )
       )
@@ -1030,10 +1056,9 @@ object OptimusBuildToolImpl {
             obtConfig,
             installDir,
             cmdLine.installVersion,
-            logDir = logDir,
+            processBuilder = processBuilder,
             latestCommit = latestCommit,
-            bundleClassJars = cmdLine.bundleClassJars,
-            useCrumbs = useCrumbs
+            bundleClassJars = cmdLine.bundleClassJars
           )
         )
       else None
@@ -1080,11 +1105,11 @@ object OptimusBuildToolImpl {
           stripDependencies = cmdLine.stripDependencies,
           latestCommit = latestCommit,
           directoryFactory = directoryFactory,
+          processBuilder = processBuilder,
           useMavenLibs = useMavenLibs,
           dockerImageCacheDir =
             buildDir.resolveDir("docker_cache").resolveDir(dockerImg.location.repo).resolveDir(timestamp),
           depCopyDir = depCopyRoot,
-          useCrumbs = useCrumbs,
           minimalInstallScopes = scopeSelector.minimalInstallScopes,
           genericRunnerGenerator = DockerGenericRunnerGenerator(installPathBuilder, globalConfig.genericRunnerConfig),
           gitLog = gitLog,
@@ -1177,7 +1202,6 @@ object OptimusBuildToolImpl {
     new StandardBuilder(
       factory = scopedCompilationFactory,
       scopeFilter = scopeFilter,
-      backgroundBuilder = backgroundBuilder,
       defaultPostBuilder = postBuilder,
       onBuildStart = onBuildStart,
       onBuildEnd = onBuildEnd,

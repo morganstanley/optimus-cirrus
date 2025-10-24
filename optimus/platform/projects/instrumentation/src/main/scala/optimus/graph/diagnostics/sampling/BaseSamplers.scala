@@ -12,7 +12,9 @@
 package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
 import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.BreadcrumbsKafkaPublisher
 import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
@@ -23,6 +25,7 @@ import optimus.graph.DiagnosticSettings
 import optimus.platform.util.Log
 import optimus.scalacompat.collection._
 import optimus.platform.util.Version
+import org.apache.kafka.common.MetricName
 
 import scala.jdk.CollectionConverters._
 import sun.management.ManagementFactoryHelper
@@ -210,17 +213,9 @@ class BaseSamplers extends SamplerProvider with Log {
         )
     )
 
-    ss += Diff(_ => StackAnalysis.numStacksPublished, numStacksPublished)
-    ss += Diff(_ => StackAnalysis.numStacksNonDeduped, numStacksReferenced)
     ss += Snap(_ => memBean.getObjectPendingFinalizationCount, gcFinalizerCount)
 
-    ss += DiffNonZero(_ => Breadcrumbs.getCounts.stringMap, crumbsSent)
-
-    // If we diff these, we risk missing the interesting ones
-    ss += SnapNonZero(_ => Breadcrumbs.getKafkaFailures.stringMap, kafkaFailures)
-    ss += SnapNonZero(_ => Breadcrumbs.getEnqueueFailures.stringMap, enqueueFailures)
-
-    var maxPsFailures = new AtomicInteger(10)
+    val maxPsFailures = new AtomicInteger(10)
 
     if (!DiagnosticSettings.isWindows)
       ss += Snap(_ => {

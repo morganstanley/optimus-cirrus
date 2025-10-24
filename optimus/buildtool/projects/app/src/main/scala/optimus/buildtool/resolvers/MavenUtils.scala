@@ -17,19 +17,24 @@ import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config.NamingConventions._
+import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.BaseHttpAsset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.HttpFileAsset
 import optimus.buildtool.resolvers.HttpResponseUtils._
+import optimus.buildtool.trace.CheckRemoteUrl
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils.isJarReadable
 import optimus.buildtool.utils.Hashing.hashFileContent
 import optimus.buildtool.utils.OsUtils
 import optimus.exceptions.RTException
 import optimus.platform._
+import optimus.stratosphere.artifactory.Credential
 
 import java.io.FileNotFoundException
 import java.io.InputStream
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URL
 import java.nio.file.attribute.PosixFilePermission._
@@ -43,6 +48,8 @@ import scala.util.control.NonFatal
   private[buildtool] val WrongCredMsg = "Credential is invalid!"
   private[buildtool] val strictTransitiveVerification =
     Option(System.getProperty("optimus.buildtool.strictTransitiveVerification")).exists(_.toBoolean)
+  private[buildtool] val validateUrl =
+    Option(System.getProperty("optimus.buildtool.credentialCheckUrl"))
 
   // may make these be configurable in future
   private[buildtool] val maxRetry = 1
@@ -59,6 +66,44 @@ import scala.util.control.NonFatal
     val urlStr = url.toString
     urlStr.substring(urlStr.lastIndexOf("/") + 1, urlStr.length)
   }
+
+  def checkCredentials(creds: Seq[Credential]): Option[HttpProbingResponse] = validateUrl match {
+    case Some(toCheck) =>
+      Some(getHttpAssetResponse(HttpFileAsset(new URI(toCheck).toURL()), 30, creds))
+    case None => None
+  }
+
+  def getHttpAssetResponse(
+      httpAsset: BaseHttpAsset,
+      timeoutSec: Int,
+      credentials: Seq[Credential]): HttpProbingResponse =
+    ObtTrace.traceTask(RootScopeId, CheckRemoteUrl(httpAsset.url)) {
+      val url = httpAsset.url
+      val host = url.getHost
+      val cred = credentials.find(_.host == host)
+      val conn = url.openConnection()
+      cred.foreach(c => conn.setRequestProperty("Authorization", c.toHttpBasicAuth))
+      conn.setReadTimeout(timeoutSec * 1000)
+      try {
+        val stream = conn.getInputStream
+        val header = conn.getHeaderFields.toString
+        log.debug(s"Got response from url: ${url.toString}, length: ${conn.getContentLength}, header: $header")
+        HttpProbingResponse(Right(stream), loadHttpHeaderInfo(header, url))
+      } catch {
+        case e: SocketTimeoutException =>
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> "time out!")))
+        case e: FileNotFoundException =>
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> "not found!")))
+        case e: Exception =>
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> e.toString)))
+      }
+    }
 
   @node def downloadUrl[T](
       url: URL,
@@ -85,7 +130,7 @@ import scala.util.control.NonFatal
       }
     } else { // check url, only download it when valid
       val (durationInNanos, (downloadResult, urlCode, isSuccess)) = AdvancedUtils.timed {
-        val probingHttpResponse = depCopier.getHttpAssetResponse(urlAsset, timeoutSec)
+        val probingHttpResponse = getHttpAssetResponse(urlAsset, timeoutSec, depCopier.credentials)
         probingHttpResponse.inputStream match {
           case Right(stream) =>
             NodeTry {
@@ -211,6 +256,9 @@ import scala.util.control.NonFatal
       }.onFailure(log.warn(s"Unable to set executable permissions for ${file.path}", _))
     }
   }
+
+  def isMavenPomFile(artifact: CoursierArtifact): Boolean =
+    artifact.`type`.value == "pom" && artifact.publication.ext.value == "pom"
 }
 
 final case class MappingKey(group: String, name: String, configuration: String)

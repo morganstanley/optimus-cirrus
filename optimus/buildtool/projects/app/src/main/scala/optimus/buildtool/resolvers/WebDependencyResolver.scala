@@ -19,6 +19,7 @@ import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.resolvers.WebDependencyResolver.emptyResultError
+import optimus.buildtool.scope.sources.WebCompilationSources.NodeModules
 import optimus.buildtool.utils.AssetUtils.loadFileAssetToString
 import optimus.platform._
 import org.slf4j.LoggerFactory
@@ -270,8 +271,8 @@ object YamlResolver {
 
 object JsonResolver {
   import optimus.buildtool.resolvers.WebDependencyResolver._
-  private val depStrSplitter = "node_modules/"
-  private val versionKey = "version"
+  private val DepStrSplitter = s"$NodeModules/"
+  private val VersionKey = "version"
 
   @node private def jsonInfoToPackageDependencies(
       jsonDeps: Map[(String, String, String), JsValue],
@@ -299,11 +300,11 @@ object JsonResolver {
       content.parseJson.asJsObject.fields(PackagesKey).asJsObject.fields
     }
     val packages: Map[(String, String, String), JsValue] = packagesContent.-("").flatMap { case (name, properties) =>
-      val (first, rest) = name.split(depStrSplitter).filter(_.nonEmpty).splitAt(1)
+      val (first, rest) = name.split(DepStrSplitter).filter(_.nonEmpty).splitAt(1)
       val (group, firstName) =
         getMetaProject(
           first.headOption.getOrThrow(s"invalid package-lock.json dependency! $name , ${properties.prettyPrint}"))
-      val loadedVersion = properties.asJsObject.fields(versionKey).toString
+      val loadedVersion = properties.asJsObject.fields(VersionKey).toString
       val loadedNames = rest.map(d => getMetaProject(d)) :+ (group, firstName)
       loadedNames.map { case (meta, project) => (meta, project, loadedVersion) -> properties }
     }

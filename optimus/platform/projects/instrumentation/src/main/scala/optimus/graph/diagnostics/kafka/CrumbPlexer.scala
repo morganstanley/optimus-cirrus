@@ -28,7 +28,6 @@ import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.{Properties => P}
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.util.LimitedSizeConcurrentHashMap
-import optimus.core.utils.AppendingGzipOutputStream
 import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.utils.app.StringOptionOptionHandler
@@ -740,9 +739,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                       logger.debug(s"$poolId $partition $uuid")
                       val dirPath = if (useSubdirs) plexDir.resolve(subdir(uuid)) else plexDir
                       val filePath = dirPath.resolve(uuidPath)
-                      val os =
-                        if (zip) new AppendingGzipOutputStream(filePath)
-                        else new FileOutputStream(filePath.toFile, true)
+                      val os = new FileOutputStream(filePath.toFile, true)
                       FileEntry(uuid, new PrintStream(os), filePath, t, t - 1)
                     }
                   )

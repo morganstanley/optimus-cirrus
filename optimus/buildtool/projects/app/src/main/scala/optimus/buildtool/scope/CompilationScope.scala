@@ -58,6 +58,7 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
+import optimus.buildtool.utils.SandboxFactory
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.distinctLast
@@ -86,6 +87,7 @@ import scala.collection.immutable.SortedMap
     cache: ArtifactCache with HasArtifactStore,
     val factory: CompilationNodeFactory,
     val directoryFactory: DirectoryFactory,
+    val sandboxFactory: SandboxFactory,
     val upstream: UpstreamArtifacts,
     val mischief: Option[MischiefArgs],
     val buildAfsMapping: Boolean
@@ -269,6 +271,7 @@ import scala.collection.immutable.SortedMap
       .map(x => s"[$tpe]$x")
   }
 
+  // noinspection ScalaUnusedSymbol
   @alwaysAutoAsyncArgs def cached[A <: CachedArtifactType](
       tpe: A,
       discriminator: Option[String],
@@ -277,7 +280,6 @@ import scala.collection.immutable.SortedMap
       nf: => Option[A#A]
   ): Seq[A#A] = needsPluginAlwaysAutoAsyncArgs
 
-  // noinspection ScalaUnusedSymbol
   @node def cached$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String], fingerprintHash: String)(
       nf: NodeFunction0[Option[A#A]]): Seq[A#A] = {
     val artifact =
@@ -328,6 +330,7 @@ object CompilationScope {
       cache: ArtifactCache with HasArtifactStore,
       factory: CompilationNodeFactory,
       directoryFactory: DirectoryFactory,
+      sandboxFactory: SandboxFactory,
       mischief: Option[MischiefArgs],
       buildAfsMapping: Boolean
   ): CompilationScope = {
@@ -376,6 +379,7 @@ object CompilationScope {
       cache,
       factory,
       directoryFactory,
+      sandboxFactory,
       upstream,
       mischief,
       buildAfsMapping

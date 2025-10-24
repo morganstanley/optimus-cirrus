@@ -11,20 +11,22 @@
  */
 package optimus.platform.storable
 
-import java.lang.ref.WeakReference
-import java.util.concurrent.atomic.AtomicInteger
-import java.time.Instant
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.platform._
 import optimus.platform.annotations.deprecating
+import optimus.platform.bitemporal.EntityBitemporalSpace
+import optimus.platform.bitemporal.EntityRectangle
 import optimus.platform.dal.DALImpl
 import optimus.platform.dal.DSIStorageInfo
 import optimus.platform.dal.EntitySerializer
-import optimus.platform._
-import optimus.platform.bitemporal.EntityBitemporalSpace
-import optimus.platform.bitemporal.EntityRectangle
+import optimus.platform.dal.LinkResolutionException
+import optimus.platform.dsi.bitemporal.VersionedReferenceQuery
 import optimus.platform.temporalSurface.impl.FlatTemporalContext
 import optimus.platform.temporalSurface.operations.EntityReferenceQueryReason
+
+import java.lang.ref.WeakReference
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 
 final case class EntityReferenceHolder[T <: Entity] private (
     val ref: EntityReference,
@@ -82,11 +84,16 @@ final case class EntityReferenceHolder[T <: Entity] private (
       val reason =
         if (cache eq null) EntityReferenceQueryReason.Holder
         else EntityReferenceQueryReason.HolderExpired
-
-      result =
-        if (knownPayloadType eq null)
-          DALImpl.resolver.findByReference(ref, tc).asInstanceOf[T]
-        else DALImpl.resolver.findByReferenceWithType(ref, tc, knownPayloadType, concrete, reason)
+      result = versionInfo match {
+        case Some(vInfo: FullVersionInfo) if knownPayloadType ne null =>
+          DALImpl.resolver
+            .getEntityByVref(this, reason)
+            .asInstanceOf[T]
+        case _ =>
+          if (knownPayloadType eq null)
+            DALImpl.resolver.findByReference(ref, tc).asInstanceOf[T]
+          else DALImpl.resolver.findByReferenceWithType(ref, tc, knownPayloadType, concrete, reason)
+      }
       setCache(result)
     }
     result

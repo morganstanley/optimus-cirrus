@@ -23,6 +23,7 @@ import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.utils.FileUtils
 import optimus.utils.MiscUtils.Endoish._
 import org.apache.commons.io
+import msjava.slf4jutils.scalalog.Logger
 
 import java.nio.file._
 import java.time.Instant
@@ -58,6 +59,7 @@ object InfoDumpUtils extends InfoDumpUtils {
   private[util] def drain(
       sb: StringBuilder,
       isr: => () => Reader,
+      cmdString: String,
       maxLines: Int = 0,
       timeoutMs: Long = 0,
       logging: Boolean = true): Int = {
@@ -70,7 +72,9 @@ object InfoDumpUtils extends InfoDumpUtils {
     thread.join(timeoutMs)
     if (Objects.isNull(br)) {
       if (logging) {
-        sb.append("Timeout creating input stream for task!")
+        val msg = s"Timeout creating input stream for $cmdString"
+        log.info(msg)
+        sb.append(msg)
       }
       TIMEOUT
     } else {
@@ -100,12 +104,17 @@ object InfoDumpUtils extends InfoDumpUtils {
       } catch {
         case NonFatal(e) =>
           if (timedout) {
-            if (logging)
-              sb.append("Timed out\n")
+            if (logging) {
+              val msg = s"Timed out on $cmdString"
+              log.info(msg)
+              sb.append(s"$msg\n")
+            }
             TIMEOUT
           } else {
-            if (logging)
+            if (logging) {
+              log.error("Exception reading stream", e)
               sb.append(s"Exception reading stream: $e\n")
+            }
             EXCEPTION
           }
       } finally {
@@ -154,13 +163,14 @@ trait InfoDumpUtils extends Log {
       path: Path,
       meta: Option[Elems] = None,
       deleteUncompressed: Boolean = true,
-      deleteUploadedFile: Boolean = false
+      deleteUploadedFile: Boolean = false,
+      logger: Logger = log
   ): Try[String] = {
     compressAndEncode(path, MAX_FILE_SIZE, deleteUncompressed).flatMap { case (zipPath, b64) =>
       val fileName = zipPath.toString
       if (b64.size > MAX_CRUMB_SIZE) {
         val msg = s"Encoded $fileName exceeds $MAX_CRUMB_SIZE bytes"
-        log.error(msg)
+        logger.error(msg)
         Failure(new IllegalArgumentException(msg))
       } else {
         val uid = id.child
@@ -185,11 +195,13 @@ trait InfoDumpUtils extends Log {
   def compressAndEncode(
       path: Path,
       maxZippedFileSize: Long,
-      deleteUncompressed: Boolean = true): Try[(Path, String)] = {
+      deleteUncompressed: Boolean = true,
+      logger: Logger = log
+  ): Try[(Path, String)] = {
     FileUtils.zstdCompress(path, deleteUncompressed).flatMap { zipped =>
       if (Files.size(zipped) > maxZippedFileSize) {
         val msg = s"File $zipped exceeded $maxZippedFileSize bytes"
-        log.error(msg)
+        logger.error(msg)
         Failure(new IllegalStateException(msg))
       } else
         Using.Manager { use =>
@@ -208,26 +220,32 @@ trait InfoDumpUtils extends Log {
       id: ChainedID,
       msg: => String,
       deleteOnExit: Boolean = false,
-      doLog: Boolean = true
+      doLog: Boolean = true,
+      logger: Logger = log
   ): Option[Path] = {
     val path: Path = tmpPath(prefix, "log")
     try {
       val m = msg
       io.FileUtils.write(path.toFile, m, Charset.defaultCharset())
       dropCrumb(crumbSource, id, s"Writing diagnostics to $path", Some(path))
-      if (doLog) log.warn(m)
+      if (doLog) logger.warn(m)
       if (deleteOnExit)
         path.toFile.deleteOnExit()
       Some(path)
     } catch {
       case NonFatal(e) =>
-        log.warn(s"Unable to write to $path: $e")
+        logger.warn(s"Unable to write to $path: $e")
         None
     }
   }
 
-  protected def dropCrumb(crumbSource: Crumb.Source, id: ChainedID, msg: String, file: Option[Path]): Unit = {
-    log.info(s"${Instant.now} InfoDumper id=$id " + file.fold(msg)(f => s"$msg $f"))
+  protected def dropCrumb(
+      crumbSource: Crumb.Source,
+      id: ChainedID,
+      msg: String,
+      file: Option[Path],
+      logger: Logger = log): Unit = {
+    logger.info(s"${Instant.now} InfoDumper id=$id " + file.fold(msg)(f => s"$msg $f"))
     Breadcrumbs.warn(
       id,
       LogPropertiesCrumb(
@@ -251,28 +269,45 @@ trait InfoDumpUtils extends Log {
   }
 
   def execute(sb: StringBuilder, cmd: String, args: Any*): Int =
-    execute(sb, 30000L, 0, true, cmd, args: _*)
+    execute(sb, cmd, args: _*)
 
   def execute(cmd: String, args: Any*): ExecutionResult =
-    execute((cmd :: args.map(_.toString).toList), 30000L, 0, true)
+    execute(cmd :: args.map(_.toString).toList)
 
   // Execute the command
-  def execute(cmd: List[String], timeoutMs: Long, maxLines: Int = 0, logging: Boolean = true): ExecutionResult = {
+  def execute(
+      cmd: List[String],
+      timeoutMs: Long = 30000L,
+      maxLines: Int = 0,
+      logging: Boolean = true,
+      logger: Logger = log,
+      bufferWithFile: Boolean = false): ExecutionResult = {
     val sb = new StringBuilder
     if (logging) {
       val msg = s"Executing command: ${cmd.mkString(" ")}"
-      log.info(msg)
+      logger.info(msg)
       sb.append(s"$msg\n")
     }
-    val pb = new ProcessBuilder(cmd: _*)
-    Try(pb.start()) match {
+    val cmdString = cmd.mkString(" ")
+    var pb = new ProcessBuilder(cmd: _*)
+    val tmpFile =
+      if (bufferWithFile) {
+        val t = Files.createTempFile("infoDump", ".txt")
+        pb = pb.redirectOutput(t.toFile).redirectErrorStream(true)
+        Some(t)
+      } else None
+    val result = Try(pb.start()) match {
       case Success(p) =>
         val isr = () => new InputStreamReader(p.getInputStream)
-        var code = drain(sb, isr, maxLines, timeoutMs, logging)
+        var code =
+          if (!bufferWithFile) drain(sb, isr, cmdString, maxLines, timeoutMs, logging)
+          else if (p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) 0
+          else TIMEOUT
+
         if (code == TIMEOUT) {
           if (logging) {
-            log.info("Timed out executing command")
-            sb.append("Timed out executing command\n")
+            logger.info(s"Timed out executing $cmdString")
+            sb.append(s"Timed out executing $cmdString\n")
           }
         } else if (code == 0) {
           if (p.isAlive)
@@ -280,6 +315,9 @@ trait InfoDumpUtils extends Log {
           else
             code = p.exitValue()
         }
+
+        tmpFile.foreach { t => sb.append(Files.readString(t)).append(System.lineSeparator()) }
+
         if (code != 0 && logging) {
           sb.append(s"Command exited abnormally: $code\n")
         }
@@ -287,6 +325,8 @@ trait InfoDumpUtils extends Log {
       case Failure(e) =>
         ExecutionResult(999, s"Exception running command $e")
     }
+    tmpFile.foreach(Files.delete)
+    result
   }
 
   private val sep = FileSystems.getDefault.getSeparator
@@ -316,7 +356,9 @@ trait InfoDump extends Log with InfoDumpUtils {
       msgs: List[String] = Nil,
       code: Int = -1,
       crumbSource: Crumb.Source = Crumb.RuntimeSource,
-      exceptions: Array[Throwable] = Array.empty[Throwable]): Unit
+      exceptions: Array[Throwable] = Array.empty[Throwable],
+      logger: Logger = log
+  ): Unit
 
   def dump(
       prefix: String,
@@ -329,7 +371,8 @@ trait InfoDump extends Log with InfoDumpUtils {
       noMore: Boolean = false,
       exceptions: Array[Throwable] = Array.empty,
       emergency: Boolean = false,
-      doLog: Boolean = true
+      doLog: Boolean = true,
+      logger: Logger = log
   ): String
 
 }
@@ -355,12 +398,14 @@ object InfoDump extends Log {
         msgs: List[String] = Nil,
         code: Int = -1,
         crumbSource: Crumb.Source = Crumb.RuntimeSource,
-        exceptions: Array[Throwable] = Array.empty[Throwable]): Unit = {
+        exceptions: Array[Throwable] = Array.empty[Throwable],
+        logger: Logger = log
+    ): Unit = {
       val e = new RuntimeException("Fatal error")
       val msg =
         s"Fatal error prefix=$prefix, msgs=$msgs, code=$code, source=$crumbSource, exception=${exceptions.mkString(" ,")}"
       exceptions.foreach(e.addSuppressed)
-      log.warn(msg, e)
+      logger.warn(msg, e)
       Breadcrumbs.error(ChainedID.root, PropertiesCrumb(_, crumbSource, Properties.logMsg -> msg))
       Runtime.getRuntime.exit(code)
       throw e
@@ -377,10 +422,11 @@ object InfoDump extends Log {
         noMore: Boolean = false,
         exceptions: Array[Throwable] = Array.empty,
         emergency: Boolean = false,
-        doLog: Boolean = true
+        doLog: Boolean = true,
+        logger: Logger = log
     ): String = {
       val msg = s"prefix=$prefix, msgs=$msgs, source=$crumbSource,  exception=${exceptions.mkString(" ,")}"
-      if (doLog) log.info(msg)
+      if (doLog) logger.info(msg)
       Breadcrumbs.info(ChainedID.root, PropertiesCrumb(_, crumbSource, Properties.logMsg -> msg))
       msg
     }

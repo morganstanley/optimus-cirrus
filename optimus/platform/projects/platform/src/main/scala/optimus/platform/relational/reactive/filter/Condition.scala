@@ -452,7 +452,7 @@ final case class PropertyCondition(
 
     override def writeFieldName(k: String) = writeContext.writeFieldName(k)
 
-    override def writeStartArray(): Unit = {
+    override def writeStartArray(isUnordered: Boolean): Unit = {
       val prefix = if (opt == BinaryOperator.IN) {
         writeContext.valuePrefix
       } else {

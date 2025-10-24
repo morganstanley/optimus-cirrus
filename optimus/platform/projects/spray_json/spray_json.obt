@@ -12,6 +12,6 @@ all.javac.release = 11
 // The changes are described in a PR on github: https://github.com/spray/spray-json/pull/222
 // but authors reject this change for they don't want to break JSON standard by making the library more open
 main {
-  compile.libs += ossscala.scala#
+  compile.libs += ossscala.scala.reflect
   installIvy = true
 }

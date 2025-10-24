@@ -28,12 +28,16 @@ trait Storable {
 
   def dal$isTemporary: Boolean
 
-  def toMap: Map[String, Any] = {
+  final def toProperties: PickledProperties = {
     val out = new StorablePropertyMapOutputStream
     out.writeStartObject()
     this.pickle(out)
     out.writeEndObject()
-    out.value.asInstanceOf[Map[String, Any]]
+    out.value.asInstanceOf[PickledProperties]
+  }
+
+  def toMap: Map[String, Any] = {
+    toProperties.asMap
   }
 }
 

@@ -12,8 +12,6 @@
 package optimus.buildtool.builders.postinstallers.uploaders
 
 import optimus.breadcrumbs.crumbs.Properties
-import optimus.buildtool.builders.BackgroundId
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader.UploadFormat
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Asset
@@ -21,6 +19,7 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.trace.Upload
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.throttle.Throttle
 import optimus.platform.util.Log
@@ -29,17 +28,15 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 class LocationUploader(
-    id: BackgroundId,
+    id: String,
     val location: UploadLocation,
     throttle: Throttle,
-    maxRetry: Int,
-    logDir: Directory,
-    toolsDir: Option[Directory],
-    useCrumbs: Boolean
+    maxRetries: Int,
+    processBuilder: ExternalProcessBuilder,
+    toolsDir: Option[Directory]
 ) extends Log {
 
-  private val category = Upload(id.toString, location)
-  private val logFile = id.logFile(logDir)
+  private val category = Upload(id, location)
 
   private val toolBinDirs = toolsDir.map(d => Seq(d.resolveDir("bin"), d.resolveDir("usr/bin")))
 
@@ -104,14 +101,22 @@ class LocationUploader(
     // reusing the same log file for each location uploader
     // strip out LD_PRELOAD since we don't want/need that for the upload command (and it can cause problems for
     // cygwin-based apps on windows)
-    BackgroundProcessBuilder(id, logFile, fullCmd, env, Seq("LD_PRELOAD"), useCrumbs = useCrumbs)
-      .buildWithRetry(RootScopeId, category, sendCrumbs = true, defaultProps)(
-        maxRetry = maxRetry,
+    processBuilder
+      .build(
+        RootScopeId,
+        id,
+        cmdLine = fullCmd,
+        Some(category),
+        env,
+        Seq("LD_PRELOAD"),
+        lastLogLines = 20
+      )
+      .startWithRetry(
+        maxRetries = maxRetries,
         msDelay = 1000,
-        lastLogLines = 20,
-        // this is target on reduce noise in console log for our greedy approach: when OBT batch uploader trying utilize
-        // the maximum NFS I/O bandwidth, we will occasionally get 1 retry
-        showWarningsAfter = if (maxRetry > 2) 1 else 0
+        // this is intended to reduce noise in console log for our greedy approach: when the OBT batch uploader is
+        // using the maximum NFS I/O bandwidth, we will occasionally get 1 retry
+        showWarningsAfter = if (maxRetries > 2) 1 else 0
       )
   }
 

@@ -12,6 +12,7 @@
 package optimus.platform.relational.reactive
 
 import optimus.platform.pickling.DefaultPicklers
+import optimus.platform.pickling.PickledProperties
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.relational.dal.StorableClassElement
 import optimus.platform.relational.reactive.PersistentEntityCheckResult._
@@ -28,18 +29,18 @@ sealed trait PersistentEntityCondition extends Serializable {
       case UNMATCHED | MISSING_PROPERTY => false
     }
   }
-  def check(props: Map[String, Any]): PersistentEntityCheckResult
+  def check(props: PickledProperties): PersistentEntityCheckResult
 
-  protected def getProp(props: Map[String, Any], names: Seq[String]) = {
+  protected def getProp(props: PickledProperties, names: Seq[String]): PickledProperties = {
     if (names ne Nil) names.tail.foldRight(props) { (nme, res) =>
-      res.getOrElse(nme, MISSING_PROPERTY).asInstanceOf[Map[String, Any]]
+      res.getOrElse(nme, MISSING_PROPERTY).asInstanceOf[PickledProperties]
     }
     else props
   }
 }
 final case class ParsedEqCondition(name: String, value: Any, names: Seq[String] = Nil)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val prop = getProp(props, names)
     prop.get(name) map { v =>
       PersistentEntityCheckResult.fromBoolean(v == value)
@@ -48,7 +49,7 @@ final case class ParsedEqCondition(name: String, value: Any, names: Seq[String] 
 }
 final case class ParsedNeCondition(name: String, value: Any, names: Seq[String] = Nil)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val prop = getProp(props, names)
     prop.get(name) map { v =>
       PersistentEntityCheckResult.fromBoolean(v != value)
@@ -57,7 +58,7 @@ final case class ParsedNeCondition(name: String, value: Any, names: Seq[String] 
 }
 final case class ParsedContainsCondition(name: String, value: IterableLike[_, _], names: Seq[String] = Nil)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val prop = getProp(props, names)
     prop.get(name) map { v =>
       PersistentEntityCheckResult.fromBoolean(value.toSeq.contains(v))
@@ -66,7 +67,7 @@ final case class ParsedContainsCondition(name: String, value: IterableLike[_, _]
 }
 final case class ParsedTypedCondition(name: String, value: Any, op: BinaryExpressionType, names: Seq[String] = Nil)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val prop = getProp(props, names)
     prop.get(name) map { v =>
       PersistentEntityCheckResult.fromBoolean(rawCompare(v, op, value))
@@ -109,14 +110,14 @@ final case class ParsedTypedCondition(name: String, value: Any, op: BinaryExpres
 }
 final case class BoolAndCondition(c1: PersistentEntityCondition, c2: PersistentEntityCondition)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val base = c1.check(props)
     if (base == UNMATCHED) base else base.and(c2.check(props))
   }
 }
 final case class BoolOrCondition(c1: PersistentEntityCondition, c2: PersistentEntityCondition)
     extends PersistentEntityCondition {
-  def check(props: Map[String, Any]): PersistentEntityCheckResult = {
+  def check(props: PickledProperties): PersistentEntityCheckResult = {
     val base = c1.check(props)
     if (base == MATCHED) base else base.or(c2.check(props))
   }

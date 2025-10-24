@@ -19,18 +19,26 @@ import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPos
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config._
-import optimus.buildtool.files.{Directory, JarAsset, Pathed, RelativePath}
-import optimus.buildtool.format.JsonSupport
+import optimus.buildtool.files.Directory
+import optimus.buildtool.files.JarAsset
+import optimus.buildtool.files.Pathed
+import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace._
-import optimus.buildtool.utils.{EmptyFileDiff, OsUtils, PathUtils, Utils}
+import optimus.buildtool.utils.EmptyFileDiff
+import optimus.buildtool.utils.OsUtils
+import optimus.buildtool.utils.PathUtils
+import optimus.buildtool.utils.Utils
 import optimus.graph.CancellationScope
 import optimus.platform._
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.util.Log
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import org.eclipse.lsp4j.jsonrpc.messages.{ResponseError, ResponseErrorCode}
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.CompletableFuture
 import scala.annotation.tailrec
 import scala.collection.compat._
@@ -104,8 +112,7 @@ class BspSyncer(
     } else Map.empty
 
     listener.traceTask(ScopeId.RootScopeId, BuildTargets) {
-      writeVsCodeConfig(structure)
-
+      Files.createDirectories(workspaceSourceRoot.path)
       val groupedByScopeRoot = structure.scopes.toIndexedSeq.groupBy { case (_, scope) =>
         scope.config.paths.configurationFile.parent
       }
@@ -162,68 +169,6 @@ class BspSyncer(
             pythonArtifactHashMap))
     }
   }.whenComplete((_, _) => bspListener.ensureDiagnosticsReported(Nil))
-
-  private def writeVsCodeConfig(structure: WorkspaceStructure): Unit = {
-    val workspaceFile = workspaceSourceRoot.resolveFile(s"$workspaceName.code-workspace")
-    Files.createDirectories(workspaceFile.parent.path)
-    Utils.atomicallyWrite(workspaceFile, replaceIfExists = true) { p =>
-      val content = Map("folders" -> Seq(Map("path" -> ".")))
-      val writer = JsonSupport.jsonWriter(content, prettyPrint = true)
-      writer(p)
-    }
-
-    val devContainer = workspaceSourceRoot.resolveFile(".devcontainer/devcontainer.json")
-    Files.createDirectories(devContainer.parent.path)
-    Utils.atomicallyWrite(devContainer, replaceIfExists = true) { p =>
-      val content = Map("extensions" -> Seq("ms-vscode.cpptools"))
-      val writer = JsonSupport.jsonWriter(content, prettyPrint = true)
-      writer(p)
-    }
-
-    val cppFile = workspaceSourceRoot.resolveFile(".vscode/c_cpp_properties.json")
-    Files.createDirectories(cppFile.parent.path)
-    Utils.atomicallyWrite(cppFile, replaceIfExists = true) { p =>
-      val configs = for {
-        (_, info) <- structure.scopes.to(Seq)
-        cfg <- info.config.cppConfigs.find(_.osVersion == osVersion).to(Seq)
-        buildCfg <- cfg.release.to(Seq) ++ cfg.debug.to(Seq)
-      } yield buildCfg
-
-      // No great way to pick a compiler for the whole workspace, so just choose the first one
-      val compiler = configs.map(_.toolchain).find(_ != CppToolchain.NoToolchain).map(_.compiler.pathString)
-      val includes = configs.flatMap(_.includes).map(d => vsCodeFriendlyPath(d)).distinct.sorted
-
-      val osContent = if (isWindows) {
-        Map(
-          "name" -> "Win32",
-          "defines" -> Seq("_DEBUG", "UNICODE", "_UNICODE"),
-          "windowsSdkVersion" -> "10.0.18362.1",
-          "compilerPath" -> compiler.getOrElse("cl.exe"),
-          "intellisenseMode" -> "windows-msvc-x64"
-        )
-      } else {
-        Map(
-          "name" -> "Linux",
-          "defines" -> Nil,
-          "compilerPath" -> compiler.getOrElse("/usr/bin/gcc"),
-          "intellisenseMode" -> "linux-gcc-x64"
-        )
-      }
-
-      val content = Map(
-        "configurations" -> Seq(
-          osContent ++ Map(
-            "includePath" -> ("${workspaceFolder}/**" +: includes),
-            "cStandard" -> "c11",
-            "cppStandard" -> "c++11"
-          )
-        ),
-        "version" -> 4
-      )
-      val writer = JsonSupport.jsonWriter(content, prettyPrint = true)
-      writer(p)
-    }
-  }
 
   def sources(targets: Seq[BuildTargetIdentifier]): CompletableFuture[Seq[SourcesItem]] = run {
     val structure = structureBuilder.structure

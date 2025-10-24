@@ -15,6 +15,7 @@ import optimus.graph.PicklingMacroUtils
 import optimus.platform._
 import optimus.platform.versioning._
 import optimus.platform.internal.MacroBase
+import optimus.platform.pickling.PickledProperties
 
 import scala.collection.immutable.SortedMap
 import scala.reflect.macros.blackbox.Context
@@ -66,6 +67,7 @@ private[optimus] trait VersioningMacroUtils[C <: Context] extends MacroBase with
 
     def setApply = Select(reify(Set).tree, names.apply)
     def shapeApply = Select(reify(RftShape).tree, names.apply)
+    def pickledPropertiesApply = Select(reify(PickledProperties).tree, names.apply)
     def mapApply = Select(reify(Map).tree, names.apply)
     def sortedMapApply = Select(reify(SortedMap).tree, names.apply)
     def tuple2Apply = Select(reify(Tuple2).tree, names.apply)

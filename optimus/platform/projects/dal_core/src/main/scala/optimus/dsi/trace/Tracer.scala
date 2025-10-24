@@ -17,7 +17,6 @@ import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.CrumbNodeType
 import optimus.breadcrumbs.crumbs.EdgeType
-import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.filter.CrumbFilter.DEFAULT_MAX_CRUMB_SIZE
 import optimus.dsi.trace.TraceBackEnd.BackEnd
@@ -205,7 +204,6 @@ object Tracer {
       if (Breadcrumbs.collecting && traceRelevant(trace, durations, bcThreshold) && !tracesSeen.contains(trace)) {
         val childId = id.childId
         Edges.ensureTracked(childId, id.chainedId, tracerName, CrumbNodeType.Trace, EdgeType.InvokedBy)
-        Breadcrumbs.debug(childId, EventCrumb(_, DalTraceCrumbSource, trace.event))
         val values: Map[String, String] = trace.event match {
           case _: ImpliesWallclockTiming => trace.values ++ wallclockPropertyValue
           case _                         => trace.values ++ aggregatePropertyValue

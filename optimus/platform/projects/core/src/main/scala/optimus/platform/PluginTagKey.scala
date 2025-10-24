@@ -69,6 +69,13 @@ trait ForwardingPluginTagKey[T] extends PluginTagKey[T] with JSerializable {
 }
 
 /**
+ * marker trait which flags that a plugin tag may be forwarded when batching
+ * @tparam T
+ *   The payload type associated with this tag.
+ */
+trait BatchLevelPluginTagKey[T] { self: PluginTagKey[T] => }
+
+/**
  * Currently used for XSFT when finding minimum scenario, to make sure pluginTags that could affect batching are not
  * dropped between proxies trying to reuse
  */

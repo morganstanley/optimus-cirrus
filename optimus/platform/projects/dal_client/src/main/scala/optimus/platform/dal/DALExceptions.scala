@@ -12,12 +12,13 @@
 package optimus.platform.dal
 
 import java.time.Instant
-
 import msjava.base.util.uuid.MSUuid
 import optimus.exceptions.RTExceptionTrait
 import optimus.platform.{HasTTContext, TemporalContext, TimeInterval, ValidTimeInterval}
 import optimus.platform.dsi.bitemporal
 import optimus.platform.dsi.bitemporal.{DSIQueryTemporality, Query}
+import optimus.platform.pickling.ExceptionLineage
+import optimus.platform.pickling.ExceptionWithHistory
 import optimus.platform.storable._
 
 /**
@@ -176,7 +177,11 @@ class BoundDSIException(entity: Entity, e: bitemporal.DSIException) extends DSIE
 /**
  * The schema of the loaded entity does not match the current definition.
  */
-class IncompatibleVersionException(message: String, cause: Throwable) extends DALRTException(message, cause) {
+class IncompatibleVersionException(message: String, cause: Throwable)
+    extends DALRTException(message, cause)
+    with ExceptionWithHistory {
+  override protected val lineage = new ExceptionLineage
+  override def getMessage: String = message + lineage.lineageString
   def this(message: String) = this(message, null)
 }
 

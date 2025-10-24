@@ -113,11 +113,12 @@ object OptionPickler {
   }
 }
 
-class CollectionPickler[T, Repr <: Traversable[T]](innerPickler: Pickler[T]) extends Pickler[Repr] {
+class CollectionPickler[T, Repr <: Iterable[T]](innerPickler: Pickler[T], isUnordered: Boolean = false)
+    extends Pickler[Repr] {
   override def pickle(s: Repr, visitor: PickledOutputStream) = {
     if (s eq null)
       throw new PicklingException("Cannot pickle null values")
-    visitor.writeStartArray()
+    visitor.writeStartArray(isUnordered)
     s foreach { innerPickler.pickle(_, visitor) }
     visitor.writeEndArray()
   }
@@ -230,7 +231,7 @@ trait PicklersLow1 extends PicklersLow2 {
 
   def entityPickler[T <: Entity] = EntityPickler.asInstanceOf[Pickler[T]]
   def inonstringMapPickler[A, B](picklerA: Pickler[A], picklerB: Pickler[B]): Pickler[immutable.Map[A, B]] =
-    new CollectionPickler[(A, B), immutable.Map[A, B]](tuple2pickler(picklerA, picklerB))
+    new CollectionPickler[(A, B), immutable.Map[A, B]](tuple2pickler(picklerA, picklerB), isUnordered = true)
   def seqPickler[T](innerPickler: Pickler[T]): Pickler[collection.Seq[T]] =
     new CollectionPickler[T, collection.Seq[T]](innerPickler)
   def indexedSeqPickler[T](innerPickler: Pickler[T]): Pickler[collection.IndexedSeq[T]] =
@@ -270,9 +271,9 @@ trait DefaultPicklers extends PicklersLow1 {
   def listPickler[T](innerPickler: Pickler[T]): Pickler[List[T]] =
     new CollectionPickler[T, List[T]](innerPickler)
   def setPickler[T](innerPickler: Pickler[T]): Pickler[collection.Set[T]] =
-    new CollectionPickler[T, collection.Set[T]](innerPickler)
+    new CollectionPickler[T, collection.Set[T]](innerPickler, isUnordered = true)
   def isetPickler[T](innerPickler: Pickler[T]): Pickler[immutable.Set[T]] =
-    new CollectionPickler[T, immutable.Set[T]](innerPickler)
+    new CollectionPickler[T, immutable.Set[T]](innerPickler, isUnordered = true)
   def sortedSetPickler[T](innerPickler: Pickler[T]): Pickler[collection.SortedSet[T]] =
     new CollectionPickler[T, collection.SortedSet[T]](innerPickler)
   def isortedSetPickler[T](innerPickler: Pickler[T]): Pickler[immutable.SortedSet[T]] =
@@ -312,7 +313,7 @@ trait DefaultPicklers extends PicklersLow1 {
   }
 
   def covariantSetPickler[T](innerPickler: Pickler[T]): Pickler[CovariantSet[T]] =
-    new CollectionPickler[T, CovariantSet[T]](innerPickler)
+    new CollectionPickler[T, CovariantSet[T]](innerPickler, isUnordered = true)
 
   // pickles an EntityReferenceHolder in exactly the same format as a direct entity reference, so you can switch a
   // field between E and EntityReferenceHolder[E] with no DAL schema change

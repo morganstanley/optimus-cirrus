@@ -13,6 +13,19 @@
 
 <configuration>
 
+    <appender name="SYNC_STDERR" class="ch.qos.logback.core.ConsoleAppender">
+    <layout class="ch.qos.logback.classic.PatternLayout">
+      <Pattern> %d{HH:mm:ss.SSS} [%thread] %-5level %logger - %msg%n</Pattern>
+    </layout>
+    <target>System.err</target>
+  </appender>
+
+  <appender name="STDERR" class="msjava.logbackutils.async.AsyncAppender">
+    <dispatcher class="msjava.logbackutils.async.AsyncDispatcherQueueImpl"/>
+    <callerDataInfo>false</callerDataInfo>
+    <appender-ref ref="SYNC_STDERR" />
+  </appender>
+
   <appender name="FILE" class="ch.qos.logback.core.FileAppender">
     <file>${log.file.path}</file>
     <append>true</append>
@@ -23,6 +36,7 @@
 
   <root level="INFO">
     <appender-ref ref="FILE" />
+    <appender-ref ref="STDERR"/>
   </root>
 
 </configuration>

@@ -12,14 +12,12 @@
 package optimus.buildtool.compilers.npm
 
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.builders.BackgroundCmdId
-import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
-import optimus.buildtool.files.FileAsset
 import optimus.buildtool.trace.NpmCommand
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
 import optimus.platform._
 import optimus.platform.util.Log
 
@@ -40,25 +38,26 @@ object AsyncNpmCommandRunner extends Log {
 
   @async private def runWebProcess(
       cmd: String,
-      logFile: FileAsset,
+      processBuilder: ExternalProcessBuilder,
       sandboxSrc: Directory,
-      id: ScopeId,
-      useCrumbs: Boolean): Unit = {
-    val cmds =
+      id: ScopeId
+  ): Unit = {
+    val cmdLine =
       if (Utils.isWindows) Seq("cmd.exe", "/c", cmd)
       else Seq("ksh", "-c", cmd)
-    BackgroundProcessBuilder(
-      BackgroundCmdId("Web"),
-      logFile,
-      cmds,
-      workingDir = Some(sandboxSrc),
-      envVariablesToRetain = Some(envVarsToRetain),
-      useCrumbs = useCrumbs
-    )
-      .buildWithRetry(id, NpmCommand)(
-        maxRetry = 3, // retry 3 times to prevent maven server setup unstable issue
-        msDelay = 0,
+    processBuilder
+      .build(
+        id,
+        "web",
+        cmdLine,
+        Some(NpmCommand),
+        workingDir = Some(sandboxSrc),
+        envVariablesToRetain = Some(envVarsToRetain),
         lastLogLines = 100 // reasonable length to avoid too large web cmds log throw msg
+      )
+      .startWithRetry(
+        maxRetries = 3, // retry 3 times to prevent maven server setup unstable issue
+        msDelay = 0
       )
   }
 
@@ -68,17 +67,17 @@ object AsyncNpmCommandRunner extends Log {
       nodeVersion: String,
       pnpmVersion: String,
       npmBuildCommands: Seq[String],
+      processBuilder: ExternalProcessBuilder,
       sandboxSrc: Directory,
-      pnpmStoreDir: Directory,
-      logFile: FileAsset,
-      useCrumbs: Boolean): Seq[CompilationMessage] = {
+      pnpmStoreDir: Directory
+  ): Seq[CompilationMessage] = {
     ObtTrace.info(s"[${id.toString}] Downloading npm remote artifacts from maven server")
     val cmd = commandTemplate
       .replace("{nodeVersion}", nodeVersion)
       .replace("{pnpmVersion}", pnpmVersion)
       .replace("{pnpmStoreDir}", pnpmStoreDir.pathString)
       .replace("{userCmd}", npmBuildCommands.mkString(" && "))
-    runWebProcess(cmd, logFile, sandboxSrc, id, useCrumbs)
+    runWebProcess(cmd, processBuilder, sandboxSrc, id)
     val warnCmds = dangerousCmds.collect { case dangerousCmd if cmd.contains(dangerousCmd) => s"'$dangerousCmd'" }
     if (warnCmds.isEmpty) Seq(CompilationMessage.info(cmd))
     else

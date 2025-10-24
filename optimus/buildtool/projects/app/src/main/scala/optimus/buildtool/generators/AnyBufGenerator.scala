@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.generators
 
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.ExternalBinaryArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
@@ -23,33 +22,28 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.Directory.PredicateFilter
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.ReactiveDirectory
-import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceFolder
-import optimus.buildtool.generators.AnyBufGenerator.pluginKey
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedFiles.Template
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.resolvers.CoursierArtifactResolver
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.MavenUtils
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.GenerateSource
-import optimus.buildtool.trace.ObtTrace
-import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.PathUtils
-import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import java.nio.file.Files
-import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 
 @entity class ProtobufGenerator(
     dependencyResolver: CoursierArtifactResolver,
-    dependencyCopier: DependencyCopier,
-    val workspaceSourceRoot: Directory)
-    extends AnyBufGenerator {
+    dependencyCopier: DependencyCopier
+) extends AnyBufGenerator {
+  import AnyBufGenerator._
+
   override val generatorType: String = "protobuf"
 
   override val generatorDefaults: PortableMavenExecutable =
@@ -67,17 +61,11 @@ import scala.sys.process.ProcessLogger
     )
 
   override val generatorExecutableNameForLog = "protoc"
-  override val sourcePredicate = Directory.fileExtensionPredicate("proto")
+  override val filePredicate: PathFilter = Directory.fileExtensionPredicate("proto")
 
-  @node override def args(inp: Inputs, outputDir: Directory): Seq[String] = {
-    val (templateDirs, templateFiles) = inp.templates.apar.map { case (root, files) =>
-      val validated = SourceGenerator.validateFiles(root, files)
-      (validated.root, validated.files)
-    }.unzip
+  @async override def args(inp: Inputs, outputDir: Directory): Seq[String] = {
 
-    val dependencyDirs = inp.dependencies.apar.map { case (root, files) =>
-      SourceGenerator.validateFiles(root, files).root
-    }
+    val templateFiles = inp.files.files(Template)
 
     val pluginArgs = inp.plugins.apar.flatMap { case (pluginName, pluginMavenDep) =>
       val res =
@@ -96,17 +84,17 @@ import scala.sys.process.ProcessLogger
 
     // protoc requires template and dependency directories to be specified as include arguments
     // use platform-appropriate Strings
-    val includeArgs = (templateDirs ++ dependencyDirs).distinct.map(d => s"-I=${PathUtils.mappedPathString(d)}")
-    val templateArgs = templateFiles.flatten.map(PathUtils.mappedPathString)
+    val includeArgs =
+      Seq(Template, Include, Upstream).apar.flatMap(inp.files.roots).map(r => s"-I=${PathUtils.mappedPathString(r)}")
+    val templateArgs = templateFiles.map(PathUtils.mappedPathString)
 
-    val mainArgLine =
-      (Seq(s"--java_out=${outputDir.path.toString}") ++ includeArgs)
+    val mainArgLine = Seq(s"--java_out=${outputDir.path.toString}") ++ includeArgs
 
     mainArgLine ++ pluginArgs ++ templateArgs
   }
 }
 
-@entity class FlatbufferGenerator(val workspaceSourceRoot: Directory) extends AnyBufGenerator {
+@entity class FlatbufferGenerator extends AnyBufGenerator {
   override val generatorType: String = "flatbuffer"
   override val generatorDefaults: PortableExecutable =
     PortableAfsExecutable(
@@ -114,59 +102,54 @@ import scala.sys.process.ProcessLogger
       linux = AfsExecutable("fsf", "google-flatbuffers", "bin/flatc", None)
     )
   override val generatorExecutableNameForLog = "flatc"
-  override val sourcePredicate: Directory.PathFilter = Directory.fileExtensionPredicate("fbs")
+  override val filePredicate: PathFilter = Directory.fileExtensionPredicate("fbs")
 
-  @node override def args(inp: Inputs, outputDir: Directory): Seq[String] = {
-    val templateFiles = inp.templates.apar.map { case (root, files) =>
-      val validated = SourceGenerator.validateFiles(root, files)
-      validated.files
-    }
+  @async override def args(inp: Inputs, outputDir: Directory): Seq[String] = {
+    val templateFiles = inp.files.files(Template)
 
-    Seq(
-      (Seq("--gen-mutable", "--java", "-o", outputDir.path.toString) ++ templateFiles.flatten
-        .map(_.path.toString)).mkString(" "))
+    val args = Seq("--gen-mutable", "--java", "-o", outputDir.path.toString) ++ templateFiles.map(_.path.toString)
+    Seq(args.mkString(" "))
   }
 }
 
 @entity trait AnyBufGenerator extends SourceGenerator {
-  val workspaceSourceRoot: Directory
+  import AnyBufGenerator._
+
   val generatorDefaults: ResolvableResource
-  val sourcePredicate: PathFilter
   val generatorExecutableNameForLog: String
+
+  override def templateType(configuration: Map[String, String]): PathFilter = filePredicate
+  protected val filePredicate: PathFilter
 
   /**
    * This function calculates the command-line arguments required by the *buf generator.
    *
    * Note: do not include the executable itself!
    */
-  @node def args(inp: Inputs, outputDir: Directory): Seq[String]
+  @async def args(inp: Inputs, outputDir: Directory): Seq[String]
 
   override type Inputs = AnyBufGenerator.Inputs
 
-  @node override protected def _inputs(
-      generatorName: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: PathFilter,
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
-  ): Inputs = {
+  ): AnyBufGenerator.Inputs = {
     val executable = generatorDefaults.resolve(configuration, scope)
     val execFingerprint = generatorDefaults.fingerprint(configuration, scope)
 
-    val filter = sourceFilter && sourcePredicate
-    val (templates, templateFingerprint) = SourceGenerator.rootedTemplates(
-      internalFolders,
-      externalFolders,
-      filter,
-      scope,
-      workspaceSourceRoot,
-      s"Template:$generatorName"
+    val allTemplatePaths = templates.content().keySet.map(_.path)
+
+    // Protoc also needs the template directories to be on the include path, so fingerprint any other files
+    // in the template directories (and capture the file content in case we're in a sparse workspace)
+    val templatesWithIncludes = templates.withFiles(
+      Include,
+      filePredicate && PredicateFilter(p => !allTemplatePaths.contains(p)),
+      allowEmpty = true
     )
-    val allTemplatePaths = templates.flatMap(_._2.keys).map(_.path).toSet
 
     // Proto files may depend on proto files in upstream scopes
-    val upstreamTemplateFolders =
+    val upstreamTemplateFolders: Seq[UpstreamFolders] =
       scope.upstream.allCompileDependencies.apar.flatMap(_.transitiveScopeDependencies).apar.flatMap { d =>
         d.config.generatorConfig.apar.collect {
           case (tpe, cfg) if tpe == this.tpe =>
@@ -175,35 +158,22 @@ import scala.sys.process.ProcessLogger
                 .lookupSourceFolder(d.config.paths.workspaceSourceRoot, d.config.paths.absScopeRoot.resolveDir(f))
             }
             val externalTemplateFolders = cfg.externalTemplateFolders.apar.map(scope.directoryFactory.reactive)
-            (d.id, internalTemplateFolders, externalTemplateFolders)
-        }
+            UpstreamFolders(d.id, internalTemplateFolders, externalTemplateFolders)
+        }: Seq[UpstreamFolders] // help intellij work out the types
       }
 
-    // Protoc also needs the template directories to be on the include path, so fingerprint any other files
-    // in the template directories (and capture the file content in case we're in a sparse workspace)
-    val (localDependencies, localDependencyFingerprint) = SourceGenerator.rootedTemplates(
-      internalFolders,
-      externalFolders,
-      sourcePredicate && PredicateFilter(p => !allTemplatePaths.contains(p)),
-      scope,
-      workspaceSourceRoot,
-      s"Template:$generatorName"
-    )
-
-    val (upstreamDependencies, upstreamDependencyFingerprints) = upstreamTemplateFolders.apar.map {
-      case (id, internalDepFolders, externalDepFolders) =>
-        SourceGenerator.rootedTemplates(
-          internalDepFolders,
-          externalDepFolders,
-          sourcePredicate,
-          scope,
-          workspaceSourceRoot,
-          "Dependency",
-          id.toString
-        )
-    }.unzip
-
-    val dependencies = localDependencies ++ upstreamDependencies.flatten
+    val files = upstreamTemplateFolders.foldLeft(templatesWithIncludes) { (accum, upstream) =>
+      // TODO (OPTIMUS-79166): Remove `allowEmpty = true` once we have a better solution for
+      // built-in proto files than just putting them in the templates
+      accum.withFolders(
+        Upstream,
+        upstream.internal,
+        upstream.external,
+        filePredicate,
+        fingerprintTypeSuffix = upstream.scopeId.toString,
+        allowEmpty = true
+      )
+    }
 
     val plugins: Seq[(String, DependencyDefinition)] = configuration
       .collect { case (k, v) if k.startsWith(pluginKey) => (k, v) }
@@ -219,74 +189,52 @@ import scala.sys.process.ProcessLogger
     val pluginsFingerprint: Seq[String] = plugins.map { case (pluginName: String, b: DependencyDefinition) =>
       s"[$generatorExecutableNameForLog]:$pluginName:${b.fingerprint("Executable")}"
     }
-    val fingerprint = s"[$generatorExecutableNameForLog]$execFingerprint" +:
-      (pluginsFingerprint ++ templateFingerprint ++ localDependencyFingerprint ++ upstreamDependencyFingerprints.flatten)
-    val fingerprintHash =
-      scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(generatorName))
+    val extraFingerprint = s"[$generatorExecutableNameForLog]$execFingerprint" +: pluginsFingerprint
+    val fingerprintHash = files.hashFingerprint(Map.empty, extraFingerprint)
 
-    AnyBufGenerator.Inputs(generatorName, executable, templates, dependencies, fingerprintHash, plugins)
+    AnyBufGenerator.Inputs(executable, files.toFiles, fingerprintHash, plugins)
   }
 
-  @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
-    inputs().templates.flatMap(_._2).nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs: NodeFunction0[Inputs],
-      outputJar: JarAsset
-  ): Option[GeneratedSourceArtifact] = {
-    val resolvedInputs = inputs()
-    import resolvedInputs._
-    ObtTrace.traceTask(scopeId, GenerateSource) {
-      val protocExecCmd: String = resolvedInputs.exec.path.toString
+      inputs: AnyBufGenerator.Inputs,
+      writer: ArtifactWriter): Option[GeneratedSourceArtifact] = writer.atomicallyWrite() { context =>
+    import inputs._
+    val protocExecCmd: String = exec.path.toString
 
-      val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
-        val tempJar = JarAsset(tempOut)
-        // Use a short temp dir name to avoid issues with too-long paths for generated .java files
-        val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
-        val outputDir = tempDir.resolveDir(AnyBufGenerator.SourcePath)
-        Utils.createDirectories(outputDir)
-        val cmdLine = s"$protocExecCmd ${args(resolvedInputs, outputDir).mkString(" ")}"
-        log.debug(s"[$scopeId:$generatorName] executing: '$cmdLine''")
-        val logging = mutable.Buffer[String]()
-        // Note: this is a blocking call. See Optimus-49290 if this gets too slow.
-        val res: Int =
-          Process(cmdLine) ! ProcessLogger { s =>
-            val line = s"[$scopeId:$generatorName] $s"
-            logging += line
-            log.debug(line)
-          }
-
-        val sourcePath = AnyBufGenerator.SourcePath
-        val messages = logging.toIndexedSeq
-          .map(s => CompilationMessage(None, s, if (res == 0) CompilationMessage.Info else CompilationMessage.Error))
-
-        val a = GeneratedSourceArtifact.create(
-          scopeId,
-          tpe,
-          generatorName,
-          outputJar,
-          sourcePath,
-          messages
-        )
-        SourceGenerator.createJar(tpe, generatorName, sourcePath, a.messages, a.hasErrors, tempJar, tempDir)()
-        a
+    val cmdLine = s"$protocExecCmd ${args(inputs, context.outputDir).mkString(" ")}"
+    log.debug(s"[$scopeId:$generatorId] executing: '$cmdLine''")
+    val logging = mutable.Buffer[String]()
+    // Note: this is a blocking call. See Optimus-49290 if this gets too slow.
+    val res: Int =
+      Process(cmdLine) ! ProcessLogger { s =>
+        val line = s"[$scopeId:$generatorId] $s"
+        logging += line
+        log.debug(line)
       }
-      Some(artifact)
-    }
+
+    val messages = logging.toIndexedSeq
+      .map(s => CompilationMessage(None, s, if (res == 0) CompilationMessage.Info else CompilationMessage.Error))
+
+    context.createArtifact(messages)
   }
 }
 
 object AnyBufGenerator {
-  private val SourcePath = RelativePath("src")
-  val pluginKey = "plugins."
+  private val pluginKey = "plugins."
+
+  case object Include extends SandboxedFiles.FileType
+  case object Upstream extends SandboxedFiles.FileType
 
   final case class Inputs(
-      generatorName: String,
       exec: FileAsset,
-      templates: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      dependencies: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
+      files: SandboxedFiles,
       fingerprint: FingerprintArtifact,
       plugins: Seq[(String, DependencyDefinition)]
   ) extends SourceGenerator.Inputs
+
+  private final case class UpstreamFolders(
+      scopeId: ScopeId,
+      internal: Seq[SourceFolder],
+      external: Seq[ReactiveDirectory])
 }

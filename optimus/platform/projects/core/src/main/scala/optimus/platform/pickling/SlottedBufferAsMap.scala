@@ -25,31 +25,18 @@ import scala.collection.AbstractIterator
  */
 @SerialVersionUID(1L)
 abstract class SlottedBufferAsMap(private[pickling] val shape: Shape)
-    extends Map[String, Any]
+    extends PickledProperties
     with ContainsUnresolvedReference
     with InternerHashEquals
     with Serializable {
 
+  override def apply(key: String): Any = get(key).getOrElse { throw new NoSuchElementException }
+
   protected[pickling] def get(index: Int): Any
 
-  // Should not be called
-  override def updated[V1 >: Any](key: String, value: V1): Map[String, V1] = throw new UnsupportedOperationException()
-
-  override def removed(key: String): Map[String, Any] = {
-    // Should only ever be called to remove the tag
-    if (key == PicklingConstants.embeddableTag)
-      untagged
-    else {
-      // really we should only be called to remove the tag but some tests want to remove
-      // fields for convenience. In case there are other usages, a reasonable implementation
-      // would be to use filterNot. We're not looking to be efficient for such usage.
-      filterNot { case (k, _) => k == key }
-    }
-  }
-
-  def hasTag: Boolean = shape.hasTag
-  def tag: String = if (hasTag) shape.tag else throw new NoSuchElementException("No tag present")
-  def untagged: TaglessSlottedBufferAsMap = new TaglessSlottedBufferAsMap(this)
+  override def hasTag: Boolean = shape.hasTag
+  override def tag: String = if (hasTag) shape.tag else throw new NoSuchElementException("No tag present")
+  override def untagged: TaglessSlottedBufferAsMap = new TaglessSlottedBufferAsMap(this)
 
   override def get(key: String): Option[Any] = {
     if (shape.hasTag && key == PicklingConstants.embeddableTag)
@@ -118,12 +105,9 @@ abstract class SlottedBufferAsMap(private[pickling] val shape: Shape)
 // SlottedBufferAsMap in a way that filters out the tag from the interface while still
 // extending Map[String, Any]
 class TaglessSlottedBufferAsMap(private val underlying: SlottedBufferAsMap)
-    extends Map[String, Any]
+    extends PickledProperties
     with ContainsUnresolvedReference
     with InternerHashEquals {
-
-  override def removed(key: String): Map[String, Any] = underlying.removed(key)
-  override def updated[V1 >: Any](key: String, value: V1): Map[String, V1] = underlying.updated(key, value)
 
   override def get(key: String): Option[Any] = {
     if (key == PicklingConstants.embeddableTag)
@@ -170,6 +154,6 @@ class TaglessSlottedBufferAsMap(private val underlying: SlottedBufferAsMap)
   }
 }
 
-object TaglessSlottedBufferAsMap {
-  private val NoMoreElements = null
+private object TaglessSlottedBufferAsMap {
+  private val NoMoreElements: (String, Any) = null
 }

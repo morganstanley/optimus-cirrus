@@ -13,95 +13,53 @@ package optimus.buildtool
 package generators
 
 import java.io.IOException
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
-import optimus.buildtool.utils.Utils
 import optimus.platform._
-
-import scala.collection.immutable.SortedMap
 import optimus.platform.util.xml.XmlLoader
 
-@entity class JxbGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
+@entity class JxbGenerator extends SourceGenerator {
   override val generatorType: String = "jxb"
 
   override type Inputs = JxbGenerator.Inputs
 
   import JxbGenerator._
 
-  @node override protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: Directory.PathFilter,
+  override def templateType(configuration: Map[String, String]): Directory.PathFilter = JxbGenerator.SourcePredicate
+
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
       scope: CompilationScope
-  ): Inputs = {
-    val filter = sourceFilter && JxbGenerator.SourcePredicate
+  ): JxbGenerator.Inputs = JxbGenerator.Inputs(templates.toFiles, templates.hashFingerprint(Map.empty, Nil))
 
-    val (templateFiles, templateFingerprint) = SourceGenerator.templates(
-      internalFolders,
-      externalFolders,
-      filter,
-      scope,
-      workspaceSourceRoot,
-      s"Template:$name"
-    )
-
-    val fingerprintHash =
-      scope.hasher.hashFingerprint(templateFingerprint, ArtifactType.GenerationFingerprint, Some(name))
-
-    JxbGenerator.Inputs(name, templateFiles, fingerprintHash)
-  }
-
-  @node override def containsRelevantSources(inputs: NodeFunction0[Inputs]): Boolean =
-    inputs().templateFiles.nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs0: NodeFunction0[Inputs],
-      outputJar: JarAsset
-  ): Option[GeneratedSourceArtifact] = {
-    val inputs = inputs0()
+      inputs: JxbGenerator.Inputs,
+      writer: ArtifactWriter
+  ): Option[GeneratedSourceArtifact] = writer.atomicallyWrite { tempJar =>
     import inputs._
 
-    Some {
-      ObtTrace.traceTask(scopeId, trace.GenerateSource) {
-        Utils.atomicallyWrite(outputJar) { tmpJar =>
-          val messageBuilder = List.newBuilder[CompilationMessage]
-          val infos = templateFiles.flatMap { case (f, c) =>
-            delegateInfo(scopeId, f, c) match {
-              case Left(message) => messageBuilder += message; Nil
-              case Right(infos)  => infos
-            }
-          }
-          val a = GeneratedSourceArtifact.create(
-            scopeId,
-            tpe,
-            generatorName,
-            outputJar,
-            SourcePath,
-            messageBuilder.result()
-          )
-          SourceGenerator.createJar(tpe, generatorName, SourcePath, a.messages, a.hasErrors, JarAsset(tmpJar)) {
-            jarOut =>
-              infos.foreach { info =>
-                jarOut.writeFile(info.source, SourcePath resolvePath info.name)
-              }
-          }
-          a
-        }
+    val messageBuilder = List.newBuilder[CompilationMessage]
+    val infos = files.content().flatMap { case (f, c) =>
+      delegateInfo(scopeId, f, c) match {
+        case Left(message) => messageBuilder += message; Nil
+        case Right(infos)  => infos
+      }
+    }
+    val sourcePath = SourceGenerator.SourcePath
+    writer.streamToArtifact(tempJar, messageBuilder.result(), sourcePath) { jarStream =>
+      infos.foreach { info =>
+        jarStream.writeFile(info.source, sourcePath.resolvePath(info.name))
       }
     }
   }
@@ -109,19 +67,14 @@ import optimus.platform.util.xml.XmlLoader
 }
 
 object JxbGenerator {
-  private val SourcePath = RelativePath("src")
   private val SourcePredicate = Directory.fileExtensionPredicate("jxb")
 
   final case class Inputs(
-      generatorName: String,
-      templateFiles: SortedMap[FileAsset, HashedContent],
+      files: SandboxedFiles,
       fingerprint: FingerprintArtifact
   ) extends SourceGenerator.Inputs
 
   final case class DelegateInfo(name: RelativePath, source: String)
-  object DelegateInfo {
-    implicit val ordering: Ordering[DelegateInfo] = Ordering.by(_.name)
-  }
 
   def delegateInfo(
       id: ScopeId,

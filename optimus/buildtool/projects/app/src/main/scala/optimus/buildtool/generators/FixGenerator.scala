@@ -11,24 +11,16 @@
  */
 package optimus.buildtool.generators
 
-import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.ReactiveDirectory
-import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
 import optimus.buildtool.generators.FixGenerator.FIX_GENERATOR_VERSION
+import optimus.buildtool.generators.sandboxed.SandboxedFiles
+import optimus.buildtool.generators.sandboxed.SandboxedInputs
 import optimus.buildtool.scope.CompilationScope
-import optimus.buildtool.trace.GenerateSource
-import optimus.buildtool.trace.ObtTrace
-import optimus.buildtool.utils.HashedContent
-import optimus.buildtool.utils.TypeClasses._
-import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 import org.w3c.dom.Document
@@ -37,7 +29,6 @@ import org.w3c.dom.Element
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.file.Files
 import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.transform.Transformer
@@ -45,137 +36,88 @@ import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
 import javax.xml.transform.stream.StreamSource
-import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-@entity class FixGenerator(workspaceSourceRoot: Directory) extends SourceGenerator {
+@entity class FixGenerator extends SourceGenerator {
   override val generatorType: String = "fix"
   override type Inputs = FixGenerator.Inputs
 
-  @node override protected def _inputs(
-      name: String,
-      internalFolders: Seq[SourceFolder],
-      externalFolders: Seq[ReactiveDirectory],
-      sourceFilter: Directory.PathFilter,
+  override def templateType(configuration: Map[String, String]): Directory.PathFilter = Directory.NoFilter
+
+  @async override protected def _inputs(
+      templates: SandboxedInputs,
       configuration: Map[String, String],
-      scope: CompilationScope): FixGenerator.Inputs = {
+      scope: CompilationScope
+  ): Inputs = {
 
-    val (templateFiles, templateFingerprint) = SourceGenerator.rootedTemplates(
-      internalFolders,
-      externalFolders,
-      sourceFilter,
-      scope,
-      workspaceSourceRoot,
-      s"Template:$name"
-    )
+    val extraFingerprint = Seq(s"[fix][transform:$FIX_GENERATOR_VERSION]")
 
-    val fingerprint =
-      s"[fix][transform:$FIX_GENERATOR_VERSION]" +: (configuration.map { case (k, v) =>
-        s"[Config]$k=$v"
-      }.toIndexedSeq ++ templateFingerprint)
-
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
+    val fingerprintHash = templates.hashFingerprint(configuration, extraFingerprint)
 
     FixGenerator.Inputs(
-      generatorName = name,
-      sourceFiles = templateFiles,
+      files = templates.toFiles,
       fingerprint = fingerprintHash,
-      configuration = configuration)
+      configuration = configuration
+    )
   }
 
-  @node override def containsRelevantSources(inputs: NodeFunction0[FixGenerator.this.Inputs]): Boolean =
-    inputs().sourceFiles.map(_._2).merge.nonEmpty
-
-  @node override def generateSource(
+  @async override def _generateSource(
       scopeId: ScopeId,
-      inputs: NodeFunction0[FixGenerator.this.Inputs],
-      outputJar: JarAsset): Option[GeneratedSourceArtifact] = {
-    val resolvedInputs = inputs()
-    import resolvedInputs._
-    ObtTrace.traceTask(scopeId, GenerateSource) {
-      val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
-        val tempJar = JarAsset(tempOut)
-        // Use a short temp dir name to avoid issues with too-long paths for generated .java files
-        val tempDir = Directory(Files.createTempDirectory(tempJar.parent.path, ""))
+      inputs: Inputs,
+      writer: ArtifactWriter
+  ): Option[GeneratedSourceArtifact] = writer.atomicallyWrite() { writeContext =>
+    import inputs._
 
-        val allTemplates = sourceFiles.apar.map { case (root, files) =>
-          val validated = SourceGenerator.validateFiles(root, files)
-          validated.files
-        }.flatten
+    val allTemplates = files.files()
+    val compilationMessages = mutable.Buffer[CompilationMessage]()
 
-        val outputDir = tempDir.resolveDir(FixGenerator.SourcePath)
-        Utils.createDirectories(outputDir)
+    allTemplates.foreach { f =>
+      {
+        try {
+          val document = FixGenerator.getSpecificationDocument(f)
 
-        val compilationMessages = mutable.Buffer[CompilationMessage]()
+          val mpkg =
+            configuration.getOrElse("messagePackage", throw FixGeneratorException("Message package is not defined!"))
+          val fpkg =
+            configuration.getOrElse("fieldPackage", throw FixGeneratorException("Field package is not defined!"))
+          val messageDir = writeContext.outputDir.path.toAbsolutePath.resolve(mpkg.replaceAll("\\.", "/"))
+          val fieldsDir = writeContext.outputDir.path.toAbsolutePath.resolve(fpkg.replaceAll("\\.", "/"))
 
-        allTemplates.foreach { f =>
-          {
-            try {
-              val document = FixGenerator.getSpecificationDocument(f)
+          val ctx = FixCodeGeneratorContext(
+            generatorId = generatorId,
+            specification = f,
+            messagePackage = mpkg,
+            fieldPackage = fpkg,
+            overwrite = configuration.getOrElse("overwrite", "true").toBoolean,
+            orderedFields = configuration.getOrElse("orderedFields", "true").toBoolean,
+            useDecimal = configuration.getOrElse("orderedFields", "false").toBoolean,
+            outputDir = writeContext.outputDir,
+            document = document,
+            messageDir = messageDir,
+            fieldsDir = fieldsDir,
+            compilationMessages = compilationMessages
+          )
 
-              val mpkg = configuration
-                .get("messagePackage")
-                .getOrElse(throw FixGeneratorException("Message package is not defined!"))
-              val fpkg = configuration
-                .get("fieldPackage")
-                .getOrElse(throw FixGeneratorException("Field package is not defined!"))
-              val messageDir = outputDir.path.toAbsolutePath.resolve(mpkg.replaceAll("\\.", "/"))
-              val fieldsDir = outputDir.path.toAbsolutePath.resolve(fpkg.replaceAll("\\.", "/"))
+          compilationMessages.addOne(
+            CompilationMessage(None, s"Generating FIX packages ${mpkg}, ${fpkg}.", CompilationMessage.Info))
 
-              val ctx = FixCodeGeneratorContext(
-                name = generatorName,
-                specification = f,
-                messagePackage = mpkg,
-                fieldPackage = fpkg,
-                overwrite = configuration.getOrElse("overwrite", "true").toBoolean,
-                orderedFields = configuration.getOrElse("orderedFields", "true").toBoolean,
-                useDecimal = configuration.getOrElse("orderedFields", "false").toBoolean,
-                outputDir = outputDir,
-                document = document,
-                messageDir = messageDir,
-                fieldsDir = fieldsDir,
-                compilationMessages = compilationMessages
-              )
-
-              compilationMessages.addOne(
-                CompilationMessage(None, s"Generating FIX packages ${mpkg}, ${fpkg}.", CompilationMessage.Info))
-
-              FixGenerator.generateFixCode(ctx)
-            } catch {
-              case e: FixGeneratorException =>
-                compilationMessages.addOne(CompilationMessage.error(e.getMessage))
-              case NonFatal(t) =>
-                compilationMessages.addOne(CompilationMessage.error(t))
-            }
-          }
+          FixGenerator.generateFixCode(ctx)
+        } catch {
+          case e: FixGeneratorException =>
+            compilationMessages.addOne(CompilationMessage.error(e.getMessage))
+          case NonFatal(t) =>
+            compilationMessages.addOne(CompilationMessage.error(t))
         }
-        log.info(s"[$scopeId:$generatorName] fix generation successful")
-        val artifact = GeneratedSourceArtifact.create(
-          scopeId,
-          tpe,
-          generatorName,
-          outputJar,
-          FixGenerator.SourcePath,
-          compilationMessages.toSeq
-        )
-        SourceGenerator.createJar(
-          tpe,
-          generatorName,
-          FixGenerator.SourcePath,
-          artifact.messages,
-          artifact.hasErrors,
-          tempJar,
-          tempDir)()
-        artifact
       }
-      Some(artifact)
     }
+    writeContext.createArtifact(compilationMessages.toSeq)
   }
+
 }
 
 final case class FixCodeGeneratorContext(
-    name: String,
+    generatorId: String,
     specification: FileAsset,
     messagePackage: String,
     fieldPackage: String,
@@ -193,7 +135,6 @@ final case class FixGeneratorException(private val message: String = "", private
     extends Exception(message, cause)
 
 object FixGenerator extends Log {
-  private[buildtool] val SourcePath = RelativePath("src")
 
   private val XSLPARAM_SERIAL_UID = "serialVersionUID"
 
@@ -204,8 +145,7 @@ object FixGenerator extends Log {
   private val FIX_GENERATOR_VERSION = 1
 
   final case class Inputs(
-      generatorName: String,
-      sourceFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
+      files: SandboxedFiles,
       fingerprint: FingerprintArtifact,
       configuration: Map[String, String]
   ) extends SourceGenerator.Inputs
@@ -220,7 +160,7 @@ object FixGenerator extends Log {
   }
 
   private def generateFieldClasses(ctx: FixCodeGeneratorContext): Unit = {
-    log.info(s"${ctx.name}: generating field classes")
+    log.debug(s"${ctx.generatorId}: generating field classes")
 
     val fieldNames = getNames(ctx.document.getDocumentElement(), "fields/field")
 
@@ -246,7 +186,7 @@ object FixGenerator extends Log {
   }
 
   private def generateMessageBaseClass(ctx: FixCodeGeneratorContext): Unit = {
-    log.info("${ctx.name}: generating message base class")
+    log.debug("${ctx.name}: generating message base class")
     val parameters = Map[String, String](
       XSLPARAM_SERIAL_UID -> SERIAL_UID_STR
     )
@@ -266,7 +206,7 @@ object FixGenerator extends Log {
       ctx: FixCodeGeneratorContext,
       className: String,
       parameters: Map[String, String]): Unit = {
-    log.debug(s"generating ${className} for ${ctx.name}")
+    log.debug(s"generating ${className} for ${ctx.generatorId}")
     val params = Map[String, String](
       "messagePackage" -> ctx.messagePackage,
       "fieldPackage" -> ctx.fieldPackage
@@ -284,7 +224,7 @@ object FixGenerator extends Log {
   }
 
   private def generateComponentClasses(ctx: FixCodeGeneratorContext): Unit = {
-    log.info("${ctx.name}: generating component classes")
+    log.debug("${ctx.name}: generating component classes")
 
     val componentsOutputDir = ctx.messageDir.resolve("component")
 
@@ -310,7 +250,7 @@ object FixGenerator extends Log {
   }
 
   private def generateMessageSubclasses(ctx: FixCodeGeneratorContext): Unit = {
-    log.info("${ctx.name}: generating message subclasses")
+    log.debug("${ctx.name}: generating message subclasses")
 
     val messageNames = getNames(ctx.document.getDocumentElement(), "messages/message")
 

@@ -699,12 +699,6 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   val maxZincCompileBytes: Int = 0
 
   @args.Option(
-    name = "--backgroundCmd",
-    required = false,
-    usage = "Command to run in background during build (defaults to none)")
-  val backgroundCmd: String = NoneArg
-
-  @args.Option(
     name = "--bspClientInitializationTimeoutMs",
     required = false,
     usage = "BSP client initialization timeout in ms (defaults to 120,000)"

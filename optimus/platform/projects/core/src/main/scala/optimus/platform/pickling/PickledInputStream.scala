@@ -24,5 +24,5 @@ trait PickledInputStream {
 }
 
 object PickledInputStream {
-  val empty: PickledInputStream = new PickledMapWrapper(Map.empty)
+  val empty: PickledInputStream = new PickledMapWrapper(PickledProperties.empty)
 }

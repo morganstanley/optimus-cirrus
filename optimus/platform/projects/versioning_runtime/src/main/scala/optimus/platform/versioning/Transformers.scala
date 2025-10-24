@@ -12,6 +12,7 @@
 package optimus.platform.versioning
 
 import optimus.platform._
+import optimus.platform.pickling.PickledProperties
 
 /**
  * Thrown when there is no transformation path from one shape to another
@@ -56,8 +57,8 @@ sealed trait Transformer {
 }
 
 object Transformer {
-  type Properties = Map[String, Any]
-  type Direction = NodeFunction2[Map[String, Any], TemporalContext, Map[String, Any]]
+  type Properties = PickledProperties
+  type Direction = NodeFunction2[PickledProperties, TemporalContext, PickledProperties]
 }
 
 /*
@@ -94,7 +95,7 @@ object SafeTransformer {
       toRftShape: RftShape,
       forwards: Transformer.Direction,
       inverse: Transformer.Direction,
-      addedFields: Map[String, Any],
+      addedFields: PickledProperties,
       renamedFields: Map[String, String])(implicit config: TransformerConfiguration): SafeTransformer = {
     val t = new SafeTransformer(fromRftShape, toRftShape, forwards, inverse, addedFields, renamedFields, 1, 1)
     config.configure(t)
@@ -108,7 +109,7 @@ final class SafeTransformer private (
     val toRftShape: RftShape,
     val forwards: Transformer.Direction,
     val inverse: Transformer.Direction,
-    val addedFields: Map[String, Any],
+    val addedFields: PickledProperties,
     val renamedFields: Map[String, String],
     val operations: Int = 1,
     val inverseOperations: Int = 1)

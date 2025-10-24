@@ -24,6 +24,7 @@ docs/css/overridesIJ23.css
 *.code-workspace
 .devcontainer
 .vscode
+.vscode-server/
 
 # Python
 .mypy_cache/
@@ -41,6 +42,9 @@ generated-obt
 generated-annoproc
 stale_outputs_checked
 /test-output/
+
+# Moderne / OpenRewrite
+.moderne
 
 # briefly present when formatting scala files using the git pre-commit hook
 diff-file.txt

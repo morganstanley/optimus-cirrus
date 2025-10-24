@@ -25,19 +25,18 @@ sealed trait PluginInfo {
   def isEnabled: Boolean
   def optional: Boolean
   def isExtension: Boolean
+  def removeBundledScala: Boolean
 }
 
 final case class PluginFromArtifactory(
     name: String,
+    version: String,
     location: String,
     isEnabled: Boolean,
     optional: Boolean,
-    isExtension: Boolean)
+    isExtension: Boolean,
+    removeBundledScala: Boolean)
     extends PluginInfo {
-
-  override def version: String = location match {
-    case PluginInfo.AfVersion(version) => version
-  }
 
   def artifactoryPath(artifactoryRoot: String): String = artifactoryRoot + "/" + location
 }
@@ -48,7 +47,8 @@ final case class PluginFromFileSystem(
     location: String,
     isEnabled: Boolean,
     optional: Boolean,
-    isExtension: Boolean)
+    isExtension: Boolean,
+    removeBundledScala: Boolean)
     extends PluginInfo {
   require(optional || Paths.get(location).exists(), s"Plugin not found at $location, please check the configuration.")
 }
@@ -64,15 +64,33 @@ object PluginInfo {
   def fromConfig(config: Config, isOptional: Boolean = false, isExtension: Boolean = false): PluginInfo = {
     val name: String = config.getString("name")
     val isEnabled: Boolean = if (config.hasPath("enabled")) config.getBoolean("enabled") else true
-
+    val removeBundledScala =
+      if (config.hasPath("remove-bundled-scala")) config.getBoolean("remove-bundled-scala") else false
     if (config.hasPath("path")) {
       val path: String = config.getString("path")
       val props = PropertiesUtils.fromFile(path + "/content.properties")
       val locationPrefix = if (props.getProperty(localKey, "false").toBoolean) path + "/" else ""
       val pluginLocation = s"$locationPrefix/${props.getProperty(locationKey)}"
-      PluginFromFileSystem(name, props.getProperty(versionKey), pluginLocation, isEnabled, isOptional, isExtension)
+
+      PluginFromFileSystem(
+        name,
+        props.getProperty(versionKey),
+        pluginLocation,
+        isEnabled,
+        isOptional,
+        isExtension,
+        removeBundledScala)
     } else {
-      PluginFromArtifactory(name, config.getString("artifactory-path"), isEnabled, isOptional, isExtension)
+      val artifactoryLocation = config.getString("artifactory-path")
+      val version =
+        if (config.hasPath("version")) {
+          config.getString("version")
+        } else {
+          artifactoryLocation match {
+            case PluginInfo.AfVersion(version) => version
+          }
+        }
+      PluginFromArtifactory(name, version, artifactoryLocation, isEnabled, isOptional, isExtension, removeBundledScala)
     }
   }
 }

@@ -14,6 +14,7 @@ package optimus.dsi.serialization.bson
 import msjava.slf4jutils.scalalog._
 import optimus.dsi.serialization.bson.handlers.PropertiesMapHandlerStack
 import optimus.dsi.serialization.bson.handlers.PropertyHolder
+import optimus.platform.pickling.PickledProperties
 
 private[bson] class HandlerStackCallback extends BSONCallback with PropertyHolder {
   private val RootKey = "RootKey"
@@ -22,7 +23,7 @@ private[bson] class HandlerStackCallback extends BSONCallback with PropertyHolde
   private val rootProps = handlerStack.newPropertiesHandler(RootKey, this)
   private val logger = getLogger[HandlerStackCallback]
   private val debug = false
-  private var result: Map[String, Any] = null
+  private var result: PickledProperties = null
 
   handlerStack.push(rootProps)
 
@@ -31,13 +32,13 @@ private[bson] class HandlerStackCallback extends BSONCallback with PropertyHolde
       logger.debug(s"set $name with $value")
     }
     if (RootKey == name) {
-      result = value.asInstanceOf[Map[String, Any]]
+      result = value.asInstanceOf[PickledProperties]
     }
   }
 
   override def parentName: String = RootKey
 
-  def properties: Map[String, Any] = result
+  def properties: PickledProperties = result
 
   private var indent = ""
 

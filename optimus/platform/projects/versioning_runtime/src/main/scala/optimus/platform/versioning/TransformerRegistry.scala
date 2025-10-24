@@ -21,6 +21,7 @@ import scala.util.Success
 import scala.util.Failure
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.platform.internal.SimpleGlobalStateHolder
+import optimus.platform.pickling.PickledProperties
 
 import scala.jdk.CollectionConverters._
 import java.util.{concurrent => juc}
@@ -87,7 +88,7 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
       source: ClientVertex,
       destination: ClientVertex,
       operation: Transformer.Direction,
-      val addedFieldMap: Map[String, Any] = Map.empty,
+      val addedFieldMap: PickledProperties = PickledProperties.empty,
       val hasRename: Boolean = false,
       val isSafe: Boolean = false,
       weight: Int = -1)
@@ -148,7 +149,7 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
         vv1: ClientVertex,
         vv2: ClientVertex,
         forward: Transformer.Direction,
-        addedFieldMap: Map[String, Any] = Map.empty,
+        addedFieldMap: PickledProperties = PickledProperties.empty,
         hasRename: Boolean = false,
         isSafe: Boolean = false) = {
       val client = ClientEdge(vv1, vv2, forward, addedFieldMap, hasRename, isSafe)
@@ -229,11 +230,11 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
 
   @async
   private[optimus] def version(
-      data: Map[String, Any],
+      data: PickledProperties,
       from: Shape,
       to: Shape,
       loadContext: TemporalContext
-  ): Option[Map[String, Any]] = {
+  ): Option[PickledProperties] = {
     val v1 = ClientVertex(from)
     val v2 = ClientVertex(to)
     versionImpl(data, getState.clientGraph, v1, v2, loadContext)
@@ -241,11 +242,11 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
 
   @async
   private[optimus] def versionUsingRegisteredFieldType(
-      data: Map[String, Any],
+      data: PickledProperties,
       from: RftShape,
       to: RftShape,
       loadContext: TemporalContext
-  ): Option[Map[String, Any]] = {
+  ): Option[PickledProperties] = {
     val v1 = ServerVertex(from)
     val v2 = ServerVertex(to)
     versionImpl(data, getState.serverGraph, v1, v2, loadContext)
@@ -253,12 +254,12 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
 
   @async
   private def versionImpl[A, V <: Vertex[A], E <: Edge[A, V] with TransformerEdge](
-      data: Map[String, Any],
+      data: PickledProperties,
       graph: Graph[A, V, E],
       v1: V,
       v2: V,
       loadContext: TemporalContext
-  ): Option[Map[String, Any]] = {
+  ): Option[PickledProperties] = {
     val transformers = graph.shortestPath(v1, v2)
     transformers match {
       case None => None
@@ -277,15 +278,15 @@ object TransformerRegistry extends SimpleGlobalStateHolder(() => new Transformer
   @async
   private[optimus] def versionToWrite(
       className: SerializedEntity.TypeRef,
-      properties: Map[String, Any],
+      properties: PickledProperties,
       slot: Int,
       temporalContext: => TemporalContext
-  ): Try[Map[Int, Map[String, Any]]] = {
+  ): Try[Map[Int, PickledProperties]] = {
     if (!getState.writeShapes.contains(className)) Success(Map(slot -> properties))
     else {
       val currentShape = Shape.fromProperties(className, properties)
       val targetShapes = getState.writeShapes(className)
-      val (successes, failures) = targetShapes.foldLeft((Map.empty[Int, Map[String, Any]], Seq.empty[(Int, Shape)])) {
+      val (successes, failures) = targetShapes.foldLeft((Map.empty[Int, PickledProperties], Seq.empty[(Int, Shape)])) {
         case ((successes, failures), (currentSlot, targetShape)) =>
           if (currentShape == targetShape) (successes + (currentSlot -> properties), failures)
           else {

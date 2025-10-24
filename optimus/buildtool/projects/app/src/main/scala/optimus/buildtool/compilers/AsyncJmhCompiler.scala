@@ -53,6 +53,7 @@ import optimus.buildtool.trace
 import optimus.buildtool.trace.Java
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
@@ -60,8 +61,9 @@ import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.SandboxFactory
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
+import optimus.buildtool.utils.process.ExternalProcessBuilder
+import optimus.buildtool.utils.process.ProcessExitException
 import optimus.platform._
-import org.apache.commons.io.IOUtils
 
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
@@ -88,15 +90,18 @@ object AsyncJmhCompiler {
   )
 }
 
-@entity final class AsyncJmhCompilerImpl(sandboxFactory: SandboxFactory, dependencyCopier: DependencyCopier)
-    extends AsyncJmhCompiler {
+@entity final class AsyncJmhCompilerImpl(
+    sandboxFactory: SandboxFactory,
+    processBuilder: ExternalProcessBuilder,
+    dependencyCopier: DependencyCopier
+) extends AsyncJmhCompiler {
   @node def fingerprint: Seq[String] = Nil
 
   @node protected def output(scopeId: ScopeId, inputs0: NodeFunction0[AsyncJmhCompiler.Inputs]): CompilerOutput = {
     val inputs = inputs0()
     import inputs._
 
-    def storeMessages(messages: List[CompilationMessage]): CompilerMessagesArtifact = {
+    def storeMessages(messages: Seq[CompilationMessage]): CompilerMessagesArtifact = {
       // Watched via `result.get.watchForDeletion()` below
       val messagesArtifact = CompilerMessagesArtifact.unwatched(
         id = InternalArtifactId(scopeId, ArtifactType.JmhMessages, None),
@@ -120,7 +125,7 @@ object AsyncJmhCompiler {
 
     val jmhTrace = ObtTrace.startTask(scopeId, trace.Jmh)
 
-    val result = Try {
+    val result = NodeTry {
       val (sources, resources, jmhMessages) = {
         log.info(s"[$scopeId:jmh] Starting generation")
         val gen = generateSources(scopeId, inputs)
@@ -181,7 +186,7 @@ object AsyncJmhCompiler {
       }
     }
 
-    jmhTrace.complete(result.map(_.messages.messages))
+    jmhTrace.complete(result.toTry.map(_.messages.messages))
     result.get.watchForDeletion()
   }
 
@@ -190,7 +195,7 @@ object AsyncJmhCompiler {
   @entersGraph def downloadMavenLib(mavenLib: ExternalClassFileArtifact): String =
     dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(mavenLib).pathString
 
-  private def generateSources(scopeId: ScopeId, inputs: AsyncJmhCompiler.Inputs): SourceGenerationResult = {
+  @async private def generateSources(scopeId: ScopeId, inputs: AsyncJmhCompiler.Inputs): SourceGenerationResult = {
     import CompilationMessage._
 
     val jmhGenClasspath = (inputs.jmhJars ++ inputs.localArtifacts ++ inputs.otherArtifacts).collect {
@@ -214,7 +219,7 @@ object AsyncJmhCompiler {
     // but a more easily-maintained solution is preferred, which this (purportedly) is.
     // The various uses of *unsafe directory methods can be justified as the temporary directories do not escape this method.
     val sandbox = sandboxFactory.empty("jmh")
-    try {
+    asyncTry {
       val inClasses = sandbox.sourceDir
       inputClasses.foreach { jar =>
         Jars.withJar(jar.file, create = false) { root =>
@@ -230,13 +235,14 @@ object AsyncJmhCompiler {
       // Write arguments to a file to prevent the command line from being too long on Windows
       val argFile = sandbox.outputFile("args.txt")
       Files.write(argFile.path, ("-cp" :: jmhClasspath :: jmhMain :: jmhArgs).asJava)
-      val outFile = sandbox.outputFile("log.out")
-      val errFile = sandbox.outputFile("log.err")
-      val proc = new ProcessBuilder(Utils.javaExecutable, s"@${argFile.path.toString}")
-        .directory(sandbox.root.path.toFile)
-        .redirectOutput(outFile.path.toFile)
-        .redirectError(errFile.path.toFile)
-        .start()
+      val process = processBuilder.build(
+        scopeId,
+        "jmh",
+        Seq(Utils.javaExecutable, s"@${argFile.path.toString}"),
+        workingDir = Some(sandbox.root),
+        separateLogs = true
+      )
+      val res = NodeTry(process.start())
 
       def messagesFrom(file: FileAsset, level: Severity): Option[CompilationMessage] = {
         import scala.io._
@@ -251,10 +257,11 @@ object AsyncJmhCompiler {
         } flatten
       }
 
-      val messages = List(messagesFrom(outFile, Severity.Info), messagesFrom(errFile, Severity.Error)).flatten
+      val infoMessages = process.logFile.flatMap(messagesFrom(_, Severity.Info)).toSeq
+      val errorMessages = process.errFile.flatMap(messagesFrom(_, Severity.Error)).toSeq
 
-      proc.waitFor() match {
-        case 0 =>
+      res
+        .map { _ =>
           val sourceFiles = Directory.findFilesUnsafe(outSources)
           val resourceFiles = Directory.findFilesUnsafe(outResources)
           val sources = sourceFiles map { src =>
@@ -263,17 +270,16 @@ object AsyncJmhCompiler {
           val resources = resourceFiles map { rsrc =>
             outResources.relativize(rsrc) -> sortLines(Files.readAllBytes(rsrc.path))
           }
-          SourceGenerationResult(sources.toMap, resources.toMap, messages)
-        case code =>
-          val errorText = IOUtils.toString(errFile.path.toUri, "UTF-8")
-          val errors = message(s"JMH generator exited with return code $code", Error) ::
-            errorText.split("\n").filterNot(_.trim.isEmpty).map(message(_, Error)).toList
-          log.error(s"[$scopeId:jmhSourceGenerator] out: ${IOUtils.toString(outFile.path.toUri, "UTF-8")}")
-          log.error(s"[$scopeId:jmhSourceGenerator] err: $errorText")
-          SourceGenerationResult(Map.empty, Map.empty, errors ++ messages)
-
-      }
-    } finally sandbox.close()
+          SourceGenerationResult(sources.toMap, resources.toMap, infoMessages ++ errorMessages)
+        }
+        .getOrRecover { case e: ProcessExitException =>
+          log.error(e.getMessage)
+          val errors =
+            if (errorMessages.isEmpty) Seq(message(s"JMH generator exited with return code ${e.exitCode}", Error))
+            else errorMessages
+          SourceGenerationResult(Map.empty, Map.empty, infoMessages ++ errors)
+        }
+    } asyncFinally sandbox.close()
   }
 }
 
@@ -283,7 +289,8 @@ object AsyncJmhCompilerImpl {
   private final case class SourceGenerationResult(
       sources: Map[RelativePath, String],
       resources: Map[RelativePath, Array[Byte]],
-      messages: List[CompilationMessage])
+      messages: Seq[CompilationMessage]
+  )
 
   // JMH doesn't reliably produce sorted resources; this keeps compilation RT
   private def sortLines(ba: Array[Byte]): Array[Byte] = {

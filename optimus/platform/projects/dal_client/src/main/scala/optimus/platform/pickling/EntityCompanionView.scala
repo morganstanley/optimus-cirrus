@@ -13,7 +13,6 @@ package optimus.platform.pickling
 
 import optimus.platform.storable.Entity
 import optimus.platform.storable.EntityCompanionBase
-import optimus.entity.ClassEntityInfo
 import optimus.graph.PropertyInfo0
 import optimus.graph.ReallyNontweakablePropertyInfo
 import optimus.graph.NodeKey
@@ -21,9 +20,10 @@ import optimus.platform._
 import optimus.platform.EvaluationContext
 
 class EntityCompanionView[T <: Entity](comp: EntityCompanionBase[T]) {
-  def fromMap(m: Map[String, Any]): T = {
+  def fromMap(m: Map[String, Any]): T = fromProperties(PickledProperties(m))
+  def fromProperties(m: PickledProperties): T = {
     val p = new PickledMapWrapper(m)
-    val entity = comp.info.asInstanceOf[ClassEntityInfo].createUnpickled(p, true).asInstanceOf[T]
+    val entity = comp.info.createUnpickled(p, forceUnpickle = true).asInstanceOf[T]
 
     {
       // Ensure that all Entity Ref vals are hydrated
@@ -42,7 +42,7 @@ class EntityCompanionView[T <: Entity](comp: EntityCompanionBase[T]) {
       }
 
       for (p <- entity.$info.properties if p.isStored) {
-        val out = p match {
+        p match {
           // Could be @node val blah: SomeEntity
           case x: PropertyInfo0[_, _] =>
             hydrate(x.asInstanceOf[PropertyInfo0[T, _]].createNodeKey(entity))

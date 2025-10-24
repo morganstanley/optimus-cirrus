@@ -16,6 +16,7 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory.PredicateFilter
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.scope.CompilationScope
+import optimus.buildtool.scope.sources.WebCompilationSources.excludedDirs
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
@@ -34,7 +35,7 @@ import java.nio.file.Paths
       .map { f =>
         val fileFilter = PredicateFilter { path =>
           val firstFolder = rootPath.relativize(path).subpath(0, 1).toString
-          !ElectronCompilationSources.ignoredFolders.contains(firstFolder)
+          !excludedDirs.contains(firstFolder)
         }
         f.findSourceFiles(fileFilter)
       }
@@ -51,6 +52,4 @@ object ElectronCompilationSources {
   // since hashedSources holds the source files and the hash, it's important that
   // it's frozen for the duration of a compilation (so that we're sure what we hashed is what we compiled)
   hashedSources.setCustomCache(reallyBigCache)
-
-  private val ignoredFolders = Set("node_modules", ".idea")
 }
