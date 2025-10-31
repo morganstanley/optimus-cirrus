@@ -11,8 +11,12 @@
  */
 package optimus.utils
 
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import scala.Double.NaN
 import scala.util.Try
 
@@ -73,4 +77,14 @@ object OptimusStringUtils extends OptimusStringUtils {
       case _ => NaN
     }
 
+  def gzipDecode(arr: Array[Byte]): Array[Byte] =
+    new GZIPInputStream(new ByteArrayInputStream(arr)).readAllBytes
+
+  def gzipEncode(text: Array[Byte]): Array[Byte] = {
+    val baos = new ByteArrayOutputStream
+    val gzip = new GZIPOutputStream(baos)
+    gzip.write(text)
+    gzip.finish()
+    baos.toByteArray
+  }
 }

@@ -25,7 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /* aka TweakPropertyDependenciesMask injected by entity agent (in TPDMaskAdapter) [SEE_MASK_SUPPORT_GENERATION] */
-public final class TPDMask implements Serializable, Cloneable {
+public final class TPDMask implements Serializable {
   private static final int maskQWords = enablePerNodeTPDMask ? tweakUsageQWords : 2;
   public static final TPDMask empty = new TPDMask();
   public static final TPDMask poison = poisonMask();
@@ -44,7 +44,7 @@ public final class TPDMask implements Serializable, Cloneable {
   public static TPDMask fromArray(long[] maskArray) {
     int maskLength = maskArray.length;
     if (maskLength > maskQWords)
-      log.debug("Compressing mask from length " + maskLength + " to length " + maskQWords);
+      log.debug("Compressing mask from length {} to length {}", maskLength, maskQWords);
     TPDMask mask = new TPDMask();
     if (maskLength != maskQWords)
       // this'll chop off the end if maskArray is longer than qWords
@@ -187,7 +187,9 @@ public final class TPDMask implements Serializable, Cloneable {
 
   @Override
   public String toString() {
-    return stringEncoded();
+    // Note: printing "[empty]" is not the same as printing "0"
+    // empty is a special mask and one has to be careful not to mutate it for example
+    return this == TPDMask.empty ? "[empty]" : stringEncoded();
   }
 
   public boolean empty() {

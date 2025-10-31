@@ -122,7 +122,9 @@ class BuildArtifactComparator(
 
     log.info("Comparing fingerprints...")
     val fingerprints = TimingUtil.timeThis("compare fingerprints") {
-      Seq(FingerprintDirComparison(compilationPaths), FingerprintDirComparison(runconfPaths))
+      Seq(
+        FingerprintDirComparison(compilationPaths),
+        FingerprintDirComparison(paths = runconfPaths, throwOnMissing = false))
     }
 
     log.info("Calculating LHS and RHS jar hashes...")

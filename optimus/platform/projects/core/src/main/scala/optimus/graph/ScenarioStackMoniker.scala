@@ -53,7 +53,7 @@ private class ActualScenarioStackMoniker(
     while (i >= 0) {
       val scenario = inputScenarios(i)
       val proposedCacheID = SSCacheID.newUninitialized(scenario)
-      // fixup our _cacheID to share with this engine's cache.
+      // fix-up our _cacheID to share with this engine's cache.
       val newCacheID =
         if (Settings.reuseCacheOnRemoteCalls && !isRecordingTweakUsage) {
           val cacheKey = new SSCacheKey(ss._cacheID.id, scenario)

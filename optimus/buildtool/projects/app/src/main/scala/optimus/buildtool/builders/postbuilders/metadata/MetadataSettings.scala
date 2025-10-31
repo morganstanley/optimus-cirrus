@@ -24,12 +24,12 @@ final case class MetadataSettings(
     extraLibs: Seq[DependencyDefinition],
     webDependencyResolver: WebDependencyResolver,
     leafDir: RelativePath,
+    installDir: Directory,
     installVersion: String,
     obtVersion: String,
     javaVersion: String,
     buildId: String,
     generatePoms: Boolean,
-    dockerDir: Directory,
     images: Set[DockerImage]
 )
 
@@ -40,7 +40,6 @@ object MetadataSettings {
       extraLibs: Seq[DependencyDefinition],
       webDependencyResolver: WebDependencyResolver,
       installDir: Directory,
-      dockerDir: Directory,
       installVersion: String,
       leafDir: RelativePath,
       buildId: String,
@@ -55,12 +54,12 @@ object MetadataSettings {
       extraLibs,
       webDependencyResolver,
       leafDir,
+      installDir,
       installVersion,
       obtVersion,
       javaVersion,
       buildId,
       generatePoms,
-      dockerDir,
       images
     )
   }

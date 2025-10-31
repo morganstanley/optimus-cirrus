@@ -53,6 +53,7 @@ final class TestplanInstaller(
 ) extends ComponentBatchInstaller
     with Log
     with CustomPassfailTestplanInstaller
+    with PyTestplanTestplanInstaller
     with PactContractTestplanInstaller
     with PythonTestplanInstaller {
 
@@ -203,6 +204,25 @@ final class TestplanInstaller(
               testType.testGroupsOpts.testModulesFileName
             )
           Seq(entry)
+        case ProgrammingLanguage.PyTestplan =>
+          val validBindings =
+            PyTestplanTestplanTemplate.requiredAdditionalBindings.forall(additionalBindings.contains)
+          if (!validBindings)
+            throw new IllegalArgumentException(
+              s"Not all valid bindings provided for ${testGroup.name}: ${PyTestplanTestplanTemplate.requiredAdditionalBindings
+                  .mkString(", ")}")
+          val entry =
+            createPyTestplanTestplanEntry(
+              testType.displayName,
+              testGroup.name,
+              testGroup.metaBundle,
+              testType.treadmillOptsFor(testGroup, testplanConfig),
+              additionalBindings,
+              testTasks,
+              Map(),
+              testType.testGroupsOpts.testModulesFileName
+            )
+          Seq(entry)
         case ProgrammingLanguage.PactContract =>
           // Special handling for pact contract testing - we need to work out if we are generating a test entry for
           // both consumer and provider, or just consumer, or just provider.  We do this by scanning the rest of the
@@ -298,25 +318,31 @@ final class TestplanInstaller(
       if (filteredTestData.nonEmpty) {
         val os = testType.testGroupsOpts.os
 
-        val (pythonTestData, unitTestData, pactContractTestData, customPassfailData) =
+        val (pythonTestData, unitTestData, pactContractTestData, customPassfailData, pyTestplanData) =
           filteredTestData.foldLeft(
             (
               Seq.empty[PythonTestplanEntry],
               Seq.empty[ScalaTestplanEntry],
               Seq.empty[PactContractTestplanEntry],
-              Seq.empty[CustomPassfailTestplanEntry])) {
-            case ((pythons, units, pacts, customPassfails), python: PythonTestplanEntry) =>
-              (pythons :+ python, units, pacts, customPassfails)
-            case ((pythons, units, pacts, customPassfails), unit: ScalaTestplanEntry) =>
-              (pythons, units :+ unit, pacts, customPassfails)
-            case ((pythons, units, pacts, customPassfails), pact: PactContractTestplanEntry) =>
-              (pythons, units, pacts :+ pact, customPassfails)
-            case ((pythons, units, pacts, customPassfails), customPassFail: CustomPassfailTestplanEntry) =>
-              (pythons, units, pacts, customPassfails :+ customPassFail)
+              Seq.empty[CustomPassfailTestplanEntry],
+              Seq.empty[PyTestplanTestplanEntry])) {
+            case ((pythons, units, pacts, customPassfails, pyTestplans), python: PythonTestplanEntry) =>
+              (pythons :+ python, units, pacts, customPassfails, pyTestplans)
+            case ((pythons, units, pacts, customPassfails, pyTestplans), unit: ScalaTestplanEntry) =>
+              (pythons, units :+ unit, pacts, customPassfails, pyTestplans)
+            case ((pythons, units, pacts, customPassfails, pyTestplans), pact: PactContractTestplanEntry) =>
+              (pythons, units, pacts :+ pact, customPassfails, pyTestplans)
+            case ((pythons, units, pacts, customPassfails, pyTestplans), customPassFail: CustomPassfailTestplanEntry) =>
+              (pythons, units, pacts, customPassfails :+ customPassFail, pyTestplans)
+            case ((pythons, units, pacts, customPassfails, pyTestplans), pyTestplan: PyTestplanTestplanEntry) =>
+              (pythons, units, pacts, customPassfails, pyTestplans :+ pyTestplan)
           }
 
         val customPassfailTestplans =
           if (customPassfailData.nonEmpty) generateCustomPassfailTestplan(customPassfailData) else Seq.empty
+
+        val pyTestplanTestplans =
+          if (pyTestplanData.nonEmpty) generatePyTestplanTestplan(pyTestplanData) else Seq.empty
 
         val pythonQualityTestplans =
           if (pythonTestData.nonEmpty) generatePythonQualityTestplan(os, pythonTestData) else Seq.empty
@@ -328,10 +354,14 @@ final class TestplanInstaller(
           if (unitTestData.nonEmpty) Seq(generateTestplan(unitTestData, templatesPerOS(os))) else Seq.empty
 
         val testplan =
-          TestPlan.merge(customPassfailTestplans ++ pactContractTestplans ++ pythonQualityTestplans ++ unitTestplans)
+          TestPlan.merge(
+            customPassfailTestplans ++ pyTestplanTestplans ++ pactContractTestplans ++ pythonQualityTestplans ++ unitTestplans)
 
         val testModules =
-          unitTestData.map(_.moduleName).distinct.sorted ++ pactContractTestData.map(_.moduleName).distinct.sorted
+          unitTestData.map(_.moduleName).distinct.sorted ++ pactContractTestData
+            .map(_.moduleName)
+            .distinct
+            .sorted ++ pyTestplanData.map(_.moduleName).distinct.sorted
 
         Some(TestData(testType, testplan, testModules))
       } else None

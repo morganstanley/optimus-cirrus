@@ -40,7 +40,6 @@ main {
       msjava.rr-protobufutils,
       msjava.rr-zkapi,
       ossjava.guava,
-      ossjava.iharder-base64,
       ossjava.jsr305-annotations,
       ossjava.protobuf-java,
       ossjava.slf4j.bridges,
@@ -52,7 +51,7 @@ main {
   runtime.libs = [
     msjava.rr-dbpool,
     msjava.rr-directory,
-    mskdb.kjava,
+    mskdb.rr-kjava,
     ossjava.args4j,
     ossjava.commons-io,
     sam.zookeeper

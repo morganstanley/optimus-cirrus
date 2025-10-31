@@ -58,7 +58,7 @@ final class Scenario private[optimus] (
 
   def topLevelTweaks: Seq[Tweak] = _topLevelTweaks
 
-  /** true if any of the tweaks are convertible to byValue */
+  /** true if any of the tweaks are convertible to byValue (not already by value and not those that need keys) */
   private[optimus] def hasReducibleToByValueTweaks: Boolean = (flags & ScenarioFlags.hasReducibleToByValueTweaks) != 0
 
   private[optimus] def hasPossiblyRedundantTweaks: Boolean = (flags & ScenarioFlags.hasPossiblyRedundantTweaks) != 0
@@ -70,7 +70,7 @@ final class Scenario private[optimus] (
   private[optimus] def hasTweaksWithUndeclaredDependencies: Boolean =
     (flags & ScenarioFlags.hasUndeclaredDependenciesInTweaks) != 0
 
-  /** true if we have tweaks that have when clause */
+  /** True if Scenario has tweaks with `when` clause(s). <br>Note: key extractors are not considered `when` predicates */
   private[optimus] def hasWhenPredicatedTweaks: Boolean = (flags & ScenarioFlags.hasWhenPredicatedTweaks) != 0
 
   /** true to compare tweaks as set */
@@ -85,7 +85,9 @@ final class Scenario private[optimus] (
   private[optimus] def flagsWithoutUnresolved: Int = flags & ~ScenarioFlags.hasUnresolvedOrMarkerTweaks
   private def flagsWithDisableRemoveRedundant: Int = flags | ScenarioFlags.disableRemoveRedundant
 
-  def keepRedundantTweaks: Boolean = (flags & ScenarioFlags.disableRemoveRedundant) != 0
+  private[optimus] def keepRedundantTweaks: Boolean = (flags & ScenarioFlags.disableRemoveRedundant) != 0
+  private[optimus] def optimizeDeepStacks: Boolean = (flags & ScenarioFlags.optimizeDeepStacks) != 0
+  private[optimus] def dontCache: Boolean = (flags & ScenarioFlags.dontCache) != 0
 
   /**
    * this is definitely not the function you are looking for
@@ -97,6 +99,17 @@ final class Scenario private[optimus] (
    */
   def disableRemoveRedundant(): Scenario =
     new Scenario(_topLevelTweaks, nestedScenarios.map(_.disableRemoveRedundant()), flagsWithDisableRemoveRedundant)
+
+  /** Return a new Scenario that when applied (used in given) will optimize (try to flatten lookups) in deep stacks */
+  def favorDeepStackOptimization(): Scenario =
+    new Scenario(
+      _topLevelTweaks,
+      nestedScenarios.map(_.favorDeepStackOptimization()),
+      flags | ScenarioFlags.optimizeDeepStacks)
+
+  /** Return a new Scenario that when applied (used in given) will not be cached */
+  def favorNotCaching(): Scenario =
+    new Scenario(_topLevelTweaks, nestedScenarios.map(_.favorNotCaching()), flags | ScenarioFlags.dontCache)
 
   private[optimus] var _createdAt: Exception = _
   private[optimus] def createdAtAsString: String =
@@ -334,7 +347,7 @@ final class Scenario private[optimus] (
         // optimization so it's fine if it is racy.
         //
         // The main danger here would be reordering. Is it possible that we end up writing this._lEP before our equality
-        // succeeded (optimistically), thereby allowing another thread to write that._LEP and fullfill our optimistic
+        // succeeded (optimistically), thereby allowing another thread to write that._LEP and fulfill our optimistic
         // read?
         //
         // No! https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.4.8
@@ -459,7 +472,7 @@ object Scenario {
               s"To see full details of the tweaks, set -D${Settings.ShowDuplicateInstanceTweakValuesProp}=true and " +
                 s"-D${DiagnosticSettings.TRACE_TWEAKS}=true. "
           val ex = new IllegalArgumentException(
-            s"$messagePrefix: Conflicting instance tweaks provided for node '${pinfo.fullName()}'. " +
+            s"$messagePrefix: Conflicting instance tweaks provided for node '${pinfo.fullName}'. " +
               tweakValues +
               "See ConflictingTweaks.md for guidance. ")
           if (Settings.throwOnDuplicateInstanceTweaks) throw ex

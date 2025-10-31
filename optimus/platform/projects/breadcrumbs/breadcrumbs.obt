@@ -24,7 +24,6 @@ main {
       msjava.rr-zkapi,
       ossjava.args4j,
       ossjava.guava,
-      ossjava.iharder-base64,
       ossjava.jackson2.module-scala,
       ossjava.jsr305-annotations,
       ossjava.logback,

@@ -35,5 +35,11 @@ public class ScenarioFlags {
 
   public static final int unorderedTweaks = 1 << 6;
 
-  public static final int markedForDebugging = 1 << 7;
+  /** Hint to optimize deep stacks by flattening lookup of deep stacks */
+  public static final int optimizeDeepStacks = 1 << 7;
+
+  /** Hint to tell the system to avoid cache lookups for the cacheID itself */
+  public static final int dontCache = 1 << 8;
+
+  public static final int markedForDebugging = 1 << 9;
 }

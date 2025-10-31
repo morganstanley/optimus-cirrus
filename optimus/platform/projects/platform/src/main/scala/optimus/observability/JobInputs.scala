@@ -13,7 +13,6 @@ package optimus.observability
 
 import optimus.graph.JobForwardingPluginTagKey
 import optimus.graph.JobNonForwardingPluginTagKey
-import optimus.graph.JobTweakExtractor
 import optimus.platform._
 import optimus.platform.inputs.ProcessState
 import optimus.platform.inputs.loaders.FoldedNodeInput

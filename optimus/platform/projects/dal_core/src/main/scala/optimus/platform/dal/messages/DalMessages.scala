@@ -13,12 +13,13 @@ package optimus.platform.dal.messages
 
 import optimus.platform._
 import optimus.platform.dal.NotificationStream
+import optimus.platform.dal.NotificationStreamCallback
+import optimus.platform.dal.messages.MessagesEvent.StreamErrorEvent
+import optimus.platform.dsi.bitemporal.DirectMessagesNotificationResult
 
 import java.time.Instant
 
 trait DalMessages {
-  import DalMessages._
-
   @async def createMessagesStream(
       streamId: String,
       subscriptions: Set[MessagesSubscription],
@@ -28,6 +29,9 @@ trait DalMessages {
   ): MessagesNotificationStream
 }
 
-object DalMessages {
-  trait MessagesNotificationStream extends NotificationStream[MessagesSubscription, String]
+trait MessagesNotificationStream extends NotificationStream[MessagesSubscription, String] {
+  private[optimus] def commitStream(commitIds: Seq[Long]): Unit
 }
+
+trait MessagesNotificationCallback
+    extends NotificationStreamCallback[MessagesEvent.GlobalEvent, MessagesEvent.StreamEvent, String]

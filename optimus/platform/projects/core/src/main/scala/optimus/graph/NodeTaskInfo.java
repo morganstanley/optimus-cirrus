@@ -303,7 +303,7 @@ public class NodeTaskInfo {
     if (setPolicy) {
       if (Settings.schedulerAsserts && policy != requestedPolicy) {
         OGScheduler.log.debug(
-            "Requested policy was " + requestedPolicy + " but actually set " + policy);
+            "Requested policy was {} but actually set {}", requestedPolicy, policy);
       }
     }
   }
@@ -1011,7 +1011,7 @@ public class NodeTaskInfo {
     if (externallyConfigured) {
       NodeCacheInfo.log()
           .javaLogger()
-          .warn(api + " for " + this + " ignored because optconf is in effect");
+          .warn("{} for {} ignored because optconf is in effect", api, this);
     }
     return externallyConfigured;
   }
@@ -1759,8 +1759,7 @@ public class NodeTaskInfo {
    */
   public static final NodeTaskInfo Default = userDefined("[default]", 0);
 
-  private static final HashMap<String, NodeTaskInfo> customNodeTaskInfoMap =
-      new HashMap<String, NodeTaskInfo>();
+  private static final HashMap<String, NodeTaskInfo> customNodeTaskInfoMap = new HashMap<>();
   private static final NodeTaskInfo outOfIndexNodeTaskInfo =
       userDefined("[OUT_OF_INDEX_CUSTOM_FRAME]", 0);
 

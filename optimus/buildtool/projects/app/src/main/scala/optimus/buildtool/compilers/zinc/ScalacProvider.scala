@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.compilers.zinc
 
+import coursier.core.Classifier
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.compilers.Task
 import optimus.buildtool.compilers.zinc.ScalacProvider.compilerBridge
@@ -18,6 +19,7 @@ import optimus.buildtool.compilers.zinc.ScalacProvider.sbtBridgeName
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.LocalDefinition
+import optimus.buildtool.config.PublicationSettings
 import optimus.buildtool.config.ScalaVersion
 import optimus.buildtool.files.Directory
 import sbt.internal.inc.AnalyzingCompiler
@@ -181,21 +183,19 @@ final class LegacyScalacProviderImpl(
     name = s"${compilerBridge}_${scalaVersionConfig.scalaMajorVersion}",
     version = ScalacProvider.zincVersion,
     kind = LocalDefinition,
-    isMaven = true
+    isMaven = true,
+    publicationSettings = PublicationSettings(classifier = Some(Classifier.sources.value))
   )
 
-  // After protobuf changes we will be able to specify that we just need sources here
   @node private def doCoursierZincResolve(zinc: DependencyDefinition): Seq[JarAsset] = {
     val coursierResult =
       dependencyResolver.resolveDependencies(DependencyDefinitions(Seq(zinc), Nil))
     val depCopied =
       coursierResult.resolvedClassFileArtifacts.apar.map(dependencyCopier.atomicallyDepCopyClassFileArtifactsIfMissing)
 
-    // MIGRATE TO THE SAME SOLUTION AS PROTOC
     depCopied.collect {
-      case artifact: ExternalClassFileArtifact if artifact.source.exists(_.name.contains(compilerBridge)) =>
-        artifact.source.get
-      case other => other.file
+      case artifact: ExternalClassFileArtifact => artifact.source.get
+      case other                               => other.file
     }
   }
 

@@ -1532,7 +1532,7 @@ public abstract class NodeTask extends NodeAwaiter
     if (nThrown == null) nThrown = 0;
     else if (nThrown > Settings.maxTracedExceptionsPerClass) return;
     else if (nThrown == Settings.maxTracedExceptionsPerClass)
-      log.warn("No longer capturing node traces on exception for " + cls.getName());
+      log.warn("No longer capturing node traces on exception for {}", cls.getName());
 
     exceptionThrowerCache.put(cls, nThrown + 1);
 
@@ -1562,7 +1562,7 @@ public abstract class NodeTask extends NodeAwaiter
       String nodeTrace = sb.toString();
       nodeTraceStringMap.put(ex, nodeTrace);
       if (Settings.dumpNodeTraceOnException && !(ex instanceof FlowControlException)) {
-        log.error("Node evaluation resulted in exception: " + ex + "\n" + nodeTrace);
+        log.error("Node evaluation resulted in exception: {}\n{}", ex, nodeTrace);
       }
     }
   }
@@ -1971,7 +1971,7 @@ public abstract class NodeTask extends NodeAwaiter
           }
           if (tsk.tryToRecoverFromCycle(mask, eq)) { // Note: this takes additional locks
             cycleIsUnrecoverable = false;
-            log.warn("Recovering from cycle on " + tsk.getClass().getSimpleName());
+            log.warn("Recovering from cycle on {}", tsk.getClass().getSimpleName());
             MonitoringBreadcrumbs$.MODULE$.sendCycleRecoveryCrumb(tsk, sb.toString());
             break;
           }

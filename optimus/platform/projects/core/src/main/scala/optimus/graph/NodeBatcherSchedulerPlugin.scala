@@ -28,22 +28,12 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 import msjava.slf4jutils.scalalog.getLogger
-import scala.collection.mutable.ArrayBuffer
-
-/**
- * case class to represent the result of BNode.tryToSchedule
- * @param shouldNotRegisterBackToOoWL : it did try to prepare for scheduling, if true the batcher does not have to subscribe again to the OutOfWorkListener later
- * @param shouldEnqueue : the BNode will have to be enqueued on the scheduler
- */
-private[graph] final case class PrepareForSchedulingOutput(shouldNotRegisterBackToOoWL: Boolean, shouldEnqueue: Boolean)
 
 /**
  * Base class for a quick implementation of "batching" nodes T is result type of individual node NodeT is type of the
  * node created to @node def ...
  */
-abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
-    extends SchedulerPlugin
-    with OutOfWorkListener {
+abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] extends SchedulerPlugin {
   batcher =>
 
   type GroupKeyT >: Null <: AnyRef
@@ -56,7 +46,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
    * batches when the graph scheduler runs out of work. Applications that are very latency sensitive or that encounter
    * hangs when using multiple independent graph schedulers might benefit from changing this value.
    */
-  override def mustCallDelay: Long = Settings.defaultBatcherMustCallDelay
+  def mustCallDelay: Long = Settings.defaultBatcherMustCallDelay
 
   /**
    * Minimum time in millis that we will wait for new elements even if the graph has completely ran out of work.
@@ -66,7 +56,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
    * avoidable delays on every batched call. UI applications where we are usually stalling while waiting for user input
    * can benefit from setting this to "debounce" expensive batchers under fast user action.
    */
-  override def mustWaitDelay: Long = Settings.defaultBatcherMustWaitDelay
+  def mustWaitDelay: Long = Settings.defaultBatcherMustWaitDelay
 
   /**
    * By default, this is max number of nodes to batch. By overriding getNodeWeight you effectively turning this value
@@ -85,7 +75,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
   protected def getNodeWeight$queued(v: NodeT): NodeFuture[Int] = null
 
   /** Batch can report the number of outstanding nodes to batch */
-  override def limitTag: PluginTagKey[AtomicInteger] = null
+  protected def getLimitTag: PluginTagKey[AtomicInteger] = null
 
   /**
    * This function needs to be very very quick and non-blocking
@@ -133,16 +123,19 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
 
   final protected class BNode(
       override val priority: Int,
-      val useScope: Boolean,
-      val batchScopeKeys: Set[BatchScopeKey],
+      useScope: Boolean,
+      batchScopeKeys: Set[BatchScopeKey],
       initState: State,
-      grpKey: GroupKeyT,
-      scenarioStack: ScenarioStack)
-      extends CompletableNode[Seq[T]] {
+      grpKey: GroupKeyT)
+      extends CompletableNode[Seq[T]]
+      with OutOfWorkListener {
+
+    override def mustCallDelay(): Long = batcher.mustCallDelay
+    override def mustWaitDelay(): Long = batcher.mustWaitDelay
+
     // Set an enqueuer arbitrarily from the first node in the batch, so at least something shows up
     // in profiling.  It's misleading surprisingly infrequently.
     initState.nodes.headOption.foreach(OGTrace.enqueue(_, this, false))
-    attach(scenarioStack)
 
     def this(
         priority: Int,
@@ -150,13 +143,8 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
         batchScopeKeys: Set[BatchScopeKey],
         node: NodeT,
         groupKeyT: GroupKeyT) = {
-      this(
-        priority,
-        useScope,
-        batchScopeKeys,
-        State(count = 1, weight = 1, List(node)),
-        groupKeyT,
-        node.scenarioStack().asSiStack)
+      this(priority, useScope, batchScopeKeys, State(count = 1, weight = 1, List(node)), groupKeyT)
+      attach(node.scenarioStack().asSiStack)
     }
 
     override def executionInfo: NodeTaskInfo = batcher.propertyInfo
@@ -170,9 +158,11 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
     override def isClonable: Boolean = false
     override def reset(): Unit = throw new GraphInInvalidState("BNode doesn't support safe cloning/reset")
 
+    override def limitTag: AnyRef = getLimitTag
+
     def notAcceptingNewNodes: Boolean = state.get eq null
 
-    def isReady(outstandingTasks: JArrayList[NodeTask]): Boolean = {
+    override def ready(outstandingTasks: JArrayList[NodeTask]): Boolean = {
       if (Settings.useScopedBatcher && useScope) {
         val cstate = state.get
         if ((cstate ne null) && cstate.count > 0) {
@@ -191,7 +181,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
       } else true
     }
 
-    def checkForNewWork(scheduler: Scheduler): Int = {
+    override def checkForNewWork(scheduler: Scheduler): Int = {
       if (prioritiseConcurrency) {
         val cstate = state.get
         if ((cstate ne null) && cstate.count > 0) {
@@ -239,25 +229,17 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
      *        distributedNode(v)  // [2]
      * }}}
      */
-    def tryToPrepareForScheduling(
-        scheduler: Scheduler,
-        outstandingTasks: JArrayList[NodeTask]): PrepareForSchedulingOutput = {
+    override def onGraphStalled(scheduler: Scheduler, outstandingTasks: JArrayList[NodeTask]): Unit = {
       val curr = state.get
       val batchSize = if (curr ne null) curr.count else 0
       verifyExpectedState(scheduler, batchSize)
-
-      if (isReady(outstandingTasks)) {
-        PrepareForSchedulingOutput(shouldNotRegisterBackToOoWL = true, shouldEnqueue = prepareForScheduling())
-      } else if (batchSize > 0)
-        PrepareForSchedulingOutput(
-          shouldNotRegisterBackToOoWL = false,
-          shouldEnqueue = false
-        ) // should be added back to the queue
-      else
-        PrepareForSchedulingOutput(shouldNotRegisterBackToOoWL = true, shouldEnqueue = false)
+      if (ready(outstandingTasks))
+        tryToSchedule(scheduler)
+      else if (batchSize > 0)
+        scheduler.addOutOfWorkListener(this) // Add ourselves back to queue
     }
 
-    def prepareForScheduling(): Boolean = {
+    def tryToSchedule(eq: EvaluationQueue): Unit = {
       // It's much safer to rely on the forward chain.
       // Note: this is possible to write to a batch node that is careful to be safe from any thread.
       // If this becomes needed we can customize and optionally turn off this call poisonCausality()
@@ -287,9 +269,8 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
           waiter.setWaitingOn(this)
           awaitingNodes = awaitingNodes.tail
         }
-        true
-      } else
-        false
+        eq.enqueue(null, this)
+      }
     }
 
     /**
@@ -442,6 +423,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]]
       }
     }
   }
+
   protected def getBatchScopeKeys(v: NodeT): Set[BatchScopeKey] = NodeBatcherSchedulerPluginBase.defaultBatchScopeKeys
 
   @nodeSync
@@ -518,7 +500,7 @@ object NodeBatcherSchedulerPluginBase {
 }
 
 abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
-    override val priority: Int,
+    val priority: Int,
     val scopedBatching: Boolean)
     extends NodeBatcherSchedulerPluginBase[T, NodeT] {
   @volatile
@@ -553,15 +535,15 @@ abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
         }
       }
       if (registerCallback)
-        ec.scheduler.addOutOfWorkListener(this)
+        ec.scheduler.addOutOfWorkListener(curBatch)
       else {
         val state = curBatch.addNode(node, weight)
         if (state ne null) {
           // addNode was not able to add `v` to the existing batch...
           if (state.count != 1) {
-            val nbatch = new BNode(0, false, batchScopeKeys, state, null, ec.scenarioStack.asSiStack)
-            if (nbatch.prepareForScheduling())
-              ec.enqueue(null, nbatch)
+            val nbatch = new BNode(0, false, batchScopeKeys, state, null)
+            nbatch.attach(ec.scenarioStack.asSiStack)
+            nbatch.tryToSchedule(ec)
           } else {
             retry = true
           }
@@ -570,31 +552,13 @@ abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
     }
     true
   }
-
-  override def checkForNewWork(scheduler: Scheduler): Int = {
-    batch.checkForNewWork(scheduler)
-  }
-
-  override def ready(outstandingTasks: JArrayList[NodeTask]): Boolean = {
-    batch.isReady(outstandingTasks)
-  }
-
-  override def onGraphStalled(scheduler: Scheduler, outstandingTasks: JArrayList[NodeTask]): Unit = {
-    val tryScheduleOutput = batch.tryToPrepareForScheduling(scheduler, outstandingTasks)
-
-    if (!tryScheduleOutput.shouldNotRegisterBackToOoWL)
-      scheduler.addOutOfWorkListener(this)
-
-    if (tryScheduleOutput.shouldEnqueue)
-      scheduler.enqueue(null, batch)
-  }
 }
 
 /**
  * Base class for implementing a grouping batcher Usually one would override run with either @node or a regular def
  */
 abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]](
-    override val priority: Int,
+    val priority: Int,
     val scopedBatching: Boolean)
     extends NodeBatcherSchedulerPluginBase[T, NodeT] {
   type GroupKeyT >: Null <: AnyRef
@@ -726,27 +690,25 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
       } else {
         if (state.count == 1 && (weight < getGroupMaxBatchSize(grpKey, node))) {
           // First time with this grpKey OR failed to add to previously scheduled batch node
-          batch = new BNode(priority, scopedBatching, batchScopeKeys, state, grpKey, ss)
+          batch = new BNode(priority, scopedBatching, batchScopeKeys, state, grpKey)
           batches.put(grpKey, batch)
           batch
         } else {
           if (batch ne null) batches.remove(grpKey)
-          new BNode(-1, false, batchScopeKeys, state, grpKey, ss)
+          new BNode(-1, false, batchScopeKeys, state, grpKey)
         }
       }
     }
 
     // Enqueue outside the lock
     if (newBatch ne null) {
-      if (newBatch.priority == -1) {
-        if (newBatch.prepareForScheduling())
-          eq.enqueue(null, newBatch)
-      } else eq.scheduler.addOutOfWorkListener(this)
-
+      newBatch.attach(ss)
+      if (newBatch.priority == -1) newBatch.tryToSchedule(eq)
+      else eq.scheduler.addOutOfWorkListener(newBatch)
     }
 
     // Allow for semi-manual control of batcher nodes
-    val limitType: PluginTagKey[AtomicInteger] = limitTag
+    val limitType: PluginTagKey[AtomicInteger] = getLimitTag
     if (limitType ne null) {
       val limit = node.scenarioStack().findPluginTag[AtomicInteger](limitType)
       if (limit.isDefined) {
@@ -756,50 +718,6 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
         }
       }
     }
-  }
-
-  override def checkForNewWork(scheduler: Scheduler): Int = {
-    batches.synchronized {
-      var batchesMaxIntValue = 0
-      batches
-        .values()
-        .forEach(batch => {
-          val batchValue = batch.checkForNewWork(scheduler)
-          if (batchValue != 0 && batchesMaxIntValue != Integer.MAX_VALUE) batchesMaxIntValue = batchValue
-        })
-      batchesMaxIntValue
-    }
-  }
-
-  override def ready(outstandingTasks: JArrayList[NodeTask]): Boolean = {
-    batches.synchronized {
-      var isReady = false
-      batches.values.forEach(batch => isReady |= batch.isReady(outstandingTasks))
-      isReady
-    }
-
-  }
-
-  override def onGraphStalled(scheduler: Scheduler, outstandingTasks: JArrayList[NodeTask]): Unit = {
-
-    val batchesToEnqueueResult: ArrayBuffer[BNode] =
-      batches.synchronized {
-        val batchesToBeEnqueued = new ArrayBuffer[BNode]()
-        var shouldRegisterBack = false
-        batches
-          .values()
-          .forEach(batch => {
-            val tryScheduleOutput = batch.tryToPrepareForScheduling(scheduler, outstandingTasks)
-            shouldRegisterBack |= !tryScheduleOutput.shouldNotRegisterBackToOoWL
-            if (tryScheduleOutput.shouldEnqueue)
-              batchesToBeEnqueued += batch
-          })
-        if (shouldRegisterBack)
-          scheduler.addOutOfWorkListener(this)
-        batchesToBeEnqueued
-      }
-
-    batchesToEnqueueResult.foreach(scheduler.enqueue(null, _))
   }
 }
 

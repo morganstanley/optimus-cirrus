@@ -40,7 +40,9 @@ import optimus.utils.datetime.ZoneIds
 import scala.annotation.varargs
 import scala.collection.immutable.HashMap
 import optimus.scalacompat.collection._
+import optimus.utils.OptimusStringUtils
 
+import java.util.Base64
 import java.util.Objects
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -162,20 +164,6 @@ object CrumbNodeType extends Enumeration {
     Value
 }
 
-class NameCrumb(uuid: ChainedID, source: Crumb.Source, val name: String, val tpe: CrumbNodeType.CrumbNodeType)
-    extends Crumb(uuid, source) {
-  def this(uuid: ChainedID, name: String, tpe: CrumbNodeType.CrumbNodeType) = this(uuid, Crumb.OptimusSource, name, tpe)
-  // Equality ignores time
-  override def toString = s"$baseString, name=$name, type=$tpe)"
-  override def equals(that: Any): Boolean =
-    that match {
-      case that: NameCrumb => uuid == that.uuid && name == that.name && tpe == that.tpe
-      case _               => false
-    }
-  override def hashCode: Int = uuid.hashCode ^ name.hashCode ^ tpe.hashCode()
-  override def stringProperties: Map[String, String] = Map("name" -> name, "nodeType" -> tpe.toString)
-}
-
 @SerialVersionUID(2016010700L)
 object EdgeType extends Enumeration {
   type EdgeType = Value
@@ -207,6 +195,8 @@ class PropertiesCrumb(
     this(uuid, Crumb.OptimusSource, m, jsonProperties)
   def this(uuid: ChainedID, m: Map[String, String], jsonProperties: Map[String, JsValue], hints: Set[CrumbHint]) =
     this(uuid, Crumb.OptimusSource, m, jsonProperties, hints)
+
+  def contains(p: Properties.Key[_]): Boolean = jsonProperties.contains(p.name)
 
   private def mapString =
     cleanProperties.filter(!_._1.startsWith("_")).toSeq.sortBy(_._1).map(e => s"${e._1} -> ${e._2}").mkString(", ")
@@ -306,19 +296,6 @@ private[breadcrumbs] object MetaDataType extends Enumeration {
   val App: crumbs.MetaDataType.Value = Value
 }
 
-private[optimus] class AppMetadataPropertiesCrumb(
-    uuid: ChainedID,
-    source: Crumb.Source,
-    m: Map[String, String],
-    jsonProperties: Map[String, JsValue] = Map.empty,
-    hints: Set[CrumbHint] = Set.empty[CrumbHint])
-    extends PropertiesCrumb(
-      uuid,
-      source,
-      m,
-      jsonProperties ++ Properties.jsMap(Properties._meta -> MetaDataType.App),
-      hints)
-
 class LogPropertiesCrumb(
     uuid: ChainedID,
     source: Crumb.Source,
@@ -389,59 +366,6 @@ object LogPropertiesCrumb {
     new LogPropertiesCrumb(uuid, Map.empty[String, String], Properties.jsMap(elems: _*) ++ location.m, hints)
 }
 
-final class LogCrumb(
-    val level: String,
-    uuid: ChainedID,
-    source: Crumb.Source,
-    val msg: String,
-    hints: Set[CrumbHint] = Set.empty[CrumbHint])
-    extends LogPropertiesCrumb(
-      uuid,
-      source,
-      Map.empty,
-      Properties.jsMap(Properties.logLevel -> level, Properties.logMsg -> msg),
-      hints) {
-
-  def this(level: String, uuid: ChainedID, msg: String) = this(level, uuid, Crumb.OptimusSource, msg)
-  def this(level: String, uuid: ChainedID, msg: String, hints: Set[CrumbHint]) =
-    this(level, uuid, Crumb.OptimusSource, msg, hints)
-  override def toString = s"LogCrumb($prettyNow, $level, $uuid: $msg)"
-}
-
-object LogCrumb {
-  def info(uuid: ChainedID, source: Crumb.Source, msg: => String): Unit =
-    Breadcrumbs.info(uuid, new LogCrumb("INFO", _, source, msg))
-  def info(uuid: ChainedID, source: Crumb.Source, msg: => String, hints: Set[CrumbHint]): Unit =
-    Breadcrumbs.info(uuid, new LogCrumb("INFO", _, source, msg, hints))
-  def error(uuid: ChainedID, source: Crumb.Source, msg: => String): Unit =
-    Breadcrumbs.error(uuid, new LogCrumb("INFO", _, source, msg))
-  def error(uuid: ChainedID, source: Crumb.Source, msg: => String, hints: Set[CrumbHint]): Unit =
-    Breadcrumbs.error(uuid, new LogCrumb("INFO", _, source, msg, hints))
-  def warn(uuid: ChainedID, source: Crumb.Source, msg: => String): Unit =
-    Breadcrumbs.warn(uuid, new LogCrumb("WARN", _, source, msg))
-  def warn(uuid: ChainedID, source: Crumb.Source, msg: => String, hints: Set[CrumbHint]): Unit =
-    Breadcrumbs.warn(uuid, new LogCrumb("WARN", _, source, msg, hints))
-  def debug(uuid: ChainedID, source: Crumb.Source, msg: => String): Unit =
-    Breadcrumbs.debug(uuid, new LogCrumb("DEBUG", _, source, msg))
-  def debug(uuid: ChainedID, source: Crumb.Source, msg: => String, hints: Set[CrumbHint]): Unit =
-    Breadcrumbs.debug(uuid, new LogCrumb("DEBUG", _, source, msg, hints))
-  def trace(uuid: ChainedID, source: Crumb.Source, msg: => String): Unit =
-    Breadcrumbs.trace(uuid, new LogCrumb("TRACE", _, source, msg))
-  def trace(uuid: ChainedID, source: Crumb.Source, msg: => String, hints: Set[CrumbHint]): Unit =
-    Breadcrumbs.trace(uuid, new LogCrumb("TRACE", _, source, msg, hints))
-
-  def info(uuid: ChainedID, msg: => String, hints: Set[CrumbHint] = Set.empty[CrumbHint]): Unit =
-    info(uuid, OptimusSource, msg, hints)
-  def error(uuid: ChainedID, msg: => String, hints: Set[CrumbHint] = Set.empty[CrumbHint]): Unit =
-    error(uuid, OptimusSource, msg, hints)
-  def warn(uuid: ChainedID, msg: => String, hints: Set[CrumbHint] = Set.empty[CrumbHint]): Unit =
-    warn(uuid, OptimusSource, msg, hints)
-  def debug(uuid: ChainedID, msg: => String, hints: Set[CrumbHint] = Set.empty[CrumbHint]): Unit =
-    debug(uuid, OptimusSource, msg, hints)
-  def trace(uuid: ChainedID, msg: => String, hints: Set[CrumbHint] = Set.empty[CrumbHint]): Unit =
-    trace(uuid, OptimusSource, msg, hints)
-}
-
 object Crumb {
 
   object Headers {
@@ -464,8 +388,6 @@ object Crumb {
   private val count = new AtomicInteger(0)
   private def newLocator(): String = ChainedID.root.repr + "L" + count.incrementAndGet()
   private val log = LoggerFactory.getLogger("Crumbs")
-
-  import net.iharder.base64.Base64
 
   sealed trait CrumbFlag
   object CrumbFlag {
@@ -565,7 +487,7 @@ object Crumb {
       else {
         val payload = payloadIterator.next()
         log.trace(payload)
-        val bytes = Base64.decode(payload, Base64.GZIP)
+        val bytes = OptimusStringUtils.gzipDecode(Base64.getDecoder.decode(payload))
         val bis = new ByteArrayInputStream(bytes)
         val ois = new ObjectInputStream(bis)
         crumbIterator = new Iterator[Crumb] {

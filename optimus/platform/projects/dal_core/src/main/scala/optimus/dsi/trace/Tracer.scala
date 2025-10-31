@@ -15,14 +15,11 @@ import com.google.common.util.concurrent.AtomicDouble
 import com.google.common.util.concurrent.AtomicLongMap
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
-import optimus.breadcrumbs.crumbs.CrumbNodeType
-import optimus.breadcrumbs.crumbs.EdgeType
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.filter.CrumbFilter.DEFAULT_MAX_CRUMB_SIZE
 import optimus.dsi.trace.TraceBackEnd.BackEnd
 import optimus.dsi.trace.TraceIdentity.CacheIdentity
 import optimus.graph.DiagnosticSettings
-import optimus.graph.Edges
 import optimus.platform.dal.config.DalConfigurationContext
 import optimus.platform.dal.config.Host
 import optimus.platform.dsi.DalTraceCrumbSource
@@ -203,7 +200,6 @@ object Tracer {
 
       if (Breadcrumbs.collecting && traceRelevant(trace, durations, bcThreshold) && !tracesSeen.contains(trace)) {
         val childId = id.childId
-        Edges.ensureTracked(childId, id.chainedId, tracerName, CrumbNodeType.Trace, EdgeType.InvokedBy)
         val values: Map[String, String] = trace.event match {
           case _: ImpliesWallclockTiming => trace.values ++ wallclockPropertyValue
           case _                         => trace.values ++ aggregatePropertyValue

@@ -23,7 +23,6 @@ main.compile {
     optimus.async-profiler,
     ossjava.args4j,
     ossjava.guava,
-    ossjava.iharder-base64,
     ossjava.junit,
     ossjava.poi,
     ossjava.slf4j,

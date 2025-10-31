@@ -11,26 +11,22 @@
  */
 package optimus.profiler.ui
 
-import java.awt.Color
-import java.lang.reflect.Field
-import java.lang.reflect.Modifier
-import java.util.prefs.Preferences
-import javax.swing.table.TableCellRenderer
 import optimus.EntityAgent
 import optimus.core.CoreHelpers
 import optimus.debug.InstrumentationConfig
 import optimus.graph.AlreadyCompletedPropertyNode
-import optimus.graph.SourceLocator
 import optimus.graph.InstancePropertyTarget
 import optimus.graph.MutableSSCacheID
 import optimus.graph.NodeTask
 import optimus.graph.PredicatedPropertyTweakTarget
 import optimus.graph.RecordedTweakables
+import optimus.graph.SourceLocator
+import optimus.graph.TweakTemplate
 import optimus.graph.TweakNode
 import optimus.graph.TweakTreeNode
 import optimus.graph.diagnostics.DbgPreference
-import optimus.graph.diagnostics.SelectionFlags
 import optimus.graph.diagnostics.NPTreeNode
+import optimus.graph.diagnostics.SelectionFlags
 import optimus.graph.diagnostics.SelectionFlags.SelectionFlag
 import optimus.platform.NodeHash
 import optimus.platform.Scenario
@@ -43,7 +39,12 @@ import optimus.profiler.ui.NPTableRenderer.ValueWithTooltip
 import optimus.profiler.ui.ValueTreeTable.RowState
 import optimus.profiler.ui.common.JPopupMenu2
 
+import java.awt.Color
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 import java.util.Objects
+import java.util.prefs.Preferences
+import javax.swing.table.TableCellRenderer
 import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -153,6 +154,9 @@ class ValueViewRow(id: RowID, val values: Seq[ValueMaybe], val diffs: SelectionF
           else
             fields.put(RowID.ofString("Result"), node.resultObjectEvenIfIncomplete())
         }
+      case tweakTemplate: TweakTemplate =>
+        // Show compute generator for tweak templates
+        fields.put(RowID.ofString("template"), tweakTemplate.computeGenerator)
       case v if (v != null) && !ValueTreeTable.ignoreClasses.contains(v.getClass) =>
         ValueTreeTable.fieldExpander(v, fields)
       case _ => /* null or one of the ignored classes */
@@ -164,7 +168,7 @@ class ValueViewRow(id: RowID, val values: Seq[ValueMaybe], val diffs: SelectionF
     values.zipWithIndex.foreach {
       case (ValuePresent(v), i) =>
         extractValues(v, builder.column(i))
-      case ow => ()
+      case _ => ()
     }
     children = builder
       .result { row =>
@@ -234,14 +238,14 @@ class ValueViewRow(id: RowID, val values: Seq[ValueMaybe], val diffs: SelectionF
 object ValueTreeTable {
   private val pref = Preferences.userNodeForPackage(ValueTreeTable.getClass)
   private val MAX_TO_COMPARE = 5
-  val VALUE_TABLE_WIDTH = "valueTableWidth"
-  val NAME_COLUMN_WIDTH = "nameColumnWidth"
+  private val VALUE_TABLE_WIDTH = "valueTableWidth"
+  private val NAME_COLUMN_WIDTH = "nameColumnWidth"
 
   private[ui] val showRawValues = DbgPreference("showRawValues", pref)
   private[ui] var showInternalValues = DbgPreference("showInternalValues", pref)
   private[ui] var showRawNames = DbgPreference("showRawNames", pref)
 
-  def hidePackage(cls: Class[_]): Boolean = {
+  private def hidePackage(cls: Class[_]): Boolean = {
     if (ValueTreeTable.showInternalValues.get) false
     else {
       val packageName = cls.getPackage.getName
@@ -271,7 +275,7 @@ object ValueTreeTable {
       }
       .result()
 
-  type CustomExpanderF[-T] = (T, ColumnBuilder) => Unit
+  private[ui] type CustomExpanderF[-T] = (T, ColumnBuilder) => Unit
   private[ui] val customExpander: ClassDispatcher[CustomExpanderF] = ClassDispatcher
     .newBuilder[CustomExpanderF]
     .put[NodeHash] { (nh, fields) =>
@@ -307,7 +311,7 @@ object ValueTreeTable {
       fields.put(RowID.ofString("tweakTemplate"), tweak.tweakTemplate)
     })
     .put[TweakNode[_]]((tn, fields) => {
-      fields.put(RowID.ofString("computeGenerator"), new ComputeGenViewer(tn.computeGenerator))
+      fields.put(RowID.ofString("tweak"), tn.tweak)
     })
     .put[InstancePropertyTarget[_, _]]((ipt, fields) => {
       fields.put(RowID.ofString("key"), ipt.key)
@@ -344,7 +348,7 @@ object ValueTreeTable {
     }
   }
 
-  def scenarioStackExpander(ss: ScenarioStack, fields: ColumnBuilder): Unit = {
+  private def scenarioStackExpander(ss: ScenarioStack, fields: ColumnBuilder): Unit = {
     if ((ss.topScenario ne null) && !ss.topScenario.isEmptyShallow)
       scenarioExpander(ss, ss.topScenario, fields, includeNested = false)
     else
@@ -354,16 +358,20 @@ object ValueTreeTable {
       fields.put(RowID.ofScenarioStack(ss.parent), ss.parent)
   }
 
-  def scenarioExpander(ss: ScenarioStack, scenario: Scenario, fields: ColumnBuilder, includeNested: Boolean): Unit = {
+  private def scenarioExpander(
+      ss: ScenarioStack,
+      scenario: Scenario,
+      fields: ColumnBuilder,
+      includeNested: Boolean): Unit = {
     tweakExpander(ss, scenario.topLevelTweaks, fields)
     if (includeNested && scenario.nestedScenarios.nonEmpty)
       fields.put(RowID.OfScenario, scenario.withNestedAsScenario)
   }
 
-  def tweakExpander(ss: ScenarioStack, tweaks: Iterable[Tweak], fields: ColumnBuilder): Unit =
+  private def tweakExpander(ss: ScenarioStack, tweaks: Iterable[Tweak], fields: ColumnBuilder): Unit =
     DebuggerUI.underStackOf(ss) {
       for (twk <- tweaks)
-        fields.put(RowID.ofNode(twk.target, false), twk.tweakTemplate)
+        fields.put(RowID.ofNode(twk.target, defOpen = false), twk.tweakTemplate)
     }
 
   // helper to compare arrays properly in diff view
@@ -427,8 +435,8 @@ object ValueTreeTable {
           }
 
           val marked = value match {
-            case n: NodeTask if (MarkObject.inMarkedObjects(n)) => MarkObject.formatMarkedObject(n, asStr)
-            case _                                              => asStr
+            case n: NodeTask if MarkObject.inMarkedObjects(n) => MarkObject.formatMarkedObject(n, asStr)
+            case _                                            => asStr
           }
 
           ValueWithTooltip(marked, row.tooltipText)
@@ -438,9 +446,13 @@ object ValueTreeTable {
 
   final case class RowState(open: Boolean, hasDiffs: SelectionFlag)
 
-  final class ComputeGenViewer(computeGen: AnyRef) {
-    override def equals(other: Any): Boolean = TweakNode.areGeneratorsCompatible(computeGen, other)
-    override def hashCode: Int = computeGen.hashCode()
+  final class ComputeGenViewer(val tweakTemplate: TweakTemplate) {
+    override def equals(other: Any): Boolean = other match {
+      case that: ComputeGenViewer => tweakTemplate == that.tweakTemplate
+      case _                      => false
+    }
+    override def hashCode: Int = tweakTemplate.hashCode()
+    override def toString: String = ""
   }
 }
 
@@ -541,7 +553,7 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
     menu.addMenu("Print Type Source") {
       val sel = getSelection
       if (sel ne null) {
-        val value = sel.values(0).asInstanceOf[AnyRef]
+        val value = sel.values.head.asInstanceOf[AnyRef]
         if (value ne null)
           println("" + value.getClass + "(" + SourceLocator.sourceOf(value.getClass) + ")")
       }
@@ -550,7 +562,7 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
     val mi = menu.addMenu("Print Stack Trace") {
       val sel = getSelection
       if (sel ne null) {
-        val value = sel.values(0).asInstanceOf[AnyRef]
+        val value = sel.values.head.asInstanceOf[AnyRef]
         value match {
           case e: Exception => e.printStackTrace()
           case _            =>
@@ -561,7 +573,7 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
     menu.addOnPopup {
       val sel = getSelection
       if (sel ne null) {
-        val value = sel.values(0).asInstanceOf[AnyRef]
+        val value = sel.values.head.asInstanceOf[AnyRef]
         mi.setEnabled(value.isInstanceOf[Exception])
       }
     }

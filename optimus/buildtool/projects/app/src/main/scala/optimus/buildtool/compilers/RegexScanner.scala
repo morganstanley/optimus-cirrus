@@ -191,9 +191,9 @@ import scala.collection.mutable
     .groupBy(_.upToLine)
     .flatMap {
       case (None, rules) =>
-        scanLines(id, content.linesIterator, rules)
+        scanLines(id, content.linesWithSeparators, rules)
       case (Some(n), rules) =>
-        val collapsedLines = upToLineCapture(content.linesIterator, n)
+        val collapsedLines = upToLineCapture(content.linesWithSeparators, n)
         scanLines(id, Iterator(collapsedLines), rules)
     }
     .toIndexedSeq
@@ -243,7 +243,7 @@ import scala.collection.mutable
     nonIgnoredRules.push(applicableRules)
     // We're not able to determine whether a start block was specific or general from an end block
     // so specificBlockStack keeps track of whether start blocks are specific (true) or general (false)
-    var specificBlockTracker = mutable.Stack[Boolean]()
+    val specificBlockTracker = mutable.Stack[Boolean]()
     val messages = Vector.newBuilder[CompilationMessage]
     var currentOffset = 0
     while (it.hasNext) {

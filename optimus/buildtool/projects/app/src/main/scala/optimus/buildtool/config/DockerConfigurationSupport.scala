@@ -12,6 +12,7 @@
 package optimus.buildtool.config
 
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.format.docker.DockerDefaults
 import optimus.buildtool.format.docker.DockerStructure
 import optimus.buildtool.format.docker.ExtraImageDefinition
@@ -23,7 +24,7 @@ import optimus.platform._
 
   def dockerStructure: DockerStructure
 
-  @node def parseImages(outputDir: Directory, images: Set[String], tag: String): Set[DockerImage] = {
+  @node def parseImages(installDir: Directory, images: Set[String], tag: String): Set[DockerImage] = {
     val imageDefinitions = dockerStructure.images
     val imageDefs = imageDefinitions.filter(img => images.contains(img.name))
     val undefinedImages = images.diff(imageDefs.map(_.name))
@@ -36,8 +37,20 @@ import optimus.platform._
     imageDefs.apar.map { imageDef =>
       val scopeIds = imageDef.scopes.toSet
       val relevantScopeIds = dockerRelevantScopeIds(scopeIds)
-
-      DockerImage(outputDir, tag, dockerStructure.configuration.defaults, imageDef, scopeIds, relevantScopeIds)
+      imageDef.metaBundle match {
+        case Some(metaBundle) =>
+          DockerImage(
+            InstallPathBuilder.dockerRelease(installDir, tag).dirForMetaBundle(metaBundle),
+            tag,
+            dockerStructure.configuration.defaults,
+            imageDef,
+            scopeIds,
+            relevantScopeIds
+          )
+        case None =>
+          throw new IllegalArgumentException(
+            s"Docker image name '${imageDef.name}' is invalid, it should be in the format of 'account/application'")
+      }
     }
   }
 
@@ -80,7 +93,7 @@ object DockerImage {
       directScopeIds: Set[ScopeId],
       relevantScopeIds: Set[ScopeId]): DockerImage = {
     val imageLocation =
-      ImageLocation.File(outputDir.resolveFile(s"${imgDef.name}.tar").path, s"${imgDef.name}:$tag")
+      ImageLocation.File(outputDir.resolveFile(s"${NamingConventions.DockerTarName}.tar").path, s"${imgDef.name}:$tag")
     val baseImage = imgDef.baseImage.orElse(defaults.baseImage).map(ImageLocation.parse(_, defaults.registry))
     val imageSysName = imgDef.imageSysName.orElse(defaults.imageSysName)
     apply(imageLocation, directScopeIds, relevantScopeIds, imgDef.extraImages, baseImage, imageSysName)

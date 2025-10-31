@@ -77,14 +77,13 @@ public class PluginHelpers {
   // Called from plugin-generated code
   @SuppressWarnings("unused")
   public static int hashOf(int prev, long v) {
-    return prev * 31 + (int) (v ^ (v >>> 32));
+    return prev * 31 + Long.hashCode(v);
   }
 
   // Called from plugin-generated code
   @SuppressWarnings("unused")
   public static int hashOf(int prev, double v) {
-    long bits = Double.doubleToLongBits(v);
-    return prev * 31 + (int) (bits ^ (bits >>> 32));
+    return prev * 31 + Double.hashCode(v);
   }
 
   // Called from plugin-generated code

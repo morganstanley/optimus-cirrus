@@ -12,31 +12,14 @@
 package optimus.graph
 
 import optimus.core.SparseBitSet
+import optimus.graph.TweakTemplate.TTModifyOriginal
 import optimus.graph.diagnostics.NodeName
-import optimus.graph.loom.LNodeFunction
-import optimus.graph.loom.LNodeFunction0
 import optimus.graph.{PropertyNode => PN}
 import optimus.graph.{TweakNode => TN}
 import optimus.platform._
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.{RecordingScenarioStack => RSS}
 import optimus.platform.{ScenarioStack => SS}
-
-object TweakNode {
-  private object UnknownValue
-
-  def areGeneratorsCompatible(genA: Any, genB: Any): Boolean = {
-    if (genA.getClass ne genB.getClass) {
-      (genA, genB) match {
-        case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithResult && nB.isDoneWithResult =>
-          nA.resultObject() == nB.resultObject()
-        case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithException && nB.isDoneWithException =>
-          nA.exception() == nB.exception()
-        case _ => false
-      }
-    } else NodeClsIDSupport.equals(genB, genA)
-  }
-}
 
 /**
  * Node implementation to compute the effect of a Tweak and reflect it as a Node computeGenerator is one of the
@@ -53,7 +36,7 @@ object TweakNode {
  *
  * Notes:
  *   1. TweakNode is already an XSFT node for evaluateInParentOfGiven and evaluateInGiven (NOT evaluateInCurrent)
- *      Consider (only interesting for byName tweaks: see above
+ *      Consider (only interesting for byName tweaks: see above)
  *   1. {{{
  *        given(e.x := e => some_code) {
  *          e.x // Used this in scenario....
@@ -64,14 +47,26 @@ object TweakNode {
  *     }}}
  *   1. scenarioStack() on the tweak node itself is for caching identity (e.g. XSFT)
  */
-class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyPropertyNode[T] {
+class TweakNode[T](
+    private[optimus] val tweak: Tweak, // The original source tweak (this should not cause increased memory)
+    private val givenSS: SS, // ScenarioStack where the tweak was found
+    _key: PN[T] // Underscore is just to remember not to capture
+) extends ProxyPropertyNode[T] {
+  srcNodeTemplate = _key
+
+  private var computeSS: SS = _ // ScenarioStack for the right hand side
   private var computeNode: Node[T] = _
-  private var tweak: Tweak = _ // The original source tweak (this should not cause increased memory)
-  private var givenSS: ScenarioStack = _ // ScenarioStack where the tweak was found
-  protected var computeSS: ScenarioStack = _ // ScenarioStack for the right hand side
   // If scenarioStack.isRecordingTweakUsage = true on complete will compute TTN as part of the result
   private var tweakTreeNode: TweakTreeNode = _
 
+  {
+    if (DiagnosticSettings.traceTweaksEnabled && OGTrace.observer.traceTweaks && tweak != null)
+      setTweakInfection(new SparseBitSet(tweak.id))
+
+    val info = propertyInfo
+    if (info.isDirectlyTweakable) setTweakPropertyDependency(info.tweakMask)
+
+  }
   override def run(ec: OGSchedulerContext): Unit = {
     initComputeScenarioStackAndNode()
     ec.enqueue(computeNode)
@@ -88,15 +83,6 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
     } else
       completeFromNode(computeNode, eq)
   }
-
-  /**
-   * This method is used in the context of ScenarioStack.equals need to check class due to the overrides for :*= :+=
-   * etc.
-   */
-  def equalsAsTemplates(other: TweakNode[_]): Boolean =
-    getClass == other.getClass && TweakNode.areGeneratorsCompatible(computeGenerator, other.computeGenerator)
-
-  def hashCodeAsTemplate: Int = NodeClsIDSupport.hashCode(computeGenerator)
 
   /** Execution should not see it as the original node */
   override def executionInfo: NodeTaskInfo = srcNodeTemplate.propertyInfo.tweakInfo()
@@ -130,7 +116,7 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
       throw new GraphInInvalidState("Asking to report not-recorded tweaks")
   }
 
-  private final def initComputeScenarioStackAndNode(): Unit = if (!isDone) {
+  private def initComputeScenarioStackAndNode(): Unit = {
     // If we did get given a RecordingScenarioStack then we need to replace computeSS with an RS too so that we
     // capture the dependencies of this tweak. See [XS_BY_NAME_TWEAKS].
     if (scenarioStack.isRecordingTweakUsage) {
@@ -151,201 +137,87 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
 
   /** Create or return RHS of the tweak, the caller is responsible for making a sensible use of it! */
   private[optimus] final def getComputeNode(evaluateInScenarioStack: ScenarioStack, key: PN[T]): Node[T] = {
-    val computeNode0 =
-      computeGenerator match {
-        case tweakValueProviderNode: TweakValueProviderNode[T @unchecked] =>
-          val cnode = if (tweakValueProviderNode.isKeyDependent) {
-            tweakValueProviderNode.copyWith(key, evaluateInScenarioStack)
-          } else
-            tweakValueProviderNode
-          if (cnode.scenarioStack == null)
-            cnode.replace(evaluateInScenarioStack.siRoot)
-          cnode
-        case lnodeDef: LNodeFunction[T @unchecked] =>
-          lnodeDef.toNodeWith(key)
-        case newComputeNode: Node[T @unchecked] =>
-          if (newComputeNode.isStable) newComputeNode
-          else newComputeNode.cloneTask().asInstanceOf[Node[T]]
-        case _ =>
-          if (key eq null) throw new GraphInInvalidState()
-          key.argsCopy(computeGenerator).asInstanceOf[Node[T]]
-      }
-
-    if (computeNode0.scenarioStack() == null)
-      computeNode0.replace(evaluateInScenarioStack.withCacheableTransitively)
-
+    val computeNode = tweak.tweakTemplate.getComputeNode(evaluateInScenarioStack, key)
     // at this point, computeNode0 is attached to a scenario, but not necessarily the scenario we do the modify lookup in.
-    withModifyOriginal(computeNode0, evaluateInScenarioStack, key)
+    withModifyOriginal(computeNode.asInstanceOf[Node[T]], evaluateInScenarioStack, key)
   }
 
   protected def withModifyOriginal(computedValue: Node[T], stack: ScenarioStack, original: PN[T]): Node[T] =
     computedValue
 
+  /** Completes the TweakNode immidiately, in loom will be just removed/inlined */
+  final def initWithValue(v: Any, requestingSS: SS): Unit = {
+    _result = v.asInstanceOf[T]
+    initAsCompleted(requestingSS)
+    finalizeTweakTreeNode() // Normally would have to go before completion, but this is initialization
+  }
+
+  /** Tweak evaluation resulted in exception */
+  final def initWithException(ex: Throwable, requestingSS: SS): Unit = {
+    initAsFailed(ex, requestingSS)
+    finalizeTweakTreeNode() // Normally would have to go before completion, but this is initialization
+  }
+
   /**
-   * Original tweaks are created with current TweakNode as template. In different scenario stacks the same template can
-   * result in different nodes with different results, hence cloning
-   *
    * givenSS (where the tweak was found/setup) requestingSS (scenario stack that requested the value and is getting this
    * tweak node instead)
    */
-  final def cloneWith(tweak: Tweak, evaluateIn: Int, requestingSS: SS, givenSS: SS, srcNodeTemplate: PN[T]): TN[T] = {
-    val newTweakNode = cloneWithClean // NOTE: All derived classes must maintain proper clone!
-    newTweakNode.givenSS = givenSS // Store the ScenarioStack where the tweak was found....
-    newTweakNode.tweak = tweak
-    newTweakNode.srcNodeTemplate = srcNodeTemplate
+  final def initialize(requestingSS: SS): TN[T] = {
+    val tweakTemplate = tweak.tweakTemplate
 
-    if (DiagnosticSettings.traceTweaksEnabled && OGTrace.observer.traceTweaks && tweak != null)
-      newTweakNode.setTweakInfection(new SparseBitSet(tweak.id))
-
-    val info = srcNodeTemplate.propertyInfo
-    if (info.isDirectlyTweakable) newTweakNode.setTweakPropertyDependency(info.tweakMask)
-
-    if (resultIsStable()) {
-      // Optimize for a common case of a byValue tweak (i.e. := const)
-      newTweakNode.attach(requestingSS)
-      newTweakNode.finalizeTweakTreeNode() // needs to be called before the node is marked DONE for visibility reasons
-      newTweakNode.initAsCompleted(computeGenerator.asInstanceOf[Node[T]], requestingSS)
-    } else {
-      var scenarioStack: ScenarioStack = null // scenarioStack where TweakNode is visible and .cacheID used for caching
-      var computeSS: ScenarioStack = null // scenarioStack where the RHS of := will be executing
-
-      // The most common case
-      if (evaluateIn == Tweak.evaluateInParentOfGiven) { // by name
-        scenarioStack = givenSS // [SEE_TWEAK_IS_XS_FT]
-        computeSS = givenSS.parent.withSIParamsFrom(requestingSS)
-      } else if (evaluateIn == Tweak.evaluateInGiven) { // bindOnce
-        scenarioStack = givenSS // [SEE_TWEAK_IS_XS_FT]
-        computeSS = givenSS.withSIParamsFrom(requestingSS)
-      } else if (evaluateIn == Tweak.evaluateInCurrent) { // bind
-        scenarioStack = requestingSS
-        computeSS = requestingSS
-      } else throw new GraphInInvalidState("Unknown evaluateIn enum")
-
-      // if the requesting SS has a different tweakable listener to the given block we can't re-use cache from there
-      // Note: this also takes care of some recording/tracking scenario requesting this node!
-      if (givenSS.tweakableListener ne requestingSS.tweakableListener)
-        scenarioStack = requestingSS
-
-      newTweakNode.attach(scenarioStack)
-      newTweakNode.computeSS = computeSS
+    if (tweakTemplate.resultIsStable) {
+      throw new GraphInInvalidState("Use initAsCompleted for stable tweak results")
     }
-    newTweakNode
+    var scenarioStack: ScenarioStack = null // scenarioStack where TweakNode is visible and .cacheID used for caching
+    val evaluateIn = tweak.evaluateIn
+
+    // The most common case
+    if (evaluateIn == Tweak.evaluateInParentOfGiven) { // by name
+      scenarioStack = givenSS // [SEE_TWEAK_IS_XS_FT]
+      computeSS = givenSS.parent.withSIParamsFrom(requestingSS)
+    } else if (evaluateIn == Tweak.evaluateInGiven) { // bindOnce
+      scenarioStack = givenSS // [SEE_TWEAK_IS_XS_FT]
+      computeSS = givenSS.withSIParamsFrom(requestingSS)
+    } else if (evaluateIn == Tweak.evaluateInCurrent || evaluateIn == Tweak.evaluateInGivenWhenExpanding) { // bind
+      scenarioStack = requestingSS
+      computeSS = requestingSS
+    } else throw new GraphInInvalidState("Unknown evaluateIn enum")
+
+    // if the requesting SS has a different tweakable listener to the given block we can't re-use cache from there
+    // Note: this also takes care of some recording/tracking scenario requesting this node!
+    if (givenSS.tweakableListener ne requestingSS.tweakableListener)
+      scenarioStack = requestingSS
+
+    attach(scenarioStack)
+
+    this
   }
 
-  protected def cloneWithClean = new TweakNode[T](computeGenerator)
+  /** Hide name suffix because it will be added in the custom pretty printer */
+  override def name_suffix = ""
 
-  /** Returns true if the result of evaluation of this tweak is a stable value */
-  def resultIsStable(): Boolean = computeGenerator match {
-    case node: NodeTask => node.isStable
-    case _              => false
-  }
-
-  /** Returns RHS value if available and marker object otherwise */
-  private[graph] def immediateResult: Any = computeGenerator match { // really returns T
-    case acn: AlreadyCompletedNode[_] => acn.result
-    case _                            => TweakNode.UnknownValue
-  }
-
-  /** Returns true if the result is stable or SI */
-  def resultIsScenarioIndependent(): Boolean = computeGenerator match {
-    case tweakValProv: TweakValueProviderNode[_] => !tweakValProv.modify
-    case node: NodeTask                          => node.isStable
-    case _                                       => false
-  }
-
-  /** Returns true if the tweak is byName and does NOT depend on the input key */
-  def isReducibleToByValue: Boolean = computeGenerator match {
-    case _: TweakValueProviderNode[_] => false
-    case _: LNodeFunction0[_]         => true // 0 means it doesn't take any additional input, hence reducible
-    case node: NodeTask               => !node.isStable
-    case _                            => false
-  }
-
-  /**
-   * Added to support property nodes with tweak-handlers, see: `AdjustASTComponent` in Optimus scalac plugin.
-   */
-  final def cloneWithDirectAttach(scenarioStack: ScenarioStack, srcNodeTemplate: PropertyNode[T]): TweakNode[T] = {
-    cloneWith(null, Tweak.evaluateInGiven, scenarioStack, scenarioStack, srcNodeTemplate)
-  }
-
-  // must override this because srcNodeTemplate can be null for AlreadyCompletedNode, but PropertyNode.equals relies
-  // on comparing propertyInfo, which is defined as srcNodeTemplate.propertyInfo for ProxyPropertyNode
-  override def equals(that: Any): Boolean = that match {
-    case tn: TweakNode[_] =>
-      if ((srcNodeTemplate eq null) && (tn.srcNodeTemplate eq null))
-        equalsAsTemplates(tn) // compares computeGenerators and our class
-      else
-        getClass == tn.getClass && super.equals(that)
-    case _ => false
-  }
-
-  // noinspection HashCodeUsesVar (clone needs to set srcNodeTemplate, otherwise could have been a val)
-  override def hashCode: Int = if (srcNodeTemplate eq null) hashCodeAsTemplate else super.hashCode
-
-  override def name_suffix = ":="
-
+  /** Display values when they are trivial */
   override def writePrettyString(sb: PrettyStringBuilder): PrettyStringBuilder = {
-    writePrettyString(sb, null)
-  }
-
-  /**
-   * tweak is supplied when TweakNode is printed as part of printing a Tweak otherwise tweak is null and we look at this
-   * as a plain node
-   */
-  final def writePrettyString(sb: PrettyStringBuilder, tweak: Tweak): PrettyStringBuilder = {
-    if (srcNodeTemplate ne null) super.writePrettyString(sb) // (super includes name_suffix)
-    else sb ++= name_suffix ++= " "
-
-    def resultOrException(n: Node[_]): String = {
-      if (n.isDoneWithResult) n.resultObject.toString
-      else if (n.isDoneWithException) n.exception.toString
-      else "[not complete]"
-    }
-
-    computeGenerator match {
-      case n: Node[_] if n.isStable => sb ++= resultOrException(n)
-      case _ if tweak != null =>
-        if (tweak.initSite != null) sb ++= "{ code... }"
-        else sb ++= NodeName.nameAndSource(computeGenerator)
-      case _ =>
-        sb ++= NodeName
-          .fromSubProfile(computeGenerator)
-          .toString(sb.simpleName, sb.includeHint)
-          .stripSuffix(NodeTaskInfo.StoredNodeFunction.rawName()) // Probably not worth generating in the first place
-    }
+    super.writePrettyString(sb)
+    sb ++= tweak.tweakTemplate
   }
 
   private[optimus] final def tweakLocation: String = {
     if (tweak != null && tweak.initSite != null) tweak.initSite.toString
-    else NodeName.nameAndSource(computeGenerator)
+    else NodeName.nameAndSource(tweak.tweakTemplate.computeGenerator)
   }
 }
 
 /**
- * Base class for all tweaks of the form e.x :op= { y } (which is eq to e.x := op(e.x, y))
+ * Class for all tweaks of the form e.x :op= { y } (which is eq to e.x := op(e.x, y))
  *
  * Note: assumes that modify itself is a non-node function.
  *
  * srcNode is the tweakable node we are modifying (i.e. "e.x" in the above) and computeNode is the right hand side of
  * the operator (i.e. "y" in the above)
  */
-sealed abstract class TweakNodeModifyOriginal[T, Self <: TweakNodeModifyOriginal[T, Self]](computeGen: AnyRef)
-    extends TweakNode[T](computeGen) { self: Self =>
-  def copy(computeGen: AnyRef): Self
-  def opName: String
-  def op(src: T, mod: T): T
-
-  protected override def cloneWithClean: TweakNode[T] = copy(computeGen)
-
-  // These flags need to be set because our compute generator might be an ACPN but we still need to apply it to the
-  // resolved srcNodeTemplate, which means that our full computation isn't already completed. If we don't do this, then
-  // we end up incorrectly triggering the optimization in optimus.graph.ConvertByNameToByValueNode.isTweakRedundant.
-  override def resultIsStable() = false
-  override def isReducibleToByValue: Boolean = false
-
-  // For printing nicely:
-  override def name_suffix: String = ":" + opName + "="
-
+final class TweakNodeModifyOriginal[T](tweak: Tweak, givenSS: SS, ttmo: TTModifyOriginal[T], _key: PN[T])
+    extends TN[T](tweak, givenSS, _key) {
   // Here is where we modify our compute generator so that it applies its result (using `modify`) to the original value
   // of the node that we look up in `stack`.
   override protected def withModifyOriginal(computedValue: Node[T], stack: ScenarioStack, original: PN[T]): Node[T] = {
@@ -383,7 +255,7 @@ sealed abstract class TweakNodeModifyOriginal[T, Self <: TweakNodeModifyOriginal
             combineInfo(srcNode, ec)
             val srcR = srcNode.result
 
-            val modifiedResult = op(srcR, computeR)
+            val modifiedResult = ttmo.op(srcR, computeR)
             completeWithResult(modifiedResult, ec)
 
           case otherwise =>
@@ -394,31 +266,5 @@ sealed abstract class TweakNodeModifyOriginal[T, Self <: TweakNodeModifyOriginal
 
     out.attach(stack.withCacheableTransitively)
     out
-  }
-}
-
-object TweakNodeModifyOriginal {
-  final class Plus[T: Numeric](computeGen: AnyRef) extends TweakNodeModifyOriginal[T, Plus[T]](computeGen) {
-    def copy(computeGen: AnyRef): Plus[T] = new Plus[T](computeGen)
-    def opName: String = "+"
-    def op(src: T, mod: T): T = implicitly[Numeric[T]].plus(src, mod)
-  }
-
-  final class Minus[T: Numeric](computeGen: AnyRef) extends TweakNodeModifyOriginal[T, Minus[T]](computeGen) {
-    def copy(computeGen: AnyRef): Minus[T] = new Minus[T](computeGen)
-    def opName: String = "-"
-    def op(src: T, mod: T): T = implicitly[Numeric[T]].minus(src, mod)
-  }
-
-  final class Times[T: Numeric](computeGen: AnyRef) extends TweakNodeModifyOriginal[T, Times[T]](computeGen) {
-    def copy(computeGen: AnyRef): Times[T] = new Times[T](computeGen)
-    def opName: String = "*"
-    def op(src: T, mod: T): T = implicitly[Numeric[T]].times(src, mod)
-  }
-
-  final class Div[T: Fractional](computeGen: AnyRef) extends TweakNodeModifyOriginal[T, Div[T]](computeGen) {
-    def copy(computeGen: AnyRef): Div[T] = new Div[T](computeGen)
-    def opName: String = "/"
-    def op(src: T, mod: T): T = implicitly[Fractional[T]].div(src, mod)
   }
 }

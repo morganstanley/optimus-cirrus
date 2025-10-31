@@ -11,9 +11,8 @@
  */
 package optimus.platform.pickling
 
-import net.iharder.base64.Base64
-
 import java.util.Arrays
+import java.util.Base64
 
 object ImmutableByteArray {
   def apply(data: Array[Byte]) = new ImmutableByteArray(data)
@@ -26,7 +25,7 @@ object ImmutableByteArray {
 // data field needs to be exposed for e.g. serialization/pickling, but must not leak otherwise
 // (else we violate immutability)
 class ImmutableByteArray(private[optimus] val data: Array[Byte]) extends Serializable {
-  private lazy val str = Base64.encodeBytes(data)
+  private lazy val str = Base64.getEncoder.encodeToString(data)
   override def hashCode = Arrays.hashCode(data)
   override def equals(rhs: Any) = rhs match {
     case x: ImmutableByteArray => Arrays.equals(x.data, data)

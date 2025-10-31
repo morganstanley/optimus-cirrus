@@ -14,6 +14,7 @@ package optimus.buildtool.format.docker
 import java.nio.file.Path
 import java.nio.file.Paths
 import com.typesafe.config.Config
+import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.PartialScopeId
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.format.ConfigUtils._
@@ -21,6 +22,7 @@ import optimus.buildtool.format.Keys
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
 import optimus.buildtool.format.Success
+import optimus.buildtool.format.docker.ImageDefinition.toMetaBundle
 
 import scala.collection.compat._
 import scala.collection.immutable.Set
@@ -30,7 +32,9 @@ final case class ImageDefinition(
     scopes: Seq[ScopeId],
     extraImages: Set[ExtraImageDefinition],
     baseImage: Option[String],
-    imageSysName: Option[String])
+    imageSysName: Option[String]) {
+  def metaBundle: Option[MetaBundle] = toMetaBundle(name)
+}
 final case class ExtraImageDefinition(name: String, pathsToIncluded: Seq[Path])
 
 object ImageDefinition {
@@ -47,6 +51,11 @@ object ImageDefinition {
           .map(_.toSet)
       }
     } else Success(Set.empty)
+
+  def toMetaBundle(name: String): Option[MetaBundle] = name.split("/", 2) match {
+    case Array(meta, bundle) => Some(MetaBundle(meta, bundle))
+    case _                   => None
+  }
 
   private def loadImageDef(
       origin: ObtFile,

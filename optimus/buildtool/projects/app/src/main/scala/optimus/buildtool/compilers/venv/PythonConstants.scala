@@ -83,7 +83,7 @@ object PythonConstants {
         .mkString(" ")
     }
 
-    final case class TpaConfig(id: String)
+    final case class TpaConfig(id: String, afs_mappings_exist: Boolean)
     object TpaConfig {
       def load(tpa: Path): TpaConfig = {
         val file = JarAsset(tpa)

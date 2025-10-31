@@ -19,7 +19,7 @@ import msjava.msnet.ssl.SSLEstablisherFactory
 import msjava.protobufutils.generated.proto.Eai.RequestResponseEnvelope
 import msjava.protobufutils.generated.proto.Eai.RequestResponseHeader
 import msjava.slf4jutils.scalalog.getLogger
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs.ChainedID
@@ -31,7 +31,6 @@ import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.core.ChainedNodeID
 import optimus.dal.ssl.DalSSLConfig
 import optimus.graph.DiagnosticSettings._
-import optimus.graph.Edges
 import optimus.graph.PluginType
 import optimus.graph.Settings
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
@@ -208,9 +207,6 @@ final class RequestSender(
         s"Multiple node ID's found in batch, will use chained ID ${rc.chainedId} for node ID's ${nodeIDs mkString ","}")
 
     try {
-      nodeIDs.foreach { nid =>
-        Edges.ensureTracked(rc.chainedId, nid, "sendBatch", CrumbNodeType.DataRequest, EdgeType.RequestedBy)
-      }
 
       /*as we check commandLocation is nonEmpty, we should always get a clientRequest hence clientRequests.head is safe
        * We need clientRequests.head.completable to pass into customCounter for jobID and scope. The method is called in a
@@ -347,7 +343,7 @@ final class RequestSender(
 
       val commands = requests.flatMap(_.commandProtos)
       val encodedCmds = commands map { cmd =>
-        Base64.encodeBytes(cmd.toByteArray)
+        Base64.getEncoder.encodeToString(cmd.toByteArray)
       }
       saveToFile(encodedCmds, file)
     }

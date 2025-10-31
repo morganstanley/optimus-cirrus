@@ -18,12 +18,14 @@ import java.nio.file.Files
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
+import optimus.buildtool.files.BundledMavenJarAsset
+import optimus.buildtool.files.DependencyInstallPathResolver
+import optimus.buildtool.files.MavenJarAsset
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions.MavenDepsCentralBundle
 import optimus.buildtool.config.NamingConventions.MavenDepsCentralMeta
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.InstallMavenJar
 import optimus.buildtool.trace.ObtTrace
@@ -31,7 +33,8 @@ import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 
-class MavenInstaller(installer: Installer) extends ComponentInstaller {
+class MavenInstaller(installer: Installer, dependencyInstallPathBuilder: DependencyInstallPathResolver)
+    extends ComponentInstaller {
   import installer._
   override val descriptor = "maven jars"
   val mavenFingerprints: BundleFingerprints = bundleFingerprints(
@@ -53,24 +56,24 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
       case scopeArtifacts: ScopeArtifacts =>
         val scopeId = scopeArtifacts.scopeId
         val pathingJar = scopeArtifacts.pathingJar
-        val mavenAssetOption: Option[Seq[(JarAsset, JarAsset)]] = pathingJar map { pj =>
+        val mavenAssetOption: Option[Seq[(JarAsset, MavenJarAsset)]] = pathingJar map { pj =>
           val manifest = Jars
             .readManifestJar(pj)
             .getOrElse(throw new IllegalArgumentException(s"Jar $pathingJar is missing manifest"))
           val classpath = Jars.extractManifestClasspath(pj, manifest)
-          pathBuilder.mavenDependencyPaths(classpath, installJarMapping)
+          dependencyInstallPathBuilder.artifactsToBundle(classpath, installJarMapping)
         }
 
         mavenAssetOption match {
           case None => Seq.empty
           case Some(artiFiles) =>
-            artiFiles.apar.flatMap { case (copyFrom, copyTo) =>
+            artiFiles.apar.collect { case (copyFrom, BundledMavenJarAsset(bundlePath)) =>
               // fingerprints.txt is loaded to memory when initialize mavenFingerprints, so we are fine to check same
               // jar hash exists or not multiple times. And we can use @HASH without suffix string for RT maven libs
-              mavenFingerprints.writeIfChanged(copyTo, HashFlagStr) {
-                MavenInstaller.copyFile(scopeId, copyFrom, copyTo)
-                Seq(copyTo)
+              mavenFingerprints.writeIfChanged(bundlePath, HashFlagStr) {
+                MavenInstaller.copyFile(scopeId, copyFrom, copyTo = bundlePath)
               }
+              bundlePath
             }
         }
       case _ => None
@@ -90,9 +93,4 @@ object MavenInstaller {
       }
     }
   }
-
-  def installMavenJars(scopeId: ScopeId, pathBuilder: InstallPathBuilder, jars: Seq[JarAsset]): Unit =
-    jars.foreach { jar =>
-      pathBuilder.getMavenPath(jar).map(to => copyFile(scopeId, jar, to))
-    }
 }

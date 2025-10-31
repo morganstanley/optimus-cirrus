@@ -11,16 +11,17 @@
  */
 package optimus.buildtool.files
 
+import com.google.common.hash.Hashing
 import optimus.buildtool.config
 import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.OsUtils
-import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.StackUtils
 import org.slf4j.LoggerFactory.getLogger
 
+import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
@@ -49,83 +50,15 @@ sealed abstract class InstallPathBuilder(
       .resolveDir(scopeId.module)
       .resolveDir(installVersion)
 
-  def getMavenPath(classJar: JarAsset, disted: Boolean = false): Option[JarAsset] = classJar.pathString match {
-    case NamingConventions.DepCopyMavenRoot(_, relativePath) =>
-      // put into sharable MetaBundle dir for AFS release
-      if (disted) Some(dirForDist(mavenReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath))
-      else Some(libDir(mavenReleaseMetaBundle).resolveJar(relativePath))
-    case _ => None
-  }
-
-  def mavenDependencyPaths(
-      classpath: Seq[JarAsset],
-      installJarMapping: Map[JarAsset, (ScopeId, JarAsset)]
-  ): Seq[(JarAsset, JarAsset)] = {
-    // only copy maven files
-    classpath
-      .filterNot(jar =>
-        installJarMapping.contains(jar) && jar.pathString.contains(NamingConventions.MavenDepsCentralBundle))
-      .flatMap { dependencyJar =>
-        getMavenPath(dependencyJar).map { j =>
-          (dependencyJar, j)
-        }
-      }
-      .distinct
-  }
-
-  def locationIndependentClasspath(
-      scopeId: ScopeId,
-      classpath: Seq[JarAsset],
-      installJarMapping: Map[JarAsset, (ScopeId, JarAsset)],
-      includeRelativePaths: Boolean = true,
-  ): Seq[String] = {
-    def isLocalOrInSameDir(localPath: RelativePath) =
-      installVersion == NamingConventions.LocalVersion || localPath.parentOption.contains(RelativePath.empty)
-
-    val pathingDir = libDir(scopeId)
-    classpath.flatMap { classJar =>
-      // Remap jars we have installed to their installed paths. Note that we reference them by relative paths so
-      // that the whole installation is location independent
-      installJarMapping.get(classJar) match {
-        case Some((jarScopeId, installJar)) =>
-          // we've got a path to a jar from another scope in the workspace
-          lazy val localPath = pathingDir.relativize(installJar)
-          def distedPath: JarAsset =
-            dirForDist(jarScopeId.metaBundle).resolveDir("lib").resolveJar(installJar.name)
-          val paths =
-            if (includeRelativePaths) {
-              if (isLocalOrInSameDir(localPath))
-                // no need to add a disted path when doing a local install or if it's in the same directory as the
-                // pathing jar
-                Seq(localPath)
-              else
-                // local path should always be before the disted one
-                Seq(localPath, distedPath)
-            } else
-              // specifically requested no relative paths (because this installation will never be used on NFS-style builds)
-              Seq(distedPath)
-
-          paths.map(_.uriString)
-        case None =>
-          val localMavenPath = getMavenPath(classJar).map(pathingDir.relativize(_))
-          // should only be called when localMavenPath exist
-          def distedMavenPath: JarAsset = getMavenPath(classJar, disted = true).get
-
-          localMavenPath match {
-            case Some(localPath) =>
-              val paths = if (includeRelativePaths) {
-                if (isLocalOrInSameDir(localPath))
-                  Seq(localPath)
-                else Seq(localPath, distedMavenPath)
-              } else Seq(distedMavenPath)
-              paths.map(_.uriString)
-            case None =>
-              val wip = PathUtils.workspaceIndependentPath(classJar.path)
-              Seq(PathUtils.uriString(wip.pathString, wip.absolute))
-          }
-      }
-    }.distinct
-  }
+  def getInArtifactoryDepsPath(classJar: JarAsset, disted: Boolean = false): Option[BundledMavenJarAsset] =
+    classJar.pathString match {
+      case NamingConventions.DepCopyMavenRoot(_, relativePath) =>
+        // put into sharable MetaBundle dir for AFS release
+        if (disted)
+          Some(BundledMavenJarAsset(dirForDist(mavenReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath)))
+        else Some(BundledMavenJarAsset(libDir(mavenReleaseMetaBundle).resolveJar(relativePath)))
+      case _ => None
+    }
 
   def pathForTpa(scopeId: ScopeId): FileAsset = etcDir(scopeId).resolveFile(s"${scopeId.module}.tpa")
   def wheelsDir(): Directory = etcDir(MetaBundle("optimus", "dependencies")).resolveDir("wheels")
@@ -254,7 +187,6 @@ sealed trait CommonDirs {
 
 private final class DevInstallPathBuilder(installDir: Directory, installVersion: String)
     extends InstallPathBuilder(installVersion, NamingConventions.AfsDist) {
-
   def dirForMetaBundle(
       metaBundle: MetaBundle,
       leaf: String = "",
@@ -301,6 +233,26 @@ private final class MavenInstallPathBuilder(installDir: Directory, installVersio
   ): Directory = dirForMetaBundle(metaBundle)
 }
 
+private final class DockerInstallPathBuilder(installDir: Directory, installVersion: String)
+    extends InstallPathBuilder(installVersion, NamingConventions.AfsDist) {
+
+  override def primaryInstallDir(metaBundle: MetaBundle, leaf: String, branch: String): Directory =
+    dirForMetaBundle(metaBundle, leaf, branch)
+
+  override def dirForMetaBundle(metaBundle: MetaBundle, leaf: String = "", branch: String = ""): Directory = {
+    if (!metaBundle.isEmpty) {
+      val result = installDir
+        .resolveDir(NamingConventions.DockerPackage)
+        .resolveDir(metaBundle.meta)
+        .resolveDir(metaBundle.bundle)
+        .resolveDir(installVersion)
+      if (leaf.nonEmpty) result.resolveDir(leaf) else result
+    } else {
+      throw new IllegalArgumentException("Can't package docker files for empty metaBundle.")
+    }
+  }
+}
+
 private final class DistInstallPathBuilder(installVersion: String, distDir: Directory = NamingConventions.AfsDist)
     extends InstallPathBuilder(installVersion, distDir) {
 
@@ -320,10 +272,39 @@ private final class DistInstallPathBuilder(installVersion: String, distDir: Dire
 
 object InstallPathBuilder {
   private val log = getLogger(this.getClass)
+  private val sha256 = Hashing.sha256
+
+  def getCachedMavenPath(
+      classJar: JarAsset,
+      cacheRootPath: Path,
+      cachePrefix: String,
+      baseArtifactDir: Option[RelativePath],
+      releaseRevisions: Map[String, Char]): Option[Path] =
+    classJar.pathString match {
+      case NamingConventions.DepCopyMavenRoot(_, relativePath) =>
+        val hash = sha256.hashString(relativePath, Charset.forName("UTF-8")).toString.take(31)
+        val shard = hash.head
+        val version = releaseRevisions.getOrElse(relativePath, '0')
+        val cacheBucketPath = cacheRootPath.resolve(s"$cachePrefix$shard")
+        val hashWithVersion = s"$hash$version"
+        val pathToHashedDir = cacheBucketPath.resolve(hashWithVersion)
+        val baseCacheDir = baseArtifactDir
+          .map { baseDir =>
+            pathToHashedDir.resolve(baseDir.path)
+          }
+          .getOrElse(pathToHashedDir)
+
+        Some(baseCacheDir.resolve(relativePath))
+      case _ => None
+    }
 
   /** Builder with layout for NFS style builds. This includes normal releases but not Docker. */
   def dev(installDir: Directory, installVersion: String): InstallPathBuilder =
     new DevInstallPathBuilder(installDir, installVersion)
+
+  /** Builder with layout for docker (i.e. /packages/docker) style builds. */
+  def dockerRelease(installDir: Directory, installVersion: String): InstallPathBuilder =
+    new DockerInstallPathBuilder(installDir, installVersion)
 
   /** Builder with layout for maven (i.e. /packages/maven) style builds. */
   def mavenRelease(installDir: Directory, installVersion: String): InstallPathBuilder =

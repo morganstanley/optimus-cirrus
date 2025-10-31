@@ -1090,7 +1090,7 @@ public class GCNative {
     }
 
     if (currentSize >= (emergencyWatermark + recentUncertaintyCorrection)) {
-      log.info(
+      log.error(
           "native heap "
               + inMB(currentSize)
               + " MB exceeds hard limit "

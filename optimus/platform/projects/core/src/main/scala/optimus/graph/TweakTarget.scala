@@ -50,35 +50,30 @@ trait TweakTarget[R, SetT] {
   /** Simple boring instance tweak On ACPN without also-sets */
   final def fullSpecified: Boolean = hashKey.isInstanceOf[TrivialNode] && !unresolved
 
-  private[this] def makeTweak(tweakTemplate: TweakNode[R]) = new Tweak(this, tweakTemplate)
-  protected def mkPlus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
-    new TweakNodeModifyOriginal.Plus[R](vn)
-  protected def mkMinus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
-    new TweakNodeModifyOriginal.Minus[R](vn)
-  protected def mkTimes(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
-    new TweakNodeModifyOriginal.Times[R](vn)
-  protected def mkDiv(vn: AnyRef)(implicit ev: Fractional[R]): TweakNode[R] =
-    new TweakNodeModifyOriginal.Div[R](vn)
+  private[this] def makeTweak(tweakTemplate: TweakTemplate) = new Tweak(this, tweakTemplate)
+  protected def mkPlus(vn: Any)(implicit ev: Numeric[R]): TweakTemplate = new TweakTemplate.Plus[R](vn)
+  protected def mkMinus(vn: Any)(implicit ev: Numeric[R]): TweakTemplate = new TweakTemplate.Minus[R](vn)
+  protected def mkTimes(vn: Any)(implicit ev: Numeric[R]): TweakTemplate = new TweakTemplate.Times[R](vn)
+  protected def mkDiv(vn: Any)(implicit ev: Fractional[R]): TweakTemplate = new TweakTemplate.Div[R](vn)
 
   @tweakOperator
   @nodeSyncLift
-  def :=(@nodeLift @withNodeClassID value: => R): Tweak = makeTweak(new TweakNode[R](mkCompute(value _)))
+  def :=(@nodeLift @withNodeClassID value: => R): Tweak = makeTweak(TweakTemplate(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  def $colon$eq$withValue(value: R): Tweak = makeTweak(new TweakNode(new AlreadyCompletedNode(value)))
-  def $colon$eq$withNode(vn: Node[R]): Tweak = makeTweak(new TweakNode[R](vn))
+  def $colon$eq$withValue(value: R): Tweak = makeTweak(TweakTemplate(value))
+  def $colon$eq$withNode(vn: Node[R]): Tweak = makeTweak(TweakTemplate(vn))
 
   @tweakOperator
   @nodeSyncLift
-  def :=(@nodeLift @withNodeClassID f: SetT): Tweak = makeTweak(new TweakNode[R](f.asInstanceOf[AnyRef]))
-  def $colon$eq$withNode(vn: AnyRef /* FunctionN(... Node[R])*/ ): Tweak = makeTweak(new TweakNode[R](vn))
+  def :=(@nodeLift @withNodeClassID f: SetT): Tweak = makeTweak(TweakTemplate.byKey(f.asInstanceOf[AnyRef]))
+  def $colon$eq$withNode(vn: AnyRef /* FunctionN(... Node[R])*/ ): Tweak = makeTweak(TweakTemplate.byKey(vn))
 
   @tweakOperator
   @nodeSyncLift
   def :+=(@nodeLift @withNodeClassID value: => R)(implicit ev: Numeric[R]): Tweak = makeTweak(
     mkPlus(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  def $colon$plus$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak = makeTweak(
-    mkPlus(new AlreadyCompletedNode(value))(ev))
+  def $colon$plus$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak = makeTweak(mkPlus(value)(ev))
   def $colon$plus$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): Tweak = makeTweak(mkPlus(vn))
 
   @tweakOperator
@@ -86,8 +81,7 @@ trait TweakTarget[R, SetT] {
   def :-=(@nodeLift @withNodeClassID value: => R)(implicit ev: Numeric[R]): Tweak =
     makeTweak(mkMinus(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  def $colon$minus$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak =
-    makeTweak(mkMinus(new AlreadyCompletedNode(value)))
+  def $colon$minus$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak = makeTweak(mkMinus(value)(ev))
   def $colon$minus$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): Tweak = makeTweak(mkMinus(vn))
 
   @tweakOperator
@@ -95,8 +89,7 @@ trait TweakTarget[R, SetT] {
   def :*=(@nodeLift @withNodeClassID value: => R)(implicit ev: Numeric[R]): Tweak =
     makeTweak(mkTimes(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  def $colon$times$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak =
-    makeTweak(mkTimes(new AlreadyCompletedNode(value)))
+  def $colon$times$eq$withValue(value: R)(implicit ev: Numeric[R]): Tweak = makeTweak(mkTimes(value))
   def $colon$times$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): Tweak = makeTweak(mkTimes(vn))
 
   @tweakOperator
@@ -104,8 +97,7 @@ trait TweakTarget[R, SetT] {
   def :/=(@nodeLift @withNodeClassID value: => R)(implicit ev: Fractional[R]): Tweak =
     makeTweak(mkDiv(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  def $colon$div$eq$withValue(value: R)(implicit ev: Fractional[R]): Tweak =
-    makeTweak(mkDiv(new AlreadyCompletedNode(value)))
+  def $colon$div$eq$withValue(value: R)(implicit ev: Fractional[R]): Tweak = makeTweak(mkDiv(value))
   def $colon$div$eq$withNode(vn: Node[R])(implicit ev: Fractional[R]): Tweak = makeTweak(mkDiv(vn))
 
   override def toString: String = { writePrettyString(new PrettyStringBuilder()).toString }

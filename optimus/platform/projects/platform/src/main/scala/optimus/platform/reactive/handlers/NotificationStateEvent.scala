@@ -73,10 +73,6 @@ sealed trait StreamFailedEvent extends ExecutionStateEvent with ErrorEvent {
 final case class InputFailedEvent(id: Option[Any], reason: String, error: StatusError) extends StreamFailedEvent {
   override val exception: Option[Throwable] = Some(error.reason)
 }
-final case class OutputFailedEvent(id: Option[Any], reason: String, exception: Option[Throwable])
-    extends StreamFailedEvent
-final case class DeferredFailedEvent(id: Option[Any], reason: String, exception: Option[Throwable])
-    extends StreamFailedEvent
 final case class PubSubStreamFailedEvent(id: ClientStreamId, exception: Throwable)
     extends NotificationStateEvent
     with ErrorEvent

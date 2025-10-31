@@ -35,14 +35,8 @@ trait PubSubOperations { this: DSIResolver with EntityResolverReadImpl =>
       subs: Seq[Subscription],
       startTime: Option[Instant],
       endTime: Option[Instant]
-  ): CreatePubSubStream = {
-    // If "disableVtFilter" is true that means that application wants notifications for all VT updates.
-    // For e.g., transaction writing multiple entities at different VTs (aka multi-VT writes) or
-    // DAL.invalidateAllCurrent.
-    if (NotificationMessageHandler.disableVtFilter)
-      CreatePubSubStream(streamId, subs, startTime, endTime, Some(ValidTimeInterval.max))
-    else CreatePubSubStream(streamId, subs, startTime, endTime, Some(ValidTimeInterval.from(TimeInterval.Infinity)))
-  }
+  ): CreatePubSubStream =
+    CreatePubSubStream(streamId, subs, startTime, endTime, Some(ValidTimeInterval.from(TimeInterval.Infinity)))
 
   def createPubSubStream(
       streamId: ClientStreamId,

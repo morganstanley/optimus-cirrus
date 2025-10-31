@@ -78,6 +78,10 @@ object GitUtils {
   final case class BranchesForMerge(source: RemoteAndBranch, target: RemoteAndBranch)
 
   trait GitApi {
+    def currentBranch(): String
+
+    def localChanges(): Seq[String]
+
     def checkBranchExists(remoteAndBranch: RemoteAndBranch): Boolean
 
     def fetch(remoteAndBranch: RemoteAndBranch): String
@@ -128,17 +132,14 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) extends GitApi {
     result.split("\\s").drop(1)
   }
 
-  private def rawCommitsUniqueToSource(source: String, target: String): Seq[String] = {
+  private def rawCommitsUniqueToSource(source: String, target: String): Seq[String] =
     runGit("rev-list", s"$target..$source").getLines()
-  }
 
-  def commitsUniqueToSource(branches: GitUtils.BranchesForMerge): Seq[String] = {
+  def commitsUniqueToSource(branches: GitUtils.BranchesForMerge): Seq[String] =
     rawCommitsUniqueToSource(source = branches.source.toString, target = branches.target.toString)
-  }
 
-  def commitsUniqueToSource(localSource: GitUtils.Branch, target: GitUtils.RemoteAndBranch): Seq[String] = {
+  def commitsUniqueToSource(localSource: GitUtils.Branch, target: GitUtils.RemoteAndBranch): Seq[String] =
     rawCommitsUniqueToSource(source = localSource.toString, target = target.toString)
-  }
 
   def replace(source: String, target: String): String = runGit("replace", source, target)
 
@@ -249,7 +250,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) extends GitApi {
 
   def hasLocalChanges(): Boolean = localChanges().nonEmpty
 
-  def localChanges(): Seq[String] = runGit("status", "--short").getLines()
+  def localChanges(): Seq[String] = runGit("status", "--short").getLines().map(_.strip())
 
   def currentCommitHash(): String = runGit("rev-list", "--max-count=1", "HEAD")
 

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 trait ForensicSource extends Crumb.Source {
   override val name: String = "BB"
-  override def filterable = false
+  override val filterable = false
   override val maxCrumbs: Int = 50
 }
 object ForensicSource extends ForensicSource
@@ -52,6 +52,14 @@ trait ControlledSource {
 
   private val kafkaData: AtomicReference[KafkaData] = new AtomicReference(KafkaData(0, 0, 0, 0, 0, 0, true))
   final val kafkaFailures = new AtomicInteger(0)
+
+  private[platform] def adaptInternal(c: Crumb): Boolean = self.publisherOverride match {
+    case Some(pub) =>
+      pub.sendInternal(c)
+      true // The override publisher is assumed always to adapt
+    case None => false
+  }
+  final def adapt(c: Crumb): Boolean = adaptInternal(c)
 
   final def kafkaSentCount: Int = kafkaData.get.sent
 

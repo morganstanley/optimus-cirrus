@@ -650,6 +650,10 @@ object Properties extends KnownProperties {
   val crumbSnapAnalysis =
     prop[Map[String, Map[String, Double]]].withMeta(INTERNAL | AGG_OVER_ENGINES, PropertyUnits.Count)
   val kafkaMetrics = prop[Map[String, Double]].withMeta(INTERNAL, PropertyUnits.BareNumber)
+  val blob = prop[String]
+  val blobOrigLen = propI
+  val blobLen = propI
+  val blobBatch = propI
   val uuidLevel = prop[String]
 
   val `type` = prop[String]
@@ -839,6 +843,7 @@ object Properties extends KnownProperties {
       "Percentage of system CPU (0 - 100%) that was used by all processes on the machine (from OperatingSystemMXBean.getSystemCpuLoad)")
   val profSysFreeMem = propL.withMeta(MemoryInUse, "Free system memory")
   val profSysTotalMem = propL.withMeta(MemoryInUse, "Total system memory")
+  val profOpenFD = propL.withMeta(UnintegrableCount, "Number of open files")
   val profCgroupMem = prop[Map[String, Long]].withMeta(MemoryInUse, "Cgroup memory")
   val profLoadAvg =
     propD.withMeta(
@@ -1161,6 +1166,11 @@ object Properties extends KnownProperties {
   val plexerSnapFreeDisk = propL.withMeta(MemoryInUse)
   val plexerSnapOldestHours = propL.withMeta(GaugeLevel)
   val plexerSnapRootCount = propL.withMeta(UnintegrableCount)
+  val plexerCountCompressed = propL.withMeta(IntegrableCount)
+  val plexerCountUnwrapped = propL.withMeta(IntegrableCount)
+  val plexerCountDeleted = propL.withMeta(IntegrableCount)
+  val plexerCountFlushed = propL.withMeta(IntegrableCount)
+  val plexerCountClosed = propL.withMeta(IntegrableCount)
   val plexerSnapLagClient = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Print lag since crumb time"))
   val plexerSnapLagKafka = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Print lag since kafka publish"))
   val plexerSnapLagQueue = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Millis, "Print lag since enqueued"))

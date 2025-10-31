@@ -62,10 +62,6 @@ import scala.concurrent.duration.DurationInt
 
 object NotificationMessageHandler {
   val log: Logger = getLogger(this)
-  private[pubsub] val disableVtFilter =
-    DiagnosticSettings.getBoolProperty("optimus.platform.dal.pubsub.disableVtFilter", false)
-  private val filterEmptyDataMessage =
-    DiagnosticSettings.getBoolProperty("optimus.platform.dal.pubsub.filterEmptyDataMessage", true)
   val msgHandlerThreadGroup = new CustomThreadGroup("NotificationMessageHandler")
   val rawEventsHandlerThreadGroup = new CustomThreadGroup("RawEventsHandler")
   private val temporalSurfaceTag = Some("NotificationMessageHandler")
@@ -320,8 +316,7 @@ sealed trait NotificationMessageHandler {
   }
 
   final def handleMessages(msgs: Seq[NotificationMessage]): Unit = {
-    def filter(s: StreamEvent): Option[StreamEvent] = if (disableVtFilter) Some(s)
-    else
+    def filter(s: StreamEvent): Option[StreamEvent] =
       s match {
         case dm: DataNotificationMessage =>
           val newData = dm.fullData filter { case (_, nes) =>
@@ -335,7 +330,7 @@ sealed trait NotificationMessageHandler {
       case g: GlobalEvent => handleGlobalEvent(g)
       case s: StreamEvent =>
         filter(s) foreach {
-          case dm: DataNotificationMessage if filterEmptyDataMessage && dm.fullData.isEmpty =>
+          case dm: DataNotificationMessage if dm.fullData.isEmpty =>
             log.info(s"$clientStreamLogHeader Filtering out empty data notification message at ${dm.tt}")
           case fs =>
             if (isPubSubReferenceNotificationEnabled)
@@ -473,12 +468,14 @@ class AsyncNotificationMessageHandler(
       }
     }
 
-    def runThread(): Unit
+    protected def runThread(): Unit
 
     def setupMessageHandlerThread(threadName: String): Unit = {
       try {
         log.info(s"$clientStreamLogHeader $threadName Message handler thread started..")
         notifyMsgHandlerThreadSetup()
+        // TODO (OPTIMUS-80295): We only initialize one of the thread, because the other one gets initialized in a
+        // roundabout way by DALPSStreamManager.
         if (threadName.equals(rawEventsThreadName) && !EvaluationContext.isInitialised)
           EvaluationContext.initializeWithoutRuntime()
         notificationStreamCallback.setupThread(clientStreamId)

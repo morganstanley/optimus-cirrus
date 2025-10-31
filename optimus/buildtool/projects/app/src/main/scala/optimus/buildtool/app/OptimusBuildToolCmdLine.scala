@@ -165,13 +165,6 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
     else workspaceRoot.resolveDir("logs/obt").path
 
   @args.Option(
-    name = "--dockerDir",
-    required = false,
-    usage = "Output directory for docker (defaults to <workspace root>/docker-out)"
-  )
-  val dockerDir: String = ""
-
-  @args.Option(
     name = "--sandboxDir",
     required = false,
     usage = "Temporary directory for sandboxes (defaults to <output dir>/sandboxes)"

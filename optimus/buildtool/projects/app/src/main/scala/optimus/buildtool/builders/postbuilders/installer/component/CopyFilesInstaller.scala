@@ -75,22 +75,25 @@ class CopyFilesInstaller(
     }.toIndexedSeq
   }
 
-  @async def copyFilesForScope(scopeId: ScopeId): Seq[FileAsset] = {
-    FileCopySpec.getCopySpecs(scopeConfigSource, scopeId, src, factory).apar.flatMap { spec =>
-      val targetBundle = spec.targetBundle.map(scopeConfigSource.metaBundle).getOrElse(scopeId.metaBundle)
-      val (_, copiedFiles) =
-        copyFilesToDir(scopeId, spec, { _ => pathBuilder.dirForMetaBundle(targetBundle, leaf = "") })
-      copiedFiles
+  @async def copyFilesForScope(
+      scopeId: ScopeId,
+      specPredicate: NodeFunction[FileCopySpec, Boolean] = asNode(_ => true)): Seq[FileAsset] =
+    FileCopySpec.getCopySpecs(scopeConfigSource, scopeId, src, factory).apar.filter(specPredicate.apply).apar.flatMap {
+      spec =>
+        val targetBundle = spec.targetBundle.map(scopeConfigSource.metaBundle).getOrElse(scopeId.metaBundle)
+        val (_, copiedFiles) =
+          copyFilesToDir(scopeId, spec, { _ => pathBuilder.dirForMetaBundle(targetBundle, leaf = "") })
+        copiedFiles
     }
-  }
 
   @async def copyFilesToCustomDir(
       scopeId: ScopeId,
-      customDirF: FileCopySpec => Directory): Seq[(Directory, Seq[FileAsset])] = {
-    FileCopySpec.getCopySpecs(scopeConfigSource, scopeId, src, factory).apar.map { spec =>
-      copyFilesToDir(scopeId, spec, customDirF)
+      customDirF: FileCopySpec => Directory,
+      specPredicate: NodeFunction[FileCopySpec, Boolean] = asNode(_ => true)): Seq[(Directory, Seq[FileAsset])] =
+    FileCopySpec.getCopySpecs(scopeConfigSource, scopeId, src, factory).apar.filter(specPredicate.apply).apar.map {
+      spec =>
+        copyFilesToDir(scopeId, spec, customDirF)
     }
-  }
 
   @async private def copyFilesToDir(
       scopeId: ScopeId,
@@ -308,6 +311,7 @@ final case class FileCopySpec(
     fileFilter: PathFilter,
     compressAs: Option[String],
     tokenFilters: Seq[TokenFilter],
+    deployArtifact: Boolean,
     skipIfMissing: Boolean,
     extensionConfig: ExtensionConfiguration
 )
@@ -362,6 +366,7 @@ object FileCopySpec extends Log {
           fileFilter = RegularFileFilter && filter,
           compressAs = task.compressAs,
           tokenFilters = task.filters,
+          task.deployArtifact,
           task.skipIfMissing,
           extensionConfig
         )

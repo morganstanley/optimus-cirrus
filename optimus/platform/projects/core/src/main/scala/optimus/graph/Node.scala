@@ -144,7 +144,7 @@ trait NodeFuture[+T] {
   @miscFlags(MiscFlags.NODESYNC_ONLY)
   def get$ : T
   // Some usages require a full Node[T] beyond just the Future-like methods.
-  // so a NodeFuture[T] has to be convertable to a Node[T]
+  // so a NodeFuture[T] has to be convertible to a Node[T]
   def asNode$ : Node[T]
 
   // Following should go away when we switch to Loom
@@ -179,7 +179,7 @@ trait NodeFuture[+T] {
 }
 
 // Marks classes that can be formatted by NodeName
-trait FormattableNode;
+trait FormattableNode
 
 /*
  * Node is:
@@ -215,11 +215,10 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
 
   /**
    * Currently there are 2 classes of everything Sync/Async (eventually this will go away) There are times where certain
-   * optimizations are possible if it's known in advance what type of a Node this is This way def run can overriden and
-   * customized.
+   * optimizations are possible if it's known in advance what type of a Node this is.
    */
   def isFSM = false
-  def func: T = throw new GraphException("func or funcAsync must have been overriden")
+  def func: T = throw new GraphException("func or funcAsync must have been overridden")
 
   /**
    * [PLUGIN_ENTRY] Used by rawNodes Blocking get - evaluates this node, returning result when done (or throwing any
@@ -273,10 +272,10 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
    */
   final def getJob: T = getInternalJob
 
-  protected def getInternalJob: T = {
+  private def getInternalJob: T = {
     val ec = OGSchedulerContext.current()
     if (scenarioStack() == null) attach(ec.scenarioStack)
-    Edges.ensureJobNodeTracked(this)
+    replace(scenarioStack.withTrackingNode)
     ec.runAndWait(this)
     ec.getCurrentNodeTask.combineInfo(this, ec)
     result
@@ -318,9 +317,9 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   /**
    * [JOB_EXPERIMENTAL] This is the variant for @job-annotated nodes
    */
-  final def attachJob(ss: ScenarioStack): Unit = {
+  private def attachJob(ss: ScenarioStack): Unit = {
     attach(ss)
-    Edges.ensureJobNodeTracked(this)
+    replace(scenarioStack.withTrackingNode)
   }
 
   /*
@@ -392,8 +391,8 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
 
   protected def throwNodeCompletionException(otherNode: Node[_]): Unit = {
     import scala.jdk.CollectionConverters._
-    val allStackThraces = Thread.getAllStackTraces
-    val dumpString = allStackThraces.asScala
+    val allStackTraces = Thread.getAllStackTraces
+    val dumpString = allStackTraces.asScala
       .map { case (thread, traces) =>
         val threadInfo = s"${thread.toString}\n\t"
         val traceInfo = traces.map(_.toString).mkString("\n\t")
@@ -499,7 +498,7 @@ abstract class CompletableNode[T] extends Node[T] {
    * have ttracks. (However, external code should not depend on this internal implementation) Currently there is way too
    * much HIDDEN coupling between DIST and CORE
    *
-   * Note: It's usefull for DMC/DIST to compute store other additional info that was computed and propagated with
+   * Note: It's useful for DMC/DIST to compute store other additional info that was computed and propagated with
    * _xinfo. e.g. Auditor information.
    *
    * See: OPTIMUS-42328
@@ -567,11 +566,14 @@ package profiled {
   abstract class NodeSync[T] extends CompletableRawNode[T] {
     override def run(ec: OGSchedulerContext): Unit = completeWithResult(func, ec)
   }
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeSyncWithExecInfo[T] extends NodeSync[T] with RawNodeExecutionInfo[T] with FormattableNode
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeSyncAlwaysUnique[T]
       extends NodeSync[T]
       with RawNodeAlwaysUniqueExecutionInfo[T]
       with FormattableNode
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeSyncStoredClosure[T] extends NodeSync[T] {
     override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
   }
@@ -603,9 +605,11 @@ package profiled {
       }
     }
   }
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeFSMWithExecInfo[T] extends NodeFSM[T] with RawNodeExecutionInfo[T]
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeFSMAlwaysUnique[T] extends NodeFSM[T] with RawNodeAlwaysUniqueExecutionInfo[T]
-
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeFSMStoredClosure[T] extends NodeFSM[T] {
     override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
   }
@@ -625,9 +629,11 @@ package profiled {
     /* Implemented by plug-in, must return just queued up node */
     protected def childNode: NodeFuture[A]
   }
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeDelegateWithExecInfo[A] extends NodeDelegate[A] with RawNodeExecutionInfo[A]
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeDelegateAlwaysUnique[A] extends NodeDelegate[A] with RawNodeAlwaysUniqueExecutionInfo[A]
-
+  // noinspection ScalaUnusedSymbol (See optimus.tools.scalacplugins.entity.TypedNodeClassGenerator.NodeClassBuilder.baseType)
   abstract class NodeDelegateStoredClosure[A] extends NodeDelegate[A] {
     override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
   }
@@ -794,6 +800,7 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
   @nodeSync
   @nodeSyncLift
   def await: A = promisedNode.await
+  // noinspection ScalaUnusedSymbol
   def await$withNode: A = promisedNode.await$withNode
   def await$queued: NodeFuture[A] = promisedNode.await$queued
 
@@ -887,7 +894,7 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
 object NodePromise {
   private def currentCScopeOrNullScope =
     Option(EvaluationContext.scenarioStackOrNull).map(_.cancelScope).getOrElse(NullCancellationScope)
-  val promisePluginType = PluginType("NodePromise")
+  val promisePluginType: PluginType = PluginType("NodePromise")
 
   /**
    * Create a NodePromise.
@@ -927,7 +934,7 @@ object Node {
   def sequence[A, CC[X] <: IterableOnce[X]](ns: CC[Node[A]], maxConcurrency: Int = Int.MaxValue)(implicit
       cbf: BuildFrom[CC[Node[A]], A, CC[A]]): Node[CC[A]] =
     new SequenceNode[A, CC[A]](null, maxConcurrency, knownSize(ns)) {
-      private[this] val iterator = ns.toIterator
+      private[this] val iterator = ns.iterator
       private[this] val builder = cbf.newBuilder(ns)
 
       override def consumeIteration(i: Iteration): Unit = builder += i.node.result

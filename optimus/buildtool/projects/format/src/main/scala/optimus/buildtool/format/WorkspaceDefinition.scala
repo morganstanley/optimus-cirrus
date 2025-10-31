@@ -13,6 +13,7 @@ package optimus.buildtool.format
 
 import com.typesafe.config.Config
 import optimus.buildtool.config.FingerprintsDiffConfiguration
+import optimus.buildtool.config.RuntimeDependencyCacheConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.dependencies
 import optimus.buildtool.dependencies.CentralDependencies
@@ -35,12 +36,13 @@ final case class WorkspaceDefinition(
     runConfSubstitutionsValidator: RunConfSubstitutionsValidator,
     dockerStructure: DockerStructure,
     globalRules: RulesStructure,
-    fingerprintsDiffConfig: FingerprintsDiffConfiguration
+    fingerprintsDiffConfig: FingerprintsDiffConfiguration,
+    runtimeDependencyCacheConfiguration: RuntimeDependencyCacheConfiguration
 )
 
 object WorkspaceDefinition {
   // keep in sync with optimus.stratosphere.config.TypeSafeOptions.scalaVersion
-  private val ScalaVersionKey = "scalaVersion"
+  private val ScalaVersionKey = "scalaVersionAF"
 
   def load(
       workspaceName: String,
@@ -89,6 +91,7 @@ object WorkspaceDefinition {
     runConfSubstitutions <- RunConfSubstitutionsValidator.load(loadFileWithProperties)
     dockerStructure <- DockerStructure.load(loadFileWithProperties, validScopes)
     fingerprintsDiffConfig <- FingerprintsDiffConfiguration.load(loadFileWithProperties)
+    runtimeDependencyCacheConfig <- RuntimeDependencyCacheConfiguration.load(loadFileWithProperties)
   } yield {
     WorkspaceDefinition(
       workspace,
@@ -100,7 +103,8 @@ object WorkspaceDefinition {
       runConfSubstitutions,
       dockerStructure,
       rules,
-      fingerprintsDiffConfig
+      fingerprintsDiffConfig,
+      runtimeDependencyCacheConfig
     )
   }
 }

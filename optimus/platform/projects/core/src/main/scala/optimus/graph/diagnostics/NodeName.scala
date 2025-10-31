@@ -56,7 +56,7 @@ object NodeName {
   val dalCall: NodeName = NodeName("optimus.platform.dal", "DALDSIExecutor.doExecuteQuery")
   val getEntityByKeyAtNowOption: NodeName = NodeName("optimus.graph", "PluginSupport.getEntityByKeyAtNowOption")
 
-  val helpfulTranslations: Map[NodeName, String] = Map(getEntityByKeyAtNowOption -> "getOption")
+  private val helpfulTranslations: Map[NodeName, String] = Map(getEntityByKeyAtNowOption -> "getOption")
 
   def apply(ref: MethodRef): NodeName = {
     val indexOfClassName = ref.cls.lastIndexOf('/')
@@ -65,7 +65,7 @@ object NodeName {
     NodeName(pkgName, clsName + "." + ref.method)
   }
 
-  final def stripPackageFromName(pkgName: String, name: String): String = {
+  private def stripPackageFromName(pkgName: String, name: String): String = {
     if (name.startsWith(pkgName) && name.charAt(pkgName.length) == '.') {
       name.substring(pkgName.length + 1)
     } else name
@@ -110,7 +110,7 @@ object NodeName {
           if (c(i + 1).isDigit) {
             i += 1
             if (DiagnosticSettings.profileOverloads) {
-              if (c(i) == '1') i += 1 // Only $1, the $2 etc are overloads
+              if (c(i) == '1') i += 1 // Only $1, the $2 etc. are overloads
             } else while (c(i).isDigit) i += 1 // Eat '$' and followup digits
           } else {
             var k = i
@@ -138,7 +138,7 @@ object NodeName {
   private[this] val nameAndSourceComputer: function.Function[Class[_], String] =
     cls => cleanNodeClassName(cls) + " (" + SourceLocator.sourceOf(cls) + ")"
 
-  def nameAndSource(f: AnyRef): String =
+  def nameAndSource(f: Any): String =
     f match {
       case clsID: LNodeClsID if clsID.isDynamic =>
         val ste = clsID.stackTraceElem()
@@ -188,7 +188,7 @@ object NodeName {
     if (pkgName == null || pkgName.isEmpty) name + modifier else pkgName + "." + name + modifier
   }
 
-  def shortPackageName(pkgName: String): String = CleanName.shortPackageName(pkgName)
+  private def shortPackageName(pkgName: String): String = CleanName.shortPackageName(pkgName)
 
   def fromNodeCls(nodeCls: Class[_]): NodeName = fromNodeCls(nodeCls, "")
   def fromNodeCls(nodeCls: Class[_], modifier: String): NodeName = {
@@ -201,7 +201,7 @@ object NodeName {
     }
   }
 
-  def fromSubProfile(f: AnyRef): NodeName = f match {
+  def fromSubProfile(f: Any): NodeName = f match {
     case clsID: LNodeClsID if clsID.isDynamic => from(clsID.stackTraceElem())
     case _                                    => fromNodeCls(f.getClass)
   }

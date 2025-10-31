@@ -135,7 +135,7 @@ trait MessagesRetryHandler { proxy: MessagesDsiProxyBase =>
     }
   }
 
-  protected def getCurrentStreamObjs: Seq[MessagesNotificationStream] =
+  protected def getCurrentStreamObjs: Seq[MessagesNotificationStreamImpl] =
     proxy.streamMap.asScala.values.toSeq
 
   protected def onDisconnect(): Unit =

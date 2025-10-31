@@ -126,12 +126,15 @@ object ChainedID {
     new ChainedID(a.get(1), a.get(2).toInt, a.get(3).toInt, a.get(4))
   }
 
+  private[breadcrumbs] def newRoot = new ChainedID(prefix + (new UUID(UuidType.Type4, false)).toString, 0, level)
+
   private[optimus] val root = {
-    val cid: ChainedID = new ChainedID(prefix + (new UUID(UuidType.Type4, false)).toString, 0, level)
+    val cid: ChainedID = newRoot
     // Logged at error to get around logging filters that get setup in various ways.  This is not an actual
     // error of course but we need to do it this way
     log.error(s"root chainedId: $cid (this is not an actual error!)")
     cid
   }
   def create(level: Int = ChainedID.level): ChainedID = root.child(level)
+
 }

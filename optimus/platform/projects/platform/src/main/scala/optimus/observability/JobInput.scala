@@ -57,7 +57,7 @@ final case class TweakJobInput(propertyInfoName: String, className: String, valu
 }
 
 object TweakJobInput {
-  def apply(propertyInfo: NodeTaskInfo, value: AnyRef): TweakJobInput =
+  def apply(propertyInfo: NodeTaskInfo, value: Any): TweakJobInput =
     TweakJobInput(
       propertyInfo.name(),
       propertyInfo.entityInfo.runtimeClass.getName,

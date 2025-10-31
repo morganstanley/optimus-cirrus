@@ -13,7 +13,7 @@ package optimus.platform
 
 import java.lang.ref.WeakReference
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.breadcrumbs.crumbs.CrumbNodeType
+import optimus.breadcrumbs.ChainedID
 import optimus.core.TPDMask
 import optimus.graph._
 import optimus.platform.PluginHelpers.toNode
@@ -311,10 +311,19 @@ object EvaluationContext {
     node
   }
 
-  final def track[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(node: Node[T]): Node[T] = {
-    Edges.ensureTracked(node, label, tpe)
+  private def trackNodeTask(node: NodeTask): NodeTask = {
+    val ss = if (node.scenarioStack ne null) node.scenarioStack else EvaluationContext.scenarioStack
+    val ssChild = ss.withTrackingNode // Child scenario stack
+    node.replace(ssChild)
     node
   }
+
+  final def track[T](node: Node[T]): Node[T] = {
+    trackNodeTask(node)
+    node
+  }
+
+  final def trackChainedID(node: NodeTask): ChainedID = trackNodeTask(node).ID()
 
   /**
    * Used to update current 'default' scenario stack The next call into graph will use this Scenario[Stack]

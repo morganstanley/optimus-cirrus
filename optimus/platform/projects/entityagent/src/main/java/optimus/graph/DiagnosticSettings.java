@@ -37,8 +37,7 @@ public class DiagnosticSettings {
       "optimus.monitor.classUsage.overheadTrace";
   private static final String SHOW_TOP_N_CLASS_USAGE = "optimus.monitor.classUsage.showTopN";
   private static final String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
-  // aka --profile-graph
-  private static final String PROFILE_PROPERTY = "optimus.scheduler.profile";
+
   // aka --profile-aggregation
   private static final String PROFILE_AGGREGATION_PROPERTY =
       "optimus.scheduler.profile.aggregation";
@@ -211,6 +210,7 @@ public class DiagnosticSettings {
 
   public static final boolean batchScopeVerboseLogging =
       getBoolProperty("optimus.batchscope.verboseLogging", false);
+  public static final boolean verboseSSView = getBoolProperty("optimus.graph.verboseSSView", false);
 
   /**
    * When set to 0 XSFT is not supported, and basically reverts to a previous version TPD won't be

@@ -11,6 +11,7 @@
  */
 package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
+import com.sun.management.UnixOperatingSystemMXBean
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.BreadcrumbsKafkaPublisher
 import optimus.breadcrumbs.ChainedID
@@ -169,6 +170,11 @@ class BaseSamplers extends SamplerProvider with Log {
       ss += Snap(_ => osBean.getCommittedVirtualMemorySize / MILLION, profCommitedMB)
       ss += Snap(_ => osBean.getFreePhysicalMemorySize / MILLION, profSysFreeMem)
       ss += Snap(_ => osBean.getTotalPhysicalMemorySize / MILLION, profSysTotalMem)
+      osBean match {
+        case unix: UnixOperatingSystemMXBean =>
+          ss += Snap(_ => unix.getOpenFileDescriptorCount, profOpenFD)
+        case _ =>
+      }
     }
     Option(ManagementFactory.getCompilationMXBean).filter(_.isCompilationTimeMonitoringSupported).foreach { bean =>
       ss += Diff(_ => bean.getTotalCompilationTime, profJitTime)

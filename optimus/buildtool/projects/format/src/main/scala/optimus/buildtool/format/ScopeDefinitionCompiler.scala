@@ -507,11 +507,31 @@ class ScopeDefinitionCompiler(
     } yield ScopeDefaults(ds.toMap, c.to(Seq).sortBy(_.name))
   }
 
+  private val ModuleSetRegex = """\((.*)\)""".r
   private def loadConditional(config: Config, name: String, defaults: ScopeDefaults): ConditionalDefaults = {
-    val ids = config.stringListOrEmpty("ids").map(id => Id.parse(id))
-    val moduleSets = config.stringListOrEmpty("module-sets").map(id => ModuleSetId(id))
+    def parseId(s: String, include: Boolean) = s match {
+      case "."                       => AllFilter(include)
+      case ModuleSetRegex(moduleSet) => ModuleSetFilter(ModuleSetId(moduleSet), include)
+      case id                        => IdFilter(Id.parse(id), include)
+    }
+
     val exclude = config.hasPath("exclude") && config.getBoolean("exclude")
-    ConditionalDefaults(name, ids, moduleSets, defaults, exclude)
+
+    val ids = config.stringListOrEmpty("ids").map { id =>
+      if (id.startsWith("+")) {
+        parseId(id.substring(1), include = true)
+      } else if (id.startsWith("-")) {
+        parseId(id.substring(1), include = false)
+      } else {
+        parseId(id, include = !exclude)
+      }
+    }
+
+    // Preserve existing behaviour - if `exclude == true` then we want to default to include if it doesn't match
+    // any other filters
+    val filters = if (exclude) AllFilter(include = true) +: ids else ids
+
+    ConditionalDefaults(name, filters, defaults)
   }
 
   private def loadDefaults(file: ObtFile, parent: ScopeDefaults): Result[ScopeDefaults] =

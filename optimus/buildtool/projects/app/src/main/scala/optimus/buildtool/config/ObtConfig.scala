@@ -76,7 +76,8 @@ import scala.jdk.CollectionConverters._
     val dockerStructure: DockerStructure,
     val workspaceStructure: WorkspaceStructure,
     val regexConfig: RegexConfiguration,
-    val fingerprintsDiffConfig: FingerprintsDiffConfiguration
+    val fingerprintsDiffConfig: FingerprintsDiffConfiguration,
+    val runtimeDependencyCacheConfiguration: RuntimeDependencyCacheConfiguration
 ) extends ScopeConfigurationSourceBase
     with DockerConfigurationSupport {
 
@@ -165,7 +166,8 @@ import scala.jdk.CollectionConverters._
               dirFilter = NotHiddenFilter && ExclusionFilter(WorkspaceLayout.Strato.profiles(workspaceSrcRoot)),
               // since this causes invalidation of all of the config nodes, filter to only respond to changes in .obt and .conf
               // we also specifically exclude mischief.obt because that file isn't read through normal channels
-              fileFilter = Directory.fileExtensionPredicate("obt") &&
+              fileFilter = (Directory.fileExtensionPredicate("obt") || Directory.fileNamePredicate(
+                "runtime-dependency-cache.json")) &&
                 ExclusionFilter(workspaceSrcRoot.resolveFile("mischief.obt")),
               // maxDepth 5 is sufficient to find all .obt files
               maxDepth = 5
@@ -219,7 +221,8 @@ import scala.jdk.CollectionConverters._
             dockerStructure = ws.dockerStructure,
             workspaceStructure = ws.structure,
             regexConfig = ws.globalRules.rules.getOrElse(RegexConfiguration.Empty),
-            fingerprintsDiffConfig = ws.fingerprintsDiffConfig
+            fingerprintsDiffConfig = ws.fingerprintsDiffConfig,
+            runtimeDependencyCacheConfiguration = ws.runtimeDependencyCacheConfiguration
           )
         case Failure(problems) =>
           val e = new IllegalArgumentException(s"Failed to load obt configuration:\n\t${problems.mkString("\n\t")}")

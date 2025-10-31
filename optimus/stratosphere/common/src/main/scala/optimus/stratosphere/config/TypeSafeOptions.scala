@@ -684,6 +684,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object prCreationTool {
     def timeout: JDuration = self.select("pr-creation-tool.timeout")
+    def prStepTimeout: JDuration = self.select("pr-creation-tool.pr-step-timeout")
     def autoConfirm: Boolean = self.select("pr-creation-tool.auto-confirm")
     def startBuild: Boolean = self.select("pr-creation-tool.start-build")
     def forcePush: Boolean = self.select("pr-creation-tool.force-push")

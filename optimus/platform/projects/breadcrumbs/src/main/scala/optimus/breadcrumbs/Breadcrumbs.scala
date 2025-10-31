@@ -56,7 +56,6 @@ import java.util.{ArrayList => jArrayList}
 import java.util.{List => jList}
 import java.util.{Map => jMap}
 import scala.collection.mutable
-import scala.collection.concurrent
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import optimus.scalacompat.collection._
@@ -68,11 +67,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.SortedMap
-
-object BreadcrumbConsts {
-  val CrumbBundle = "_crumbs" // compressed, encoded stream of serialized crumbs
-  val BreadcrumbVersion = "0.6"
-}
 
 trait BreadcrumbConfig {
   def tag: String
@@ -575,7 +569,7 @@ abstract class BreadcrumbsPublisher extends Filterable with Log {
   protected[breadcrumbs] final def error(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
     sendLimited(key, uuid, cf, BreadcrumbLevel.Error)
 
-  protected[breadcrumbs] def sendInternal(c: Crumb): Boolean
+  protected[optimus] def sendInternal(c: Crumb): Boolean = false
 
   protected def warning: Option[ThrottledWarnOrDebug] = None
 
@@ -583,11 +577,9 @@ abstract class BreadcrumbsPublisher extends Filterable with Log {
     if (crumb.source.isShutdown) false
     else if (crumb.uuid.base.nonEmpty) {
       def sendCrumbsForOneSource(c: Crumb): Boolean = {
-        if (c.source.publisherOverride.isDefined) {
-          c.source.publisherOverride.exists(_.sendInternal(c))
-        } else {
-          val cReplicated = Breadcrumbs.replicateToUuids(c)
-          val s = c.source
+        val cReplicated = Breadcrumbs.replicateToUuids(c)
+        val s = c.source
+        s.adapt(c) || {
           val currCount = s.genericSendCount.get
           val more = cReplicated.size
           knownSource.put(s, s)
@@ -736,7 +728,7 @@ private[optimus] class BreadcrumbsRouter(
   }
 
   // [SEE_BREADCRUMB_FILTERING]
-  private def route(c: Crumb): BreadcrumbsPublisher = {
+  private[breadcrumbs] final def route(c: Crumb): BreadcrumbsPublisher = {
     if (c.source.isFilterable) {
       val targetPublisher = rules
         .find { _.matcher matches c }
@@ -745,7 +737,7 @@ private[optimus] class BreadcrumbsRouter(
     } else BreadcrumbsKafkaPublisher.instance.get.getOrElse(defaultPublisher)
   }
 
-  protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
+  protected[optimus] override def sendInternal(c: Crumb): Boolean = {
     val r = route(c)
     r.sendInternal(c)
   }
@@ -859,7 +851,7 @@ class BreadcrumbsLocalPublisher(gzpath: Path, flushSec: Int = 10) extends Breadc
 
   override def collecting: Boolean = open
   override def init(): Unit = {}
-  override protected[breadcrumbs] def sendInternal(c: Crumb): Boolean = queue.offer(c)
+  override protected[optimus] def sendInternal(c: Crumb): Boolean = queue.offer(c)
   override def flush(): Unit = {
     val fm = FlushMarker()
     queue.offer(fm)
@@ -1054,6 +1046,7 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
               Breadcrumbs.queue.drainTo(buf)
               buf.asScala.foreach(sendKafka)
               countSent(buf.size)
+              producer.foreach(_.flush())
               f.flushed()
             case c: Crumb =>
               sendKafka(c)
@@ -1092,7 +1085,6 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
           log.warn(s"The last ${unsentCrumbCount} crumbs will not be published")
         }
       }
-    producer.foreach(_.flush())
   }
 
   override def shutdown(): Unit = {
@@ -1138,7 +1130,7 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
       None
   }
 
-  protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
+  protected[optimus] override def sendInternal(c: Crumb): Boolean = {
     publishers.foldLeft(true) { (acc, publisher) =>
       try {
         log.debug(s"Running sendInternal for $publisher")

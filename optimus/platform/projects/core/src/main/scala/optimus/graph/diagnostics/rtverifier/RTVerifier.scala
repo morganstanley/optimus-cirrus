@@ -11,11 +11,13 @@
  */
 package optimus.graph.diagnostics.rtverifier
 
+import com.github.benmanes.caffeine.cache.Caffeine
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.core.MonitoringBreadcrumbs
 import optimus.debug.InstrumentedModuleCtor
 import optimus.debug.InstrumentedNotRTFunction
 import optimus.debug.RTVerifierCategory
+import optimus.graph.NodeTask
 import optimus.graph.OGTrace.CachedSuffix
 import optimus.graph.OGSchedulerContext
 import optimus.graph.PropertyNodeSync
@@ -23,6 +25,7 @@ import optimus.graph.loom.AsNode
 import optimus.platform.util.PrettyStringBuilder
 
 import java.lang.StackWalker.StackFrame
+import java.util.Objects
 import java.util.stream.{Stream => JStream}
 import scala.collection.convert.ImplicitConversions._
 import scala.collection.mutable.ArrayBuffer
@@ -100,13 +103,17 @@ object RTVerifier {
       })
   }
 
+  private val lambdaRe = "Lambda./\\w+$".r
+  val reportedNodes = Caffeine.newBuilder().weakKeys().build[NodeTask, Boolean]().asMap()
   private def reportIfTransitivelyCached(): Unit = {
     val ec = OGSchedulerContext._TRACESUPPORT_unsafe_current()
     if (ec != null) {
       val ntsk = ec.getCurrentNodeTask
-      val isCacheableUserNode =
-        ntsk != null && !ntsk.executionInfo().isInternal && ntsk.scenarioStack().cachedTransitively
-      if (isCacheableUserNode) {
+      val isReportable =
+        ntsk != null && !ntsk.executionInfo().isInternal && ntsk.scenarioStack().cachedTransitively && Objects.isNull(
+          reportedNodes
+            .put(ntsk, true))
+      if (isReportable) {
         val ntskStack = ntsk.nodeStackToCacheable()
         val cacheableNode = ntskStack.lastOption.getOrElse(ntsk)
         // intentionally getting the generated class rather than the runtimeClass class to match the stack trace
@@ -146,10 +153,8 @@ object RTVerifier {
               sb.append("Node Stack ")
               sb.startBlock()
               ntskStack.forEach { ns =>
-                val cleanName =
-                  ns.toPrettyName(true, false)
-                    // strip lambda encoding so that we can correctly group violations
-                    .replaceAll("Lambda./\\w+$", "Lambda./NN")
+                // strip lambda encoding so that we can correctly group violations
+                val cleanName = lambdaRe.replaceAllIn(ns.toPrettyName(true, false), "Lambda./NN")
                 sb.appendln(cleanName)
               }
               sb.endBlock()

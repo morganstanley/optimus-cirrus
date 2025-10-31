@@ -11,6 +11,8 @@
  */
 package optimus.breadcrumbs.zookeeper
 
+import com.google.common.annotations.VisibleForTesting
+
 import java.io.Closeable
 import java.util.{ArrayList => JavaArrayList, HashMap => JavaHashMap, List => JavaList, Map => JavaMap}
 import msjava.zkapi.PropertySource
@@ -256,161 +258,165 @@ object BreadcrumbsPropertyConfigurer extends Log {
       zkc: ZkaContext,
       appKeys: Map[String, String] = Map(),
       setupFlags: SetupFlags = SetupFlags.None,
-  ): BreadcrumbsPublisher = {
+  ) = CachedZkaContext.withCache(zkc)(implFromConfig0(_, appKeys, setupFlags))
 
+  @VisibleForTesting
+  private[breadcrumbs] def implFromConfig0(
+      czkc: CachedZkaContext,
+      appKeys: Map[String, String],
+      setupFlags: SetupFlags,
+  ): BreadcrumbsPublisher = {
     val trail = ArrayBuffer.empty[String]
     val ST = Some(trail)
 
-    CachedZkaContext.withCache(zkc) { czkc =>
-      /**
-       * Try to find an appropriate property source given a configuration map. In order, try:
-       *   1. An explicit "breadcrumb.config" or "breadcrumb.config.location" element. Treat its value as the subpath
-       *      (after "/breadcrumbs/") 2. A runtime environment from "rtcEncv", "rtcMode" or zkMode", e.g. "dev". Treat
-       *      its value as the subpath. 3. An "optimus.dsi.uri". Treat everything after the "//" as the subpath. 4. Try
-       *      no subpath, i.e. "/breadcrumbs" directly. In all cases, the path may resolve to an alias, which pathToPS
-       *      will resolve.
-       */
-      def findPS(appKeys: Map[String, String]): Option[PropertySource] = {
-        try {
-          PropertyUtils.get("breadcrumb.config.location").flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            appKeys.get("breadcrumb.config").flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            appKeys.get("rtcEnv").flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            appKeys.get("rtcMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            appKeys.get("zkMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            // The uri could take the forms
-            //     foo://bar/wiz/env
-            //     foo://bar/wiz?blip=env
-            // where the actual environment is env.
-            appKeys
-              .get("optimus.dsi.uri")
-              .map(_.replaceFirst(".*:\\/\\/(.*\\?\\w+=)?", ""))
-              .flatMap(pathToPS(czkc, _, trail = ST)) orElse
-            pathToPS(czkc, "", trail = ST).map { ps =>
-              closeablePropertySources += ps
-              ps
-            }
-        } catch {
-          case NonFatal(ex) => {
-            log.warn(s"Caught exception while creating property source, possibly due to invalid configuration data", ex)
-            None
+    /**
+     * Try to find an appropriate property source given a configuration map. In order, try:
+     *   1. An explicit "breadcrumb.config" or "breadcrumb.config.location" element. Treat its value as the subpath
+     *      (after "/breadcrumbs/") 2. A runtime environment from "rtcEncv", "rtcMode" or zkMode", e.g. "dev". Treat
+     *      its value as the subpath. 3. An "optimus.dsi.uri". Treat everything after the "//" as the subpath. 4. Try
+     *      no subpath, i.e. "/breadcrumbs" directly. In all cases, the path may resolve to an alias, which pathToPS
+     *      will resolve.
+     */
+    def findPS(appKeys: Map[String, String]): Option[PropertySource] = {
+      try {
+        PropertyUtils.get("breadcrumb.config.location").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          appKeys.get("breadcrumb.config").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          appKeys.get("rtcEnv").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          appKeys.get("rtcMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          appKeys.get("zkMode").flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          // The uri could take the forms
+          //     foo://bar/wiz/env
+          //     foo://bar/wiz?blip=env
+          // where the actual environment is env.
+          appKeys
+            .get("optimus.dsi.uri")
+            .map(_.replaceFirst(".*:\\/\\/(.*\\?\\w+=)?", ""))
+            .flatMap(pathToPS(czkc, _, trail = ST)) orElse
+          pathToPS(czkc, "", trail = ST).map { ps =>
+            closeablePropertySources += ps
+            ps
           }
+      } catch {
+        case NonFatal(ex) => {
+          log.warn(s"Caught exception while creating property source, possibly due to invalid configuration data", ex)
+          None
         }
       }
-
-      val SYS = "(SYS_\\w+)".r
-      val locspec: Map[String, String] = System
-        .getenv()
-        .asScala
-        .collect { case (SYS(k), v) => k -> v }
-        .toMap
-      val keys = appKeys ++ locspec ++ PropertyUtils.get("breadcrumb.special.code").map("specialCode" -> _).toList
-
-      val maybePropertySource = findPS(keys)
-
-      val ignorer: BreadcrumbsPublisher = new BreadcrumbsIgnorer() {
-        override val savedCustomization = Some((keys, czkc.context))
-        override def init(): Unit = log.info("Initialized crumb ignorer")
-        override def toString = classOf[BreadcrumbsIgnorer].getSimpleName
-      }
-
-      lazy val kafkaPublisher = safeResolvePublisher(KafkaPublisherKey)
-      lazy val logPublisher = safeResolvePublisher(LogPublisherKey)
-
-      def safeResolvePublisher(publisher: String) = {
-        try {
-          maybePropertySource
-            .map { ps =>
-              resolvePublisher(czkc, ps, publisher, keys)
-            }
-            .getOrElse(throw new RuntimeException(s"$publisher failed to initialize due to missing property source"))
-        } catch {
-          case NonFatal(ex) => {
-            log.warn(s"Caught exception $ex configuring $publisher; reverting to crumb ignorer")
-            log.debug("Exception:", ex)
-            ignorer
-          }
-        }
-      }
-
-      def select(publisher: String): BreadcrumbsPublisher = {
-        val publishers = publisher.split(",")
-        if (publishers.length > 1)
-          new BreadcrumbsCompositePublisher(publishers.toSet map select)
-        else
-          publisher match {
-            case KafkaPublisherKey => kafkaPublisher
-            case LogPublisherKey   => logPublisher
-            case NoPublisherKey => {
-              log.info("Publishing turned off, selecting crumb ignorer")
-              ignorer
-            }
-            case x => {
-              log.info(s"Unknown breadcrumbs resource '$x', selecting crumb ignorer")
-              ignorer
-            }
-          }
-      }
-
-      val verboseSetup = Set(SetupFlags.StrictInit, SetupFlags.VerboseInit).exists(setupFlags.contains(_))
-      val configuredPublisher =
-        try {
-          (for (
-            ps <- maybePropertySource;
-            publisher <- findCase[String](ps, PublisherKey, keys, verbose = verboseSetup)
-          )
-            yield select(publisher)) getOrElse ignorer
-        } catch {
-          case NonFatal(ex) =>
-            log.warn(s"Caught exception $ex configuring breadcrumbs; reverting to crumb ignorer")
-            log.debug("Exception:", ex)
-            ignorer
-        }
-
-      if (setupFlags.contains(SetupFlags.StrictInit) && configuredPublisher.isInstanceOf[BreadcrumbsIgnorer]) {
-        throw new IllegalArgumentException("Crumb configuration would result in no publisher being enabled")
-      }
-
-      val routingConfiguration =
-        try {
-          (for (
-            ps <- maybePropertySource;
-            routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey, trail = ST)
-          )
-            yield {
-              Option(routing.get(RuleKey))
-                .map { _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala }
-                .getOrElse(Seq.empty)
-            }).getOrElse(Seq.empty)
-        } catch {
-          case NonFatal(ex) =>
-            log.warn(s"Caught exception $ex setting up breadcrumbs routing")
-            log.debug("Exception:", ex)
-            Seq.empty
-        }
-
-      val rules: collection.Seq[CrumbRoutingRule] =
-        try {
-          routingConfiguration.map { r =>
-            val filters = r.get(FilterKey).asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
-            CrumbFilter.createFilter(filters.map(_.asScala.toMap).toSeq) map { filter =>
-              val name = r.getOrDefault("name", "N/A").toString()
-              val publisher = select(Option(r.get(PublisherKey)).map(_.toString).getOrElse(NoPublisherKey))
-              CrumbRoutingRule(name, filter, publisher)
-            }
-          } collect { case Some(routingRule) => routingRule }
-        } catch {
-          case NonFatal(ex) =>
-            log.warn(s"Caught exception $ex setting up breadcrumbs routing, no rules will be applied")
-            log.debug("Exception:", ex)
-            Seq.empty
-        }
-      trail += s"rules: $rules"
-      // This will get enequeued and published eventually by any publisher other than the ignorer.
-      Breadcrumbs.info(
-        ChainedID.root,
-        PropertiesCrumb(_, ForensicSource, Properties.crumbConfig -> trail.toSeq :: Version.properties))
-      new BreadcrumbsRouter(rules.toSeq, configuredPublisher)
     }
+
+    val SYS = "(SYS_\\w+)".r
+    val locspec: Map[String, String] = System
+      .getenv()
+      .asScala
+      .collect { case (SYS(k), v) => k -> v }
+      .toMap
+    val keys = appKeys ++ locspec ++ PropertyUtils.get("breadcrumb.special.code").map("specialCode" -> _).toList
+
+    val maybePropertySource = findPS(keys)
+
+    val ignorer: BreadcrumbsPublisher = new BreadcrumbsIgnorer() {
+      override val savedCustomization = Some((keys, czkc.context))
+      override def init(): Unit = log.info("Initialized crumb ignorer")
+      override def toString = classOf[BreadcrumbsIgnorer].getSimpleName
+    }
+
+    lazy val kafkaPublisher = safeResolvePublisher(KafkaPublisherKey)
+    lazy val logPublisher = safeResolvePublisher(LogPublisherKey)
+
+    def safeResolvePublisher(publisher: String) = {
+      try {
+        maybePropertySource
+          .map { ps =>
+            resolvePublisher(czkc, ps, publisher, keys)
+          }
+          .getOrElse(throw new RuntimeException(s"$publisher failed to initialize due to missing property source"))
+      } catch {
+        case NonFatal(ex) => {
+          log.warn(s"Caught exception $ex configuring $publisher; reverting to crumb ignorer")
+          log.debug("Exception:", ex)
+          ignorer
+        }
+      }
+    }
+
+    def select(publisher: String): BreadcrumbsPublisher = {
+      val publishers = publisher.split(",")
+      if (publishers.length > 1)
+        new BreadcrumbsCompositePublisher(publishers.toSet map select)
+      else
+        publisher match {
+          case KafkaPublisherKey => kafkaPublisher
+          case LogPublisherKey   => logPublisher
+          case NoPublisherKey => {
+            log.info("Publishing turned off, selecting crumb ignorer")
+            ignorer
+          }
+          case x => {
+            log.info(s"Unknown breadcrumbs resource '$x', selecting crumb ignorer")
+            ignorer
+          }
+        }
+    }
+
+    val verboseSetup = Set(SetupFlags.StrictInit, SetupFlags.VerboseInit).exists(setupFlags.contains(_))
+    val configuredPublisher =
+      try {
+        (for (
+          ps <- maybePropertySource;
+          publisher <- findCase[String](ps, PublisherKey, keys, verbose = verboseSetup)
+        )
+          yield select(publisher)) getOrElse ignorer
+      } catch {
+        case NonFatal(ex) =>
+          log.warn(s"Caught exception $ex configuring breadcrumbs; reverting to crumb ignorer")
+          log.debug("Exception:", ex)
+          ignorer
+      }
+
+    if (setupFlags.contains(SetupFlags.StrictInit) && configuredPublisher.isInstanceOf[BreadcrumbsIgnorer]) {
+      throw new IllegalArgumentException("Crumb configuration would result in no publisher being enabled")
+    }
+
+    val routingConfiguration =
+      try {
+        (for (
+          ps <- maybePropertySource;
+          routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey, trail = ST)
+        )
+          yield {
+            Option(routing.get(RuleKey))
+              .map { _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala }
+              .getOrElse(Seq.empty)
+          }).getOrElse(Seq.empty)
+      } catch {
+        case NonFatal(ex) =>
+          log.warn(s"Caught exception $ex setting up breadcrumbs routing")
+          log.debug("Exception:", ex)
+          Seq.empty
+      }
+
+    val rules: collection.Seq[CrumbRoutingRule] =
+      try {
+        routingConfiguration.map { r =>
+          val filters = r.get(FilterKey).asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
+          CrumbFilter.createFilter(filters.map(_.asScala.toMap).toSeq) map { filter =>
+            val name = r.getOrDefault("name", "N/A").toString()
+            val publisher = select(Option(r.get(PublisherKey)).map(_.toString).getOrElse(NoPublisherKey))
+            CrumbRoutingRule(name, filter, publisher)
+          }
+        } collect { case Some(routingRule) => routingRule }
+      } catch {
+        case NonFatal(ex) =>
+          log.warn(s"Caught exception $ex setting up breadcrumbs routing, no rules will be applied")
+          log.debug("Exception:", ex)
+          Seq.empty
+      }
+    trail += s"rules: $rules"
+    // This will get enequeued and published eventually by any publisher other than the ignorer.
+    Breadcrumbs.info(
+      ChainedID.root,
+      PropertiesCrumb(_, ForensicSource, Properties.crumbConfig -> trail.toSeq :: Version.properties))
+    new BreadcrumbsRouter(rules.toSeq, configuredPublisher)
   }
 
   private[breadcrumbs] def resolvePublisher(
@@ -474,7 +480,7 @@ protected[breadcrumbs] class CachedZkaContext(val context: ZkaContext) {
   private val cache: mutable.Map[String, ZkaData] = mutable.Map.empty
   private var size = 0
 
-  def getData(childPath: String) = {
+  def getData(childPath: String): ZkaData = {
     if (size >= maxCacheSize) {
       log.debug("cache size exceeded, will resolve request from Zookeeper")
       context.getData(childPath)

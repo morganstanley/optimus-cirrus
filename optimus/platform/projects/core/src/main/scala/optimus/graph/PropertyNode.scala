@@ -70,7 +70,7 @@ sealed trait NodeKey[+T] extends TweakableKey {
    * Currently used for scenario tweaks only to generate the tweak's when or set clause given the arguments of the
    * current key node
    */
-  def argsCopy(generator: AnyRef /* Function[E, A1, A2, Any] */ ): Node[Any]
+  def argsCopy(generator: Any /* Function[E, A1, A2, Any] */ ): Node[Any]
 
   /**
    * In order to avoid creating temporary array and boxing value type plug-in generates and overrides these functions
@@ -136,7 +136,7 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
    * Currently used for scenario tweaks only to generate the tweak's when or set clause given the arguments of the
    * current key node
    */
-  override def argsCopy(generator: AnyRef /* Function[E, A1, A2, Any] */ ): Node[Any] = {
+  override def argsCopy(generator: Any /* Function[E, A1, A2, Any] */ ): Node[Any] = {
     generator.asInstanceOf[Entity => Node[Any]](entity) // For no arguments property and relies on erasure for entity
   }
 
@@ -210,7 +210,7 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
   override final def lookupAndEnqueueJob: Node[T] = {
     val ec = OGSchedulerContext.current()
     OGTrace.setPotentialEnqueuer(ec, this, false)
-    val node = Edges.ensurePropertyJobNodeTracked(this, ec)
+    val node = ec.scenarioStack().withTrackingNode.getNode(this, ec)
     ec.enqueueDirect(node)
     node
   }
@@ -236,7 +236,7 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
   override final def lookupAndGetJob: T = {
     val ec = OGSchedulerContext.current()
     OGTrace.setPotentialEnqueuer(ec, this, true)
-    val node = Edges.ensurePropertyJobNodeTracked(this, ec)
+    val node = ec.scenarioStack().withTrackingNode.getNode(this, ec)
     ec.runAndWait(node)
     ec.getCurrentNodeTask.combineInfo(node, ec)
     node.result
@@ -254,9 +254,13 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
 
   /**
    * Called when `PropertyInfo.hasTweakHandler = true` to transform an applied tweaks into the actual tweaks to apply.
+   * Added to support property nodes with tweak-handlers, see: `AdjustASTComponent` in Optimus scalac plugin.
    */
-  final def transformTweak(value: TweakNode[T], pss: ScenarioStack): Seq[Tweak] =
-    transformTweak(value.cloneWithDirectAttach(pss, this).get)
+  final def transformTweak(tweak: Tweak, pss: ScenarioStack): Seq[Tweak] = {
+    val useTweak = tweak.bind(Tweak.evaluateInGivenWhenExpanding)
+    val tweakNode = tweak.tweakTemplate.createTweakNode(useTweak, pss, pss, this)
+    transformTweak(tweakNode.get)
+  }
 
   /**
    * The plugin implements this method to call the user written foo_:= tweak handler
@@ -457,10 +461,8 @@ class InitedPropertyNodeSync[T](
 
   override def run(ec: OGSchedulerContext): Unit = completeWithResult(func, ec)
 
-  final def refreshedValue: T = propertyInfo.createNodeKey(entity).asInstanceOf[InitedPropertyNodeSync[T]].v
-  override def func: T = {
-    refreshedValue
-  }
+  private def refreshedValue: T = propertyInfo.createNodeKey(entity).asInstanceOf[InitedPropertyNodeSync[T]].v
+  override def func: T = refreshedValue
 
   // noinspection ScalaUnusedSymbol
   // Take a snapshot of ticking value if serialised
@@ -534,7 +536,7 @@ class AlreadyCompletedPropertyNode[T](
   // noinspection ScalaUnusedSymbol
   private def writeReplace(): AnyRef = new ACPNMoniker(this)
 
-  override def argsCopy(generator: AnyRef): Node[Any] = generator match {
+  override def argsCopy(generator: Any): Node[Any] = generator match {
     case predicate: LNodeFunction1[Entity @unchecked, Boolean @unchecked] =>
       predicate.apply$newNode(entity)
     case _ => super.argsCopy(generator)

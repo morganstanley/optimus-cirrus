@@ -78,9 +78,3 @@ object MessagesEvent {
    */
   case object MessagesBrokerDisconnectEvent extends GlobalEvent
 }
-
-trait MessagesNotificationCallback
-    extends NotificationStreamCallback[MessagesEvent.GlobalEvent, MessagesEvent.StreamEvent, String] {
-  override def notifyGlobalEvent(id: String, msg: MessagesEvent.GlobalEvent): Unit
-  override def notifyStreamEvent(id: String, msg: MessagesEvent.StreamEvent): Unit
-}

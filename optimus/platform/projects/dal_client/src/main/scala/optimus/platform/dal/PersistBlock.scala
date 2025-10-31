@@ -604,7 +604,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
         else if (!entity.$inline) assertOps += AssertEntry(entity, vt, currentPropertyInfo)
         // if dal$entityRef is null or isTemporary then it is a heap entity, or if it is a finalReference
         if (
-          containsFinalTypedReferencesOnly && Option(entity.dal$entityRef).forall { r =>
+          containsFinalTypedReferencesOnly && Option(getEntityRef(entity)).forall { r =>
             r.isTemporary || r.getTypeId.isEmpty
           }
         ) {

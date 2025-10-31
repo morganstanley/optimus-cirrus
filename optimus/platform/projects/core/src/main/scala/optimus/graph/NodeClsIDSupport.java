@@ -183,8 +183,7 @@ public class NodeClsIDSupport {
     return values;
   }
 
-  private static MethodHandle fieldsAsArray(Class<?> cls, MethodHandle[] getters)
-      throws NoSuchMethodException, IllegalAccessException {
+  private static MethodHandle fieldsAsArray(Class<?> cls, MethodHandle[] getters) {
     var objGetters = new MethodHandle[getters.length];
     for (int i = 0; i < getters.length; i++)
       objGetters[i] = getters[i].asType(methodType(Object.class, cls));

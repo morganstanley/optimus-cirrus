@@ -17,7 +17,6 @@ import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
 
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.breadcrumbs.{CrumbLogger => clog}
 import optimus.buildtool.config.ScopeId
 import optimus.logging.LoggingInfo
 
@@ -42,8 +41,7 @@ private[buildtool] final class CountingTrace(statusIntervalSec: Option[Int] = No
 
     final def logTask(scopeId: ScopeId, category: String, tpe: String, extraInfo: => String): Unit = {
       lazy val extraInfoEvaluated = extraInfo
-      log.debug(s"$scopeId:$category:$tpe $extraInfoEvaluated")
-      clog.debug(f"$scopeId:$category:$tpe $extraInfoEvaluated [${LoggingInfo.getHost}]")
+      log.debug(s"$scopeId:$category:$tpe $extraInfoEvaluated [${LoggingInfo.getHost}]")
     }
 
     override def end(success: Boolean, errors: Int, warnings: Int, time: Instant): Unit = synchronized {

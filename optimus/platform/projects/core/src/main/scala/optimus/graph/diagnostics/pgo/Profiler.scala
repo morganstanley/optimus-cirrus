@@ -43,9 +43,9 @@ object Profiler {
   ////////////////////////////////////////////////////////////////////////////////////////
   val u: Utils.type = Utils
   val log: Logger = msjava.slf4jutils.scalalog.getLogger("PROFILER")
-  def lnlog(str: String): Unit = println(str)
-  def lnlog(): Unit = lnlog("")
-  def lnlog(w: Int): Unit = lnlog(" " * w)
+  private def lnlog(str: String): Unit = println(str)
+  private def lnlog(): Unit = lnlog("")
+  private def lnlog(w: Int): Unit = lnlog(" " * w)
   def padTo(b: Boolean, w: Int): String = b.toString.padTo(w, ' ')
   def padTo(str: String, w: Int): String = str.padTo(w, ' ')
 
@@ -84,7 +84,7 @@ object Profiler {
 
   var onsstack_trace: ( /*ssu*/ ScenarioStack, /*hit:*/ Boolean) => Unit = _
 
-  val locationCache = new ConcurrentHashMap[AnyRef, StackTraceElement]
+  private val locationCache = new ConcurrentHashMap[AnyRef, StackTraceElement]
   val sstack_roots = new ConcurrentHashMap[AnyRef, GivenBlockProfile]
   val sstack_id = new AtomicInteger(0)
 
@@ -348,9 +348,8 @@ object Profiler {
 
     if (ss._cacheID ne null) {
       for (twk <- ss.expandedTweaks) {
-        val cgen = twk.tweakTemplate.computeGenerator
-        if ((cgen ne null) && !cgen.isInstanceOf[AlreadyCompletedNode[_]])
-          ssu.addByNameTweak(cgen.getClass, "")
+        if (!twk.tweakTemplate.isConstant)
+          ssu.addByNameTweak(twk.tweakTemplate.computeGenerator.getClass, "")
       }
     }
 
@@ -372,31 +371,24 @@ class TraceTag2(var id: Int, val pname: String, val ename: String) extends Seria
   var calls = 0
   var totalTime = 0L
   var selfTime = 0L
-  def totalChildTime: Long = totalTime - selfTime
+  private def totalChildTime: Long = totalTime - selfTime
 
-  var getIfPresentTime = 0L
-  var getIfPresentHit = 0
-  var getIfPresentMiss = 0
-  var putIfAbsentTime = 0L
-  var putIfAbsentHit = 0
-  var putIfAbsentMiss = 0
+  private var getIfPresentTime = 0L
+  private var getIfPresentHit = 0
+  private var getIfPresentMiss = 0
+  private var putIfAbsentTime = 0L
+  private var putIfAbsentHit = 0
+  private var putIfAbsentMiss = 0
   var evicted = 0
   var invalidated = 0
   var age = 0
   var returnType: String = _
-  var cacheMemoryEffect: Long = 0
-  var gcNativeEffect: Long = 0
+  private var cacheMemoryEffect: Long = 0
+  private var gcNativeEffect: Long = 0
 
-  var engineSentTimestamp = 0L
-  var engineReturnedTimestamp = 0L
-  var engineStartTimestamp = 0L
-  var engineFinishTimestamp = 0L
-  var distributionTime = 0L
   // nanoseconds
   var engineID: String = _
-  var distJobName: String = _
   var comment: String = ""
-  var engineReturnTime = 0L // NOT USED - just to match w new Profiler
 
   def cacheHit: Int = putIfAbsentHit + getIfPresentHit
   def cacheMiss: Int = putIfAbsentMiss + getIfPresentMiss
@@ -406,12 +398,6 @@ class TraceTag2(var id: Int, val pname: String, val ename: String) extends Seria
 
   @transient
   val callsTo = new ConcurrentHashMap[NodeTaskInfo, AnyRef]()
-
-  def recommend: String =
-    (if (shouldNotCache) "-$" else "") + (if ((NodeTaskInfo.ASYNC_NEEDED & flags) == 0) "-" else "")
-
-  def shouldNotCache: Boolean = avgSelfTime * cacheHit < cacheTime
-  def hasNativeMarker: Boolean = (flags & NodeTaskInfo.HOLDS_NATIVE) != 0
 
   def combine(t: TraceTag2): TraceTag2 = {
     val tag = new TraceTag2(id, pname, ename)

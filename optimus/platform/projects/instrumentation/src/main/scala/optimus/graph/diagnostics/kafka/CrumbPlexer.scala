@@ -14,6 +14,9 @@ package optimus.graph.diagnostics.kafka
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.cache.RemovalCause
+import com.github.benmanes.caffeine.cache.RemovalListener
+import com.github.luben.zstd.ZstdInputStream
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import kafka.zk.KafkaZkClient
@@ -25,6 +28,7 @@ import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceBySourceLoc
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
+import optimus.breadcrumbs.crumbs.Properties.EnumeratedKey
 import optimus.breadcrumbs.crumbs.{Properties => P}
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.util.LimitedSizeConcurrentHashMap
@@ -50,6 +54,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
 import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.PrintStream
@@ -67,8 +72,11 @@ import java.util.concurrent.TimeUnit
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util
+import java.util.Base64
 import java.util.Objects
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
@@ -236,55 +244,111 @@ trait CrumbRecordParser {
   protected val maxLastFailedParseWaitMs: Long =
     Integer.parseInt(System.getProperty("optimus.breadcrumbs.maxLastFailedParseWaitMs", "6400")).toLong
 
-  protected val recordMaxLength: Int = PropertyUtils.get("optimus.crumbplexer.max.record.length", 100000)
-
   private val mapper = new ObjectMapper()
   mapper.registerModule(DefaultScalaModule)
   def toMap(s: String) = mapper.readValue(s, classOf[Map[String, Object]])
 
   protected val parseErrors = new AtomicLong(0)
-  protected def parseRecord(s: ConsumerRecord[String, String]): Try[Map[String, Object]] = {
-    val value = s.value()
-    if (value.length > recordMaxLength)
-      Failure(new IllegalArgumentException(s"Record size ${value.length} > $recordMaxLength"))
-    else
-      Try(mapper.readValue(value, classOf[Map[String, Object]])).recoverWith { case t: Throwable =>
-        parseErrors.incrementAndGet()
-        val (lastFailedParseTime, waitMs): (Instant, Long) =
-          lastFailedParseTimeAndWaitMs.getOrElse(t.getClass, (Instant.EPOCH, -1))
-        val nowMs: Instant = patch.MilliInstant.now
-        val elapsedMs: Long = nowMs.toEpochMilli - lastFailedParseTime.toEpochMilli
-        val msg: String = s"Failed to parse ${s.value.take(1000)} ${t.getMessage.take(1000)}"
-        val didLogError: Boolean = if (elapsedMs > waitMs) {
-          error(msg, "", t)
-          true
-        } else {
-          logger.debug(msg)
+
+  protected def getAs[T](m: Map[String, Object], k: String): Option[T] =
+    m.get(k).flatMap(x => Try(x.asInstanceOf[T]).toOption)
+
+  protected def get[T](m: Map[String, Object], property: EnumeratedKey[T]) = getAs[T](m, property.name)
+
+  // Decode a zstd-encoded blob into an iterator returning lines
+  private def blobToLines(blob: String): Iterator[String] = try {
+    val decoder = Base64.getDecoder
+    val bytes = decoder.decode(blob)
+    val bis = new ByteArrayInputStream(bytes)
+    val zis = new ZstdInputStream(bis)
+    val reader = new java.io.BufferedReader(new java.io.InputStreamReader(zis))
+    new Iterator[String] {
+      override def hasNext: Boolean = try {
+        val ret = reader.ready()
+        if (!ret) reader.close()
+        ret
+      } catch {
+        case NonFatal(e) =>
+          logParseError(e, "hasNext")
           false
-        }
-        if (elapsedMs > maxLastFailedParseWaitMs * 2) {
-          // Reset if we went long enough without failing.
-          lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, 100))
-        } else if (didLogError && waitMs < maxLastFailedParseWaitMs) {
-          // Double the previous time between failure logging.
-          lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, waitMs * 2))
-        }
-        Failure(t)
       }
+      override def next(): String = try {
+        reader.readLine()
+      } catch {
+        case NonFatal(e) =>
+          try {
+            reader.close()
+          } catch {
+            case NonFatal(_) =>
+          }
+          logParseError(e, "next")
+          ""
+      }
+    }
+  } catch {
+    case NonFatal(e) =>
+      logParseError(e, "creating iterator")
+      Iterator.empty
   }
+
+  // Attempt to unwrap a crumb, expanding blobs recursively
+  private def unwrap(value: String, objects: Map[String, Object]): Iterator[(String, Map[String, Object])] = {
+    if (!objects.contains(P.blob.name)) Iterable((value, objects)).iterator
+    else
+      for {
+        blob <- get(objects, P.blob).to(Iterator)
+        _ = BaseSamplers.increment(P.plexerCountUnwrapped, 1)
+        line <- blobToLines(blob)
+        (line: String, propMap: Map[String, Object]) <- parseRecord(line)
+        lp: (String, Map[String, Object]) <- unwrap(line, propMap)
+      } yield lp
+  }
+
+  // Log parse errors with backoff
+  private def logParseError(t: Throwable, value: String): Unit = {
+    parseErrors.incrementAndGet()
+    val (lastFailedParseTime, waitMs): (Instant, Long) =
+      lastFailedParseTimeAndWaitMs.getOrElse(t.getClass, (Instant.EPOCH, -1))
+    val nowMs: Instant = patch.MilliInstant.now
+    val elapsedMs: Long = nowMs.toEpochMilli - lastFailedParseTime.toEpochMilli
+    val msg: String = s"Failed to parse ${value.take(1000)} ${t.getMessage.take(1000)}"
+    val didLogError: Boolean = if (elapsedMs > waitMs) {
+      error(msg, "", t)
+      true
+    } else {
+      logger.debug(msg)
+      false
+    }
+    if (elapsedMs > maxLastFailedParseWaitMs * 2) {
+      // Reset if we went long enough without failing.
+      lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, 100))
+    } else if (didLogError && waitMs < maxLastFailedParseWaitMs) {
+      // Double the previous time between failure logging.
+      lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, waitMs * 2))
+    }
+  }
+
+  def parseRecord(value: String): Iterator[(String, Map[String, Object])] =
+    try {
+      val m = mapper.readValue(value, classOf[Map[String, Object]])
+      unwrap(value, m)
+    } catch {
+      case NonFatal(t) =>
+        logParseError(t, value)
+        Iterator.empty
+    }
 }
 
 object CrumbPlexerUtils {
   val zipSuffix = ".gz"
   val zstdSuffix = ".zst"
   val sizeSuffix = ".size"
-  private[kafka] val subdirs = 1000
+  private[optimus] val subdirs = 1000
   private[kafka] def numdir(i: Int) = f"$i%03d"
   private[kafka] def subdir(uuid: String): String = f"${numdir(Math.abs(uuid.hashCode) % subdirs)}"
   def pathsToTry(uuid: String): Seq[String] = for {
     base <- Seq(s"${subdir(uuid)}/$uuid")
-    // Even if nginx has gzip_static, we still need to look at the .gz file to get a size
-    ext <- Seq(zipSuffix, zstdSuffix, "")
+    ext <- Seq(zstdSuffix, "")
   } yield s"$base$ext"
 }
 
@@ -375,14 +439,33 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private val counts: Cache[String, java.lang.Long] =
     CacheBuilder.newBuilder.maximumSize(10000).build[String, java.lang.Long]
 
+  private val unixBean =
+    java.lang.management.ManagementFactory.getPlatformMXBean(classOf[com.sun.management.UnixOperatingSystemMXBean])
+  private val maxFd = unixBean.getMaxFileDescriptorCount
+  private val maxFiles = maxFd * 9 / 10
+  private def fdUsage = unixBean.getOpenFileDescriptorCount / (maxFd + 1.0)
+
   private final case class FileEntry(
       uuid: String,
       f: PrintStream,
       path: Path,
       var tPrinted: Long,
       var tFlushed: Long,
-      var bytesWritten: Long = 0)
-  private val files = new java.util.HashMap[String, FileEntry] // so we can iterate and delete
+      var bytesWritten: Long)
+
+  private val files: ConcurrentMap[String, FileEntry] = Caffeine
+    .newBuilder()
+    .expireAfterAccess(closeAfterMs, TimeUnit.MILLISECONDS)
+    .maximumSize(maxFiles)
+    .evictionListener((key: String, value: FileEntry, cause: RemovalCause) => {
+      val f = value.f
+      f.flush()
+      f.close()
+      totalClosed.incrementAndGet()
+      if (f.checkError()) exceptions.incrementAndGet()
+    })
+    .build()
+    .asMap
 
   private def isBadSeed(uuid: String) = {
     val ret = uuid.split("#").scan("")(_ + _ + "#").tail.exists(badSeeds.getIfPresent(_) ne null)
@@ -486,18 +569,17 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       line: String,
       partition: Int)
       extends QElem
-  private class QPing extends QElem { def tEnqueued: Long = -1 }
+  private object QPing extends QElem { def tEnqueued: Long = -1 }
 
   private val queue =
     new java.util.concurrent.PriorityBlockingQueue[QElem](
       11,
       (o1: QElem, o2: QElem) => o1.tEnqueued.compare(o2.tEnqueued))
 
-  private def getAs[T](m: Map[String, Object], k: String): Option[T] =
-    m.get(k).flatMap(x => Try(x.asInstanceOf[T]).toOption)
-
   private val pauseTimeMs = new AtomicLong(0)
   private val totalDropped = new AtomicLong(0)
+  private val totalClosed = new AtomicLong(0)
+  private val totalFlushed = new AtomicLong(0)
   private val ignored = new AtomicLong(0)
   private val deduplicated = new AtomicLong(0)
   private val exceptions = new AtomicLong(0)
@@ -509,7 +591,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private val dedupCache = Caffeine.newBuilder().maximumSize(nDedupKeys).build[String, Object]()
   private val dummy = new Object
   def isDuplicate(objects: Map[String, Object]): Boolean = {
-    getAs[String](objects, "dedupKey") match {
+    get[String](objects, P.dedupKey) match {
       case None => false // if there isn't a dedupKey at all, assume not a duplicate
       case Some(dedupKey) =>
         var ret = true
@@ -529,50 +611,53 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private val threads = consumers.map { consumer =>
     new Thread {
       override def run(): Unit = {
-        val maxLagMs = maxLagMn * 60 * 1000L
         var kafkaAgeMs = 0L
+        var overflow = false
+        var pauseStart = 0L
+        var droppedWhilePaused = 0
         while (continue) {
           try {
             val consumerRecords = consumer.poll(Duration.ofMillis(1000L))
             consumerRecords.iterator().asScala.foreach { s: ConsumerRecord[String, String] =>
-              val overflow = queue.size() > maxQueue
+              val wasOverflow = overflow
+              val histeresisThreshold = if (wasOverflow) maxQueue * 9 / 10 else maxQueue
+              overflow = queue.size() > histeresisThreshold
               if (overflow) {
-                val tResume = s.timestamp() + maxLagMs
-                val t0 = System.currentTimeMillis()
-                if (t0 < tResume) {
-                  warn("Pausing consumption due to queue size")
-                  while (queue.size() > maxQueue && System.currentTimeMillis() < tResume) {
-                    Thread.sleep(1000L)
-                    pauseTimeMs.addAndGet(1000L)
-                  }
-                  warn(
-                    s"$poolId $consumer resuming consumption after ${System.currentTimeMillis() - t0}ms, queue=${queue.size}")
+                if (!wasOverflow) {
+                  warn(s"$poolId $consumer queue size ${queue.size()} exceeds maxQueue $maxQueue, pausing consumption")
+                  pauseStart = System.currentTimeMillis()
                 }
-              }
-              // If we still have an over flow, don't bother even parsing
-              if (overflow && queue.size() > maxQueue)
+                droppedWhilePaused += 1
                 totalDropped.incrementAndGet()
-              else
-                for (
-                  objects <- parseRecord(s);
-                  tKafka = s.timestamp();
-                  uuidFull <- getAs[String](objects, "uuid")
+              } else {
+                if (wasOverflow) {
+                  val pauseEnd = System.currentTimeMillis()
+                  val pauseDuration = pauseEnd - pauseStart
+                  info(
+                    s"$poolId $consumer resuming consumption after pausing for $pauseDuration ms, dropped $droppedWhilePaused, queue size ${queue
+                        .size()}")
+                  droppedWhilePaused = 0
+                  pauseTimeMs.addAndGet(pauseDuration)
+                }
+                for {
+                  (line, propMap) <- parseRecord(s.value())
+                  tKafka = s.timestamp()
+                  uuidFull <- getAs[String](propMap, "uuid")
                     .flatMap(uuidRegex.unapplySeq)
                     .flatMap(_.headOption);
-                  tCrumb <- getAs[Long](objects, "t") if !isDuplicate(objects)
-                ) {
+                  tCrumb <- getAs[Long](propMap, "t") if !isDuplicate(propMap)
+                } {
                   val rootUuid = uuidFull.split("#").head
                   if (rootUuid.isEmpty) {
                     badUuids += 1
                   } else if (
-                    !objects.contains(P.crumbplexerIgnore.name)
+                    !propMap.contains(P.crumbplexerIgnore.name)
                     && (hashPoolSize == 0 || (Math.abs(rootUuid.hashCode) % hashPoolSize) == hashPoolId)
                     && !isBadSeed(rootUuid)
                   ) {
-                    getAs[String](objects, "event").filter(killPastEventRegex.unapplySeq(_).isDefined).foreach {
-                      event =>
-                        warn(s"$poolId Truncating $rootUuid due to $event event", rootUuid)
-                        badSeeds.put(uuidFull, event)
+                    get(propMap, P.event).filter(killPastEventRegex.unapplySeq(_).isDefined).foreach { event =>
+                      warn(s"$poolId Truncating $rootUuid due to $event event", rootUuid)
+                      badSeeds.put(uuidFull, event)
                     }
                     if (truncateLines > 0) {
                       val count = counts.get(rootUuid, () => Long.box(0))
@@ -581,7 +666,6 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                         badSeeds.put(rootUuid, "truncated")
                       }
                     }
-                    val line = s.value
                     val tEnqeued = System.currentTimeMillis()
                     kafkaAgeMs = tEnqeued - tKafka
                     queue.offer(
@@ -600,6 +684,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                   )
                     continue = false
                 }
+              }
             }
           } catch {
             case e: Exception =>
@@ -625,7 +710,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     timer.schedule(
       new TimerTask {
         override def run(): Unit = {
-          queue.offer(new QPing)
+          queue.offer(QPing)
         }
       },
       0L,
@@ -637,35 +722,46 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     val s0 = files.size
     var nFlushed = 0
     var nClosed = 0
+    var errors = 0
+
     val i = files.entrySet().iterator()
     while (i.hasNext) {
-      val fe @ FileEntry(uuid, f, path, tPrinted, tFlushed, bytesWritten) = i.next().getValue
+      val fe @ FileEntry(_, f: PrintStream, path: Path, tPrinted, tFlushed, _) = i.next().getValue
       val dtPrinted = t - tPrinted
       val dtFlushed = t - tFlushed
-      if (closeAll || dtPrinted > closeAfterMs) {
+      if (!Files.exists(path)) {
+        f.close()
+        nClosed += 1
+        totalClosed.incrementAndGet()
+        i.remove()
+        if (f.checkError()) errors += 1
+      } else if (closeAll) {
         logger.debug(s"$poolId Closing $path dt=$dtPrinted")
         f.flush()
         nFlushed += 1
         f.close()
         nClosed += 1
+        totalClosed.incrementAndGet()
         i.remove()
       } else if (tFlushed < tPrinted && (dtFlushed > flushAfterActiveMs || dtPrinted > flushAfterInactiveMs)) {
         logger.trace(s"$poolId Flushing $path dt=$dtPrinted")
         f.flush()
         fe.tFlushed = t
+        totalFlushed.incrementAndGet()
         nFlushed += 1
+        if (f.checkError()) errors += 1
       }
     }
     val t1 = System.currentTimeMillis()
     val s1 = files.size
-    val msg = s"$poolId Closed $nClosed, flushed $nFlushed out of $s0 $s1 in ${t1 - t}"
+    def msg =
+      s"$poolId Closed $nClosed, flushed $nFlushed out of $s0, $s1 remaining, fd=$fdUsage, errors=$errors in ${t1 - t}"
     logger.debug(msg)
     // Logging might be shut down by now...
     if (closeAll) System.err.println(msg)
   }
 
   private var tNextLog = 0L
-  private val rootUuids = new ConcurrentHashMap[String, Boolean]
   private var tLastDrained = System.currentTimeMillis()
   private val es = new util.ArrayList[QElem](mergeQueueSize * 10)
 
@@ -681,11 +777,10 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     if (status > 0 && tnow > tNextLog) {
       import crumb._
       tNextLog = tnow + status * 1000L
-      val liveRoots = rootUuids.size
-      rootUuids.clear()
       val dtCrumb = tnow - tCrumb
       val dtKafka = tnow - tKafka
       val dtQueue = tnow - tEnqueued
+      val liveRoots = files.size
       val unflushed = files.values.asScala.count(f => f.tPrinted > f.tFlushed)
       BaseSamplers.setCounter(P.plexerCountPrinted, printed)
       BaseSamplers.setCounter(P.plexerCountDropped, totalDropped.get)
@@ -693,6 +788,8 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       BaseSamplers.setCounter(P.plexerCountParseError, parseErrors.get)
       BaseSamplers.setCounter(P.plexerCountExceptions, exceptions.get)
       BaseSamplers.setCounter(P.plexerCountPause, pauseTimeMs.get)
+      BaseSamplers.setCounter(P.plexerCountClosed, totalClosed.get)
+      BaseSamplers.setCounter(P.plexerCountFlushed, totalFlushed.get)
       BaseSamplers.setGauge(P.plexerSnapRootCount, liveRoots)
       BaseSamplers.setGauge(P.plexerSnapQueueSize, queue.size)
       BaseSamplers.setGauge(P.plexerSnapLagClient, dtCrumb)
@@ -718,8 +815,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       tLastDrained = tNow
       if (es.size < mergeQueueSize / 2)
         Thread.sleep(mergeWait)
-      val esl: List[QElem] =
-        e1 :: es.asScala.toList
+      val esl: List[QElem] = e1 :: es.asScala.toList
       for (e <- esl) e match {
         case crumb @ QCrumb(uuid, _tEnqueued, tCrumb, _tKafka, line, partition) =>
           val uuidPath = Paths.get(uuid)
@@ -729,18 +825,17 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
             logger.warn(s"Ignoring improper file name $uuid")
           } else if (tCrumb <= tFinal) {
             val t = System.currentTimeMillis()
-            rootUuids.put(uuid, true)
             plexDirOpt match {
               case Some(plexDir) =>
                 try {
-                  val fe @ FileEntry(_, f, _, _, _, _) = files.computeIfAbsent(
+                  val fe @ FileEntry(_, f: PrintStream, _, _, _, _) = files.computeIfAbsent(
                     uuid,
                     { _ =>
                       logger.debug(s"$poolId $partition $uuid")
                       val dirPath = if (useSubdirs) plexDir.resolve(subdir(uuid)) else plexDir
                       val filePath = dirPath.resolve(uuidPath)
-                      val os = new FileOutputStream(filePath.toFile, true)
-                      FileEntry(uuid, new PrintStream(os), filePath, t, t - 1)
+                      val os = new BufferedOutputStream(new FileOutputStream(filePath.toFile, true), 100 * 1000)
+                      FileEntry(uuid, new PrintStream(os), filePath, tPrinted = t, tFlushed = t - 1, bytesWritten = 0L)
                     }
                   )
                   f.println /* deliberately printing to file */ (line)
@@ -765,7 +860,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
             writeStatus(crumb)
           }
 
-        case _: QPing =>
+        case QPing =>
           cleanUp(closeAll = false)
       }
     }

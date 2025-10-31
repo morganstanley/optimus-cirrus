@@ -38,7 +38,9 @@ import optimus.buildtool.builders.postbuilders.installer.component.DockerApplica
 import optimus.buildtool.builders.postbuilders.installer.component.CopyFilesInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.CppInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.DockerGenericRunnerGenerator
+import optimus.buildtool.builders.postbuilders.installer.component.DockerProcessedFileInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.FileCopySpec
+import optimus.buildtool.builders.postbuilders.installer.component.FileInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.InstallJarMapping
 import optimus.buildtool.config.DockerConfigurationSupport
 import optimus.buildtool.config.DockerImage
@@ -49,6 +51,7 @@ import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.config.VersionConfiguration
+import optimus.buildtool.files.AlwaysBundledDependencyInstallPathResolver
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.FileAsset
@@ -57,6 +60,7 @@ import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.docker.DockerConfiguration
 import optimus.buildtool.format.docker.ExtraImageDefinition
+import optimus.buildtool.format.docker.ImageDefinition
 import optimus.buildtool.format.docker.ImageLocation
 import optimus.buildtool.oci.ImageBuilderDelegate.newLayerDirsMap
 import optimus.buildtool.runconf.AppRunConf
@@ -150,6 +154,7 @@ class ImageBuilder(
     val scopeConfigSource: ScopeConfigurationSource with DockerConfigurationSupport,
     val versionConfig: VersionConfiguration,
     val sourceDir: WorkspaceSourceRoot,
+    val installDir: Directory,
     val dockerImage: DockerImage,
     val workDir: Directory,
     val scopedCompilationFactory: ScopedCompilationFactory,
@@ -193,6 +198,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   import AbstractImageBuilder._
 
   protected val sourceDir: WorkspaceSourceRoot
+  protected val installDir: Directory
   protected val workDir: Directory
   protected val scopedCompilationFactory: ScopedCompilationFactory
   protected val dockerImage: DockerImage
@@ -210,6 +216,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   protected val gitLog: Option[GitLog]
 
   val dstImage: ImageLocation = dockerImage.location
+  val imageMetaBundle: Option[MetaBundle] = ImageDefinition.toMetaBundle(dstImage.repo)
   private val relevantScopes: Set[ScopeId] = dockerImage.relevantScopeIds
   private val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
 
@@ -221,16 +228,25 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   // The staging path builder is used by regular installers
   // and we then map those paths to the regular path builder.
   private val stagingPathBuilder: InstallPathBuilder = InstallPathBuilder.staging(installVersion, stagingDir)
+  private val dockerPathBuilder: InstallPathBuilder = InstallPathBuilder.dockerRelease(installDir, dstImage.tag)
   private val fingerprintsCache = new DisabledBundleFingerprintsCache(stagingPathBuilder)
 
-  private val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
+  private val manifestResolver =
+    ManifestResolver(scopeConfigSource, versionConfig, AlwaysBundledDependencyInstallPathResolver(pathBuilder), gitLog)
   private val applicationScriptsInstaller = new DockerApplicationScriptsInstaller
   private val cppInstaller = new CppInstaller(stagingPathBuilder, fingerprintsCache)
-  private val copyFileInstaller = new CopyFilesInstaller(
+  private val imageCopyFileInstaller = new CopyFilesInstaller(
     cache = new DisabledBundleFingerprintsCache(stagingPathBuilder), // we don't support incremental installs for docker
     scopeConfigSource,
     sourceDir,
     stagingPathBuilder,
+    directoryFactory
+  )
+  private val deployArtifactCopyFileInstaller = new CopyFilesInstaller(
+    cache = new DisabledBundleFingerprintsCache(dockerPathBuilder), // we don't support incremental installs for docker
+    scopeConfigSource,
+    sourceDir,
+    dockerPathBuilder,
     directoryFactory
   )
 
@@ -409,7 +425,9 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       analyzeRunconfJars(relevantRunconfJars),
       analyzePathingJars(scopes, allScopeArtifacts, relevantRunconfJars, installJarMapping),
       analyzeCppLibs(installable),
-      analyzeCopyFileConfiguration(scopes)
+      analyzeImageCopyFileConfiguration(scopes),
+      analyzeDeployArtifactCopyFileConfiguration(scopes),
+      analyzeProcessedFileInstaller(installable)
     )
   }
 
@@ -549,23 +567,46 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     posixPermissions
   }
 
-  @async private def analyzeCopyFileConfiguration(scopeIds: Set[ScopeId]): Unit = scopeIds.apar.foreach { scopeId =>
-    val into = pathBuilder.dirForMetaBundle(scopeId.metaBundle)
-    def stagingDirWithHash(spec: FileCopySpec): Directory =
-      stagingSubdir(scopeId, Hashing.consistentlyHashDirectory(spec.from))
-    val filesToPut = for {
-      (stagingDir, copiedFiles) <- copyFileInstaller.copyFilesToCustomDir(scopeId, stagingDirWithHash)
-      copiedFile <- copiedFiles
-    } yield {
-      val dst = into.resolveFile(stagingDir.relativize(copiedFile))
-      val mode = if (!isWindows) {
-        // we just preserve the mode used by the copy file installer but ensure others can read
-        PosixPermissionUtils.toMode(ensureReadableByAll(Files.getPosixFilePermissions(copiedFile.path)))
-      } else OctalMode.Default
-      FileToPut(src = copiedFile, dst = dst, mode)
-    }
-    putFiles(scopeId.metaBundle, filesToPut)
+  @async private def analyzeImageCopyFileConfiguration(scopeIds: Set[ScopeId]): Unit = scopeIds.apar.foreach {
+    scopeId =>
+      val into = pathBuilder.dirForMetaBundle(scopeId.metaBundle)
+      def stagingDirWithHash(spec: FileCopySpec): Directory =
+        stagingSubdir(scopeId, Hashing.consistentlyHashDirectory(spec.from))
+      val filesToPut = for {
+        (stagingDir, copiedFiles) <- imageCopyFileInstaller.copyFilesToCustomDir(scopeId, stagingDirWithHash)
+        copiedFile <- copiedFiles
+      } yield {
+        val dst = into.resolveFile(stagingDir.relativize(copiedFile))
+        val mode = if (!isWindows) {
+          // we just preserve the mode used by the copy file installer but ensure others can read
+          PosixPermissionUtils.toMode(ensureReadableByAll(Files.getPosixFilePermissions(copiedFile.path)))
+        } else OctalMode.Default
+        FileToPut(src = copiedFile, dst = dst, mode)
+      }
+      putFiles(scopeId.metaBundle, filesToPut)
   }
+
+  @async private def analyzeDeployArtifactCopyFileConfiguration(scopeIds: Set[ScopeId]): Unit = scopeIds.apar.foreach {
+    scopeId =>
+      imageMetaBundle match {
+        case Some(imgMetaBundle) =>
+          deployArtifactCopyFileInstaller.copyFilesToCustomDir(
+            scopeId,
+            customDirF = _ => dockerPathBuilder.dirForMetaBundle(imgMetaBundle),
+            specPredicate = asNode(_.deployArtifact)
+          )
+        case None => log.warn(s"[${dstImage.name}]  metabundle cannot be parsed from ${dstImage.repo}")
+      }
+  }
+
+  @async private def analyzeProcessedFileInstaller(installable: InstallableArtifacts): Unit =
+    imageMetaBundle match {
+      case Some(imageMetaBundle) =>
+        val processedFileInstaller =
+          new DockerProcessedFileInstaller(fingerprintsCache, new FileInstaller(dockerPathBuilder), imageMetaBundle)
+        processedFileInstaller.install(installable)
+      case None => log.warn(s"[${dstImage.name}]  metabundle cannot be parsed from ${dstImage.repo}")
+    }
 
   private def analyzePathingJarDependencies(
       jarAsset: JarAsset,

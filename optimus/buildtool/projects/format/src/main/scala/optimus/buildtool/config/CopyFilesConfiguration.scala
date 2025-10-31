@@ -31,6 +31,7 @@ final case class CopyFileTask(
     id: String,
     from: Path,
     into: RelativePath,
+    deployArtifact: Boolean,
     skipIfMissing: Boolean,
     fileMode: Option[OctalMode],
     dirMode: Option[OctalMode],

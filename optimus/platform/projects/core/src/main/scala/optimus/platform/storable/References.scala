@@ -286,20 +286,23 @@ class StorableReferenceArrayImpl(override val data: Array[Byte]) extends Storabl
 // with empty byte arrays. In order to support backward compatibility, we need to differentiate
 // between using arrays of 16 zeros versus empty arrays. To do this, we declare these constants
 // that we can use to do reference comparisons such that def data returns empty array as expected.
-private[optimus] object EmptyArrayReferenceCompatibility {
-  private[optimus] val emptyFixed = new StorableReferenceFixedImpl(0L, 0L)
-  private[optimus] val emptyFinal = new FinalReference(0L, 0L, None)
-  private[optimus] val emptyFinalTyped = new FinalTypedReference(0L, 0L, None, 0)
-  private[optimus] val emptyTemporary = new TemporaryReference(0L, 0L)
-  private[optimus] val emptyVersioned = new VersionedReference(0L, 0L)
+private object EmptyTemporary extends TemporaryReference(0L, 0L) { override protected def isEmpty: Boolean = true }
+private object EmptyVersioned extends VersionedReference(0L, 0L) { override protected def isEmpty: Boolean = true }
+private final class EmptyFinal(unresolvedReference: Option[TemporaryReference])
+    extends FinalReference(0L, 0L, unresolvedReference) {
+  override protected def isEmpty: Boolean = true
+}
+private final class EmptyFinalTyped(unresolvedReference: Option[TemporaryReference], typeId: Int)
+    extends FinalTypedReference(0L, 0L, unresolvedReference, typeId) {
+  override protected def isEmpty: Boolean = true
 }
 
 class StorableReferenceFixedImpl(private[storable] val hi: Long, private[storable] val lo: Long)
     extends StorableReference {
 
-  protected def empty: StorableReferenceFixedImpl = EmptyArrayReferenceCompatibility.emptyFixed
+  protected def isEmpty: Boolean = false
   override def data: Array[Byte] = {
-    if (this eq empty)
+    if (isEmpty)
       Array.emptyByteArray
     else {
       val result = new Array[Byte](16)
@@ -311,7 +314,7 @@ class StorableReferenceFixedImpl(private[storable] val hi: Long, private[storabl
   }
 
   protected def bytesEqual(other: StorableReferenceFixedImpl): Boolean =
-    (this ne empty) && (other ne empty) && hi == other.hi && lo == other.lo
+    isEmpty == other.isEmpty && hi == other.hi && lo == other.lo
 
   override def calcHashCode: Int = {
     // Below implementation keeps the calculated hash
@@ -386,14 +389,13 @@ private[optimus] sealed class FinalReference private[storable] (
     val unresolvedReference: Option[TemporaryReference])
     extends EntityReference(hi, lo) {
   override def isTemporary = false
-  override protected def empty: FinalReference = EmptyArrayReferenceCompatibility.emptyFinal
 }
 
 sealed trait TypedReference {
   def typeId: Int
 }
 
-private[optimus] final class FinalTypedReference private[storable] (
+private[optimus] sealed class FinalTypedReference private[storable] (
     hi: Long,
     lo: Long,
     unresolvedReference: Option[TemporaryReference],
@@ -401,16 +403,15 @@ private[optimus] final class FinalTypedReference private[storable] (
     extends FinalReference(hi, lo, unresolvedReference)
     with TypedReference {
   override def isTemporary = false
-  override protected def empty: FinalTypedReference = EmptyArrayReferenceCompatibility.emptyFinalTyped
   override def getTypeId: Option[Int] = Some(typeId)
   // TODO (OPTIMUS-20613): Remove comment of toString method once typed refs is enabled in all DAL envs
   // override def toString = s"${Base64.encodeBytes(data)}:$typeId"
   private[optimus] def asFinalRef = new FinalReference(hi, lo, unresolvedReference)
 }
 
-private[optimus] final class TemporaryReference private[storable] (hi: Long, lo: Long) extends EntityReference(hi, lo) {
+private[optimus] sealed class TemporaryReference private[storable] (hi: Long, lo: Long)
+    extends EntityReference(hi, lo) {
   override def isTemporary = true
-  override protected def empty: TemporaryReference = EmptyArrayReferenceCompatibility.emptyTemporary
 }
 
 object EntityReference {
@@ -439,12 +440,8 @@ object EntityReference {
   def temporaryFromString(rep: String): TemporaryReference = temporary(RawReference.stringToBytes(rep))
 
   def apply(d: Array[Byte]): EntityReference = apply(d, None)
-  def apply(d: Array[Byte], typeId: Option[Int]): FinalReference = {
-    if (d.isEmpty)
-      EmptyArrayReferenceCompatibility.emptyFinal
-    else
-      apply(RawReference.bytesToLongLong(d, classOf[FinalReference]), typeId)
-  }
+  def apply(d: Array[Byte], typeId: Option[Int]): FinalReference =
+    typeId.map(t => finalTypedRef(d, t)).getOrElse(finalRef(d))
   def apply(uuid: RawReference.LongLong): EntityReference = finalRefFromUuid(uuid, None)
   def apply(uuid: RawReference.LongLong, typeId: Option[Int]): FinalReference = {
     typeId.map(t => finalTypedRefFromUuid(uuid, t)).getOrElse(finalRefFromUuid(uuid))
@@ -452,7 +449,7 @@ object EntityReference {
 
   def finalRef(d: Array[Byte], tempRef: Option[TemporaryReference] = None): FinalReference = {
     if (d.isEmpty)
-      EmptyArrayReferenceCompatibility.emptyFinal
+      new EmptyFinal(tempRef)
     else {
       val uuid = RawReference.bytesToLongLong(d, classOf[FinalReference])
       finalRefFromUuid(uuid, tempRef)
@@ -466,7 +463,7 @@ object EntityReference {
   }
   def finalTypedRef(d: Array[Byte], typeId: Int, tempRef: Option[TemporaryReference] = None): FinalTypedReference = {
     if (d.isEmpty)
-      EmptyArrayReferenceCompatibility.emptyFinalTyped
+      new EmptyFinalTyped(tempRef, typeId)
     else {
       val uuid = RawReference.bytesToLongLong(d, classOf[FinalTypedReference])
       finalTypedRefFromUuid(uuid, typeId, tempRef)
@@ -482,7 +479,7 @@ object EntityReference {
 
   def temporary(d: Array[Byte]): TemporaryReference = {
     if (d.isEmpty)
-      EmptyArrayReferenceCompatibility.emptyTemporary
+      EmptyTemporary
     else
       temporary(RawReference.bytesToLongLong(d, classOf[TemporaryReference]))
   }
@@ -502,9 +499,8 @@ private[optimus] final case class EntityTimeSliceReference(
 /**
  * A reference to a specific bitemporal version of an entity.
  */
-final class VersionedReference(hi: Long, lo: Long) extends StorableReferenceFixedImpl(hi, lo) {
+sealed class VersionedReference(hi: Long, lo: Long) extends StorableReferenceFixedImpl(hi, lo) {
   def isNil: Boolean = this == VersionedReference.Nil
-  override protected def empty: VersionedReference = EmptyArrayReferenceCompatibility.emptyVersioned
 }
 
 object VersionedReference {
@@ -515,7 +511,7 @@ object VersionedReference {
   val Nil: VersionedReference = apply(RawReference.NilUUID)
   def apply(d: Array[Byte]): VersionedReference = {
     if (d.isEmpty)
-      EmptyArrayReferenceCompatibility.emptyVersioned
+      EmptyVersioned
     else
       apply(RawReference.bytesToLongLong(d, classOf[VersionedReference]))
   }

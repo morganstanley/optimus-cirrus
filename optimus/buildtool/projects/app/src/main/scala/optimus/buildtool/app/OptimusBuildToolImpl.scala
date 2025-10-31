@@ -149,9 +149,12 @@ object OptimusBuildToolImpl {
 @entity private[buildtool] class OptimusBuildToolImpl(
     cmdLine: OptimusBuildToolCmdLineT,
     instrumentation: BuildInstrumentation,
-    errorReporter: Option[ErrorReporter] = None
+    errorReporter: Option[ErrorReporter] = None,
+    requireCredentialsDefault: Boolean = false
 ) {
-  private val requireCredentials = OptimusBuildToolProperties.getOrFalse("private.requireCredentials")
+  private val requireCredentials =
+    OptimusBuildToolProperties.get("private.requireCredentials").map(_.toBoolean).getOrElse(requireCredentialsDefault)
+
   // do this first to avoid mistakes (failing to write to logs is unhelpful)
   Files.createDirectories(cmdLine.logDir)
   private val logDir: Directory = Directory(cmdLine.logDir)
@@ -197,8 +200,6 @@ object OptimusBuildToolImpl {
   private val uploadLocations: Seq[UploadLocation] =
     cmdLine.uploadLocations.toIndexedSeq.map(UploadLocation(_, cmdLine.decompressAfterUpload))
 
-  private val dockerDir = cmdLine.dockerDir.asDirectory.getOrElse(workspaceRoot.resolveDir("docker-out"))
-
   private val cacheFlushTimeout = 60000 // ms
 
   private def gbString(bytes: Long): String = {
@@ -231,7 +232,6 @@ object OptimusBuildToolImpl {
   log.info(s"Working directory: $workingDir")
   log.info(s"Workspace root: $workspaceRoot")
   log.info(s"Source directory: $workspaceSourceRoot")
-  log.info(s"Docker directory: $dockerDir")
   log.info(s"Build directory: $buildDir")
   if (cmdLine.install) log.info(s"Install directory: $installDir")
   log.info(s"Java home: ${Utils.javaHome}")
@@ -264,7 +264,6 @@ object OptimusBuildToolImpl {
     "workingDir" -> workingDir.pathString,
     "workspaceRoot" -> workspaceRoot.pathString,
     "sourceDir" -> workspaceSourceRoot.pathString,
-    "dockerDir" -> dockerDir.pathString,
     "installDir" -> installDir.pathString,
     "javaHome" -> Utils.javaHome.pathString,
     "classVersion" -> Utils.javaClassVersion,
@@ -488,8 +487,8 @@ object OptimusBuildToolImpl {
   }
 
   @async @scenarioIndependent private def credentials: Seq[Credential] =
-    if (cmdLine.credentialFiles == NoneArg && !requireCredentials) Nil
-    else if (cmdLine.credentialFiles == NoneArg) getLocalCredentials()
+    if (cmdLine.credentialFiles == NoneArg)
+      getLocalCredentials()
     else
       cmdLine.credentialFiles
         .split(",")
@@ -638,7 +637,7 @@ object OptimusBuildToolImpl {
   }
 
   @node private[buildtool] def scopeSelector =
-    ScopeSelector(ScopeArgs(cmdLine), obtConfig, workspaceSourceRoot, dockerDir)
+    ScopeSelector(ScopeArgs(cmdLine), obtConfig, workspaceSourceRoot, installDir)
 
   @node @scenarioIndependent private def scalacProfileDir: Option[Directory] =
     if (cmdLine.profileScalac) {
@@ -797,7 +796,8 @@ object OptimusBuildToolImpl {
       useMavenLibs = useMavenLibs,
       pythonConfiguration = InstallTpa,
       externalDependencies = obtConfig.jvmDependencies,
-      fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig
+      fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig,
+      runtimeDependencyCacheConfig = obtConfig.runtimeDependencyCacheConfiguration
     )
   }
 
@@ -1087,7 +1087,8 @@ object OptimusBuildToolImpl {
           bundleClassJars = cmdLine.bundleClassJars,
           pythonConfiguration = if (globalConfig.installWheels) InstallTpaWithWheels(pythonEnvironment) else InstallTpa,
           externalDependencies = obtConfig.jvmDependencies,
-          fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig
+          fingerprintsConfiguration = obtConfig.fingerprintsDiffConfig,
+          runtimeDependencyCacheConfig = obtConfig.runtimeDependencyCacheConfiguration
         )
       )
     } else None
@@ -1101,6 +1102,7 @@ object OptimusBuildToolImpl {
           sourceDir = workspaceSourceRoot,
           dockerImage = dockerImg,
           workDir = buildDir.resolveDir("docker").resolveDir(dockerImg.location.repo).resolveDir(timestamp),
+          installDir = installDir,
           scopedCompilationFactory = scopedCompilationFactory,
           stripDependencies = cmdLine.stripDependencies,
           latestCommit = latestCommit,
@@ -1178,7 +1180,6 @@ object OptimusBuildToolImpl {
             extraLibs = obtConfig.jvmDependencies.allExternalDependencies.definitions.filter(_.isExtraLib),
             webDependencyResolver = webDependencyResolver,
             installDir = installDir,
-            dockerDir = dockerDir,
             installVersion = cmdLine.installVersion,
             leafDir = RelativePath(StaticConfig.string("metadataLeaf")),
             buildId = cmdLine.buildId,

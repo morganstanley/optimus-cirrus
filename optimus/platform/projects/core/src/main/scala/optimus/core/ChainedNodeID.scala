@@ -13,7 +13,6 @@ package optimus.core
 
 import optimus.platform.EvaluationContext
 import optimus.breadcrumbs.ChainedID
-import optimus.graph.Edges
 import optimus.graph.NodeTask
 
 import java.util.Objects
@@ -38,7 +37,7 @@ object ChainedNodeID {
       val n = EvaluationContext.currentNode
       if (n ne null) {
         val ss = n.scenarioStack
-        if (ss ne null) Edges.ensureTracked(n, ss) else ChainedID.root
+        if (ss ne null) ss.getTrackingNodeID else ChainedID.root
       } else ChainedID.root
     } else ChainedID.root
   }

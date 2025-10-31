@@ -12,13 +12,13 @@
 package optimus.graph.diagnostics
 
 import optimus.graph.DiagnosticSettings
-import optimus.graph.Node
 
 import scala.collection.mutable.ArrayBuffer
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.tracking.EventCause
 import optimus.graph.tracking.TrackedNode
+import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
 import optimus.ui.ScenarioReference
 
@@ -74,11 +74,10 @@ final class PNodeInvalidateFullRecord(
   override def tweakTo: String = {
     if (tweak eq null) "N/A"
     else {
-      val gen = tweak.tweakTemplate.computeGenerator
-      gen match {
-        case n: Node[_] => Debugger.underStackOf(n.scenarioStack) { gen.toString }
-        case _          => s"${gen.getClass.getName}:$gen"
+      if (tweak.tweakTemplate.isConstant) Debugger.underStackOf(ScenarioStack.constant) {
+        s"${tweak.tweakTemplate.constantValue}"
       }
+      else s"${tweak.tweakTemplate.computeGenerator.getClass.getName}"
     }
   }
 }

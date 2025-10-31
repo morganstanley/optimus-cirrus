@@ -16,6 +16,8 @@ import org.apache.kafka.clients.CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG
 import org.apache.kafka.clients.CommonClientConfigs.SECURITY_PROTOCOL_CONFIG
 import org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG
 import org.apache.kafka.clients.producer.ProducerConfig.ACKS_CONFIG
+import org.apache.kafka.clients.producer.ProducerConfig.BATCH_SIZE_CONFIG
+import org.apache.kafka.clients.producer.ProducerConfig.LINGER_MS_CONFIG
 import org.apache.kafka.clients.producer.ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG
 import org.apache.kafka.clients.producer.ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION
 import org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG
@@ -113,6 +115,10 @@ class DalUowKafkaConfig(env: DalEnv) extends DalKafkaConfig(DalFeatureKafkaLooku
     // whichever happens first if only 500 attempts have occurred before hitting the 60s mark then the remaining
     // 500 retry attempts will not occur and vice versa.
     prop.put(DELIVERY_TIMEOUT_MS_CONFIG, getProperty(DELIVERY_TIMEOUT_MS_CONFIG, "2147483647"))
+    // we want no delay in sending messages to kafka once they are ready
+    // so setting linger.ms to 0 and batch.size to 0 by default
+    prop.put(BATCH_SIZE_CONFIG, getProperty(BATCH_SIZE_CONFIG, "0"))
+    prop.put(LINGER_MS_CONFIG, getProperty(LINGER_MS_CONFIG, "0"))
     prop
   }
 

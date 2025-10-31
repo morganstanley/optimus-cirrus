@@ -173,7 +173,10 @@ private[optimus] object SSCacheID {
    * creates a new uninitialized SSCacheID for inputScenario - this is cheap to create but must not be used until you
    * have called ensureInitialized (note that CacheIDs does that for you)
    */
-  def newUninitialized(inputScenario: Scenario): SSCacheID = new SSScenarioCacheID(inputScenario)
+  def newUninitialized(inputScenario: Scenario): SSCacheID = {
+    if (inputScenario.optimizeDeepStacks) new SSScenarioGroupCacheID(inputScenario)
+    else new SSScenarioCacheID(inputScenario)
+  }
 }
 
 /**
@@ -188,14 +191,14 @@ sealed private[optimus] class SSCacheID {
   /**
    * Entries can be of 4 forms:
    *   1. NodeKey (PropertyNode) -> Tweak [aka instance tweak]
-   *   1. propertyInfo -> Tweak [aka full blown property tweak]
+   *   1. propertyInfo -> Tweak [aka full-blown property tweak]
    *   1. propertyInfo -> KeyExtractor [aka faster property tweaks]
    *   1. ExtractorTweakableKey -> Tweak [second part of faster property tweaks]
    *
    * These types are represented in the two getters below.
    */
   protected var tweaks: JHashMap[AnyRef, AnyRef] = new JHashMap()
-  @volatile // This field also serves as isInitialized in a classic double checked locking
+  @volatile // This field also serves as isInitialized in a classic double-checked locking
   protected var twkHash: JHashMap[AnyRef, AnyRef] = _ // Node hash or NodeTaskInfo hash
   protected var tweakMask: TPDMask = TPDMask.empty
   // Note! It is important to keep the state of the three variables above in sync, which is why they need to be
@@ -342,7 +345,7 @@ sealed private[optimus] class SSCacheID {
   /**
    * Note that this method recomputes tweakMask based on the instanceTweaks and propertyTweaks. It should be called to
    * recompute the mask after tweaks are mutated, unless the mutation method itself updates tweakMask as it goes -- for
-   * example, the two put(key, twk) methods below update tweakMask anyway in super.put calls.
+   * example, the two put(key, twk) methods below update tweakMask anyway in super.put() calls.
    *
    * In the remove(key) and removeInstance/PropertyTweaks methods, we cannot just unset the bit as we go, since we lose
    * information when we do the compression in the first place. For example, if we have calls to the same node with
@@ -379,26 +382,27 @@ sealed private[optimus] class SSCacheID {
 }
 
 /* Delay initialized cache ID based on a scenario */
-final private class SSScenarioCacheID(val _inputScenario: Scenario) extends SSCacheID {
+private class SSScenarioCacheID(val _inputScenario: Scenario) extends SSCacheID {
   @volatile
   private var isInitialized: Boolean = _
 
   if (Settings.schedulerAsserts) CacheIDs.validateInputScenario(_inputScenario)
 
-  override def isEmpty: Boolean = _inputScenario.isEmpty
-  override def inputScenario: Scenario = _inputScenario
+  final override def isEmpty: Boolean = _inputScenario.isEmpty
+  final override def inputScenario: Scenario = _inputScenario
 
-  override def ensureInitialized(): Unit = {
+  final override def ensureInitialized(): Unit = {
     if (!isInitialized) synchronized {
-      // (double checked lock)
+      // (double-checked lock)
       if (!isInitialized) {
         putAllInternal(_inputScenario.topLevelTweaks)
         isInitialized = true
       }
     }
   }
-
 }
+
+final private class SSScenarioGroupCacheID(_inputScenario: Scenario) extends SSScenarioCacheID(_inputScenario) {}
 
 /**
  * An SSCacheID with mutable tweak maps - TrackingScenario is using this Note: after serialization it becomes SSCacheID

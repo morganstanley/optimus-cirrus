@@ -191,8 +191,11 @@ public abstract class OGEventsObserver implements Cloneable {
 
   public void lookupAdjustCacheStats(NodeTaskInfo nti, boolean hit, long startTime) {}
 
-  public LookupState lookupStartScenario(Object couldBeGiven) {
-    return LookupState.Default;
+  /**
+   * Hint comes from a user who can supply the flag to a scenario, it can be ignored by PGO system
+   */
+  public LookupState lookupStartScenario(boolean hintDontCache, Object couldBeGiven) {
+    return hintDontCache ? LookupState.NoCache : LookupState.Default;
   }
 
   public void lookupAdjustCacheStats(LookupState ls, boolean hit) {}

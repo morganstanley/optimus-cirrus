@@ -204,38 +204,3 @@ final case class InputFailedStatusEvent(override val detail: InputFailedEvent) e
 final case class PubSubTickingTxTimeFailedEvent(override val detail: InputFailedEvent) extends GlobalStatusEvent {
   type DetailType = InputFailedEvent
 }
-
-sealed trait NotificationUpdate extends ReactiveEvent with Ordered[NotificationUpdate] {
-  def tt: Instant
-  final override def compare(that: NotificationUpdate) = this.tt.compareTo(that.tt)
-}
-final case class EntityNotificationUpdate(
-    tt: Instant,
-    changedEntities: List[PersistentEntity],
-    deletedEntities: List[PersistentEntity])
-    extends NotificationUpdate
-object EntityNotificationUpdate {
-  def fromNotificationEntries(tt: Instant, entries: Seq[NotificationEntry]): EntityNotificationUpdate = {
-    val (updates, deletes) = entries.foldLeft((List[PersistentEntity](), List[PersistentEntity]())) {
-      case ((curUpdates, curDeletes), entry) =>
-        entry.tpe match {
-          case NotificationType.ADD_ENTITY =>
-            (toPersistentEntity(entry, entry.txTime) :: curUpdates, curDeletes)
-          case NotificationType.INVALIDATE_ENTITY =>
-            (curUpdates, toPersistentEntity(entry, entry.segmentTtFrom) :: curDeletes)
-          case _ =>
-            throw new IllegalArgumentException(s"Unexpected NotificationType: ${entry.tpe}")
-        }
-    }
-    new EntityNotificationUpdate(tt, updates, deletes)
-  }
-
-  private def toPersistentEntity(entry: NotificationEntry, ttFrom: Instant): PersistentEntity = {
-    entry.segment.data.toPersistentEntity(
-      entry.slotRef.vref,
-      entry.lockToken,
-      entry.segment.vtInterval,
-      TimeInterval(ttFrom),
-      None)
-  }
-}

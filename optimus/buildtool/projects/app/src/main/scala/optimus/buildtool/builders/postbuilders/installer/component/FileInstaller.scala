@@ -11,14 +11,15 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component
 
-import java.nio.file.Files
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ElectronArtifact
 import optimus.buildtool.artifacts.GenericFilesArtifact
 import optimus.buildtool.artifacts.ProcessorArtifact
 import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints
+import optimus.buildtool.builders.postbuilders.installer.BundleFingerprintsCache
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
+import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config.ScopeId
@@ -39,6 +40,8 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
+
+import java.nio.file.Files
 
 class GenericFileInstaller(installer: Installer, fileInstaller: FileInstaller) extends ComponentInstaller {
   import installer._
@@ -74,6 +77,28 @@ class ProcessedFileInstaller(installer: Installer, fileInstaller: FileInstaller)
 
     if (processorArtifacts.nonEmpty) {
       processorArtifacts.apar.flatMap(a => fileInstaller.installFiles(a, bundleFingerprints(a.scopeId)))
+    } else Nil
+  }
+}
+
+class DockerProcessedFileInstaller(
+    fingerprintsCache: BundleFingerprintsCache,
+    fileInstaller: FileInstaller,
+    imageMetaBundle: MetaBundle)
+    extends ComponentInstaller {
+
+  override val descriptor = "docker processed files"
+
+  @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
+    installProcessedFiles(installable.artifacts, installable.includedScopes)
+
+  @async private def installProcessedFiles(artifacts: Seq[Artifact], includedScopes: Set[ScopeId]) = {
+    val processorArtifacts =
+      artifacts.collectAll[ProcessorArtifact].filter(a => includedScopes.contains(a.scopeId))
+
+    if (processorArtifacts.nonEmpty) {
+      processorArtifacts.apar.flatMap(a =>
+        fileInstaller.installFiles(a, fingerprintsCache.bundleFingerprints(imageMetaBundle), imageMetaBundle))
     } else Nil
   }
 }
@@ -162,7 +187,7 @@ class FileInstaller(installPathBuilder: InstallPathBuilder) {
         targetDir = targetDir,
         sourceRelDir = RelativePath("common"),
         jar = artifact.file,
-        bundleFingerprints
+        bundleFingerprints = bundleFingerprints
       )
       val removedTargetFiles = previousTargetFiles.toSet -- newTargetFiles.map(_._1).toSet
 
@@ -182,12 +207,24 @@ class FileInstaller(installPathBuilder: InstallPathBuilder) {
     }
 
   @async def installFiles(artifact: ProcessorArtifact, bundleFingerprints: BundleFingerprints): Seq[FileAsset] =
+    installFiles(artifact, bundleFingerprints, installPathBuilder.dirForScope(artifact.scopeId))
+
+  @async def installFiles(
+      artifact: ProcessorArtifact,
+      bundleFingerprints: BundleFingerprints,
+      image: MetaBundle): Seq[FileAsset] =
+    installFiles(artifact, bundleFingerprints, installPathBuilder.dirForMetaBundle(image))
+
+  @async private def installFiles(
+      artifact: ProcessorArtifact,
+      bundleFingerprints: BundleFingerprints,
+      targetDir: Directory): Seq[FileAsset] =
     ObtTrace.traceTask(artifact.scopeId, InstallProcessedFiles) {
       installFiles(
-        targetDir = installPathBuilder.dirForScope(artifact.scopeId),
+        targetDir = targetDir,
         sourceRelDir = ScopeProcessor.baseRelPath,
         jar = artifact.file,
-        bundleFingerprints
+        bundleFingerprints = bundleFingerprints,
       ).collect { case (f, true) => f }
     }
 
@@ -206,11 +243,9 @@ class FileInstaller(installPathBuilder: InstallPathBuilder) {
             Files.createDirectories(target.parent.path)
             AssetUtils.atomicallyCopy(f, target, replaceIfExists = true)
             // Only interested in making scripts whose direct parent folder is bin executable
-            if (target.parent.name == "bin")
-              target.path.toFile.setExecutable(true, false)
+            if (target.parent.name == "bin") target.path.toFile.setExecutable(true, false)
           }
           .isDefined
-
         (target, installed)
       }
     }

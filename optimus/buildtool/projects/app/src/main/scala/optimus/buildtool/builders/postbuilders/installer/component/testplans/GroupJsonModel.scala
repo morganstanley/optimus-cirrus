@@ -199,7 +199,7 @@ class EntryDeserializer extends StdDeserializer[Entry](classOf[Entry]) {
 
 object ProgrammingLanguage extends Enumeration {
   type ProgrammingLanguage = Value
-  val CustomPassfail, Java, PactContract, Python, Scala = Value
+  val CustomPassfail, Java, PactContract, Python, PyTestplan, Scala = Value
 
   def fromString(s: String): ProgrammingLanguage =
     values.find(_.toString.equalsIgnoreCase(s)).getOrElse(ProgrammingLanguage.Scala)

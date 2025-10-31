@@ -13,7 +13,7 @@ package optimus.profiler
 
 import java.nio.charset.Charset
 
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.NodeTask
 import optimus.platform.storable.Entity
@@ -71,13 +71,13 @@ class NodeDump() {
       if (ntsk.args.nonEmpty) {
         ntsk.args.foreach(arg => {
           args.add(
-            "\"" + Base64.encodeBytes(
+            "\"" + Base64.getEncoder.encodeToString(
               CoreHelpers.safeToString(arg, null, DebuggerUI.maxCharsInInlineArg).getBytes(charset)) + "\"")
         })
       }
 
       // result
-      result = Base64.encodeBytes(ntsk.resultAsString.getBytes(charset))
+      result = Base64.getEncoder.encodeToString(ntsk.resultAsString.getBytes(charset))
     }
   }
 

@@ -284,31 +284,41 @@ object FileUtils extends Log {
       to: Path,
       removeOld: Boolean = true,
       compressionLevel: Int = Zstd.defaultCompressionLevel(),
-      fileBuffer: Int = 524288): Try[(Long, Long)] = for {
-    ret <- Using.Manager { use =>
-      Files.deleteIfExists(to)
-      val in = use(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
-      val counting = new CountingOutputStream(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
-      val out = use(new ZstdOutputStream(counting, RecyclingBufferPool.INSTANCE, compressionLevel))
-      val orig = in.transferTo(out)
-      val compressed = counting.getByteCount
-      (orig, compressed)
-    }
-    _ <- Try { if (removeOld) Files.delete(from) }
-  } yield ret
+      fileBuffer: Int = 524288): Try[(Long, Long)] = Using.Manager { use =>
+    val tmpSuffix = s".tmp.${Instant.now}"
+    val fromTmp = Paths.get(from.toString + tmpSuffix)
+    val toTmp = Paths.get(to.toString + tmpSuffix)
+    if (removeOld)
+      Files.move(from, fromTmp, StandardCopyOption.REPLACE_EXISTING)
+    else
+      Files.copy(from, fromTmp, StandardCopyOption.REPLACE_EXISTING)
+    Files.deleteIfExists(toTmp)
+    val in = use(new BufferedInputStream(Files.newInputStream(fromTmp), fileBuffer))
+    val counting = new CountingOutputStream(new BufferedOutputStream(Files.newOutputStream(toTmp), fileBuffer))
+    val out = use(new ZstdOutputStream(counting, RecyclingBufferPool.INSTANCE, compressionLevel))
+    val orig = in.transferTo(out)
+    val compressed = counting.getByteCount
+    Files.delete(fromTmp)
+    Files.move(toTmp, to, StandardCopyOption.REPLACE_EXISTING)
+    (orig, compressed)
+  }
 
   def zstdDecompress(from: Path, to: Path, removeOld: Boolean = true, fileBuffer: Int = 524288): Try[(Long, Long)] =
-    for {
-      ret <- Using.Manager { use =>
-        Files.deleteIfExists(to)
-        val count = new CountingInputStream(new BufferedInputStream(Files.newInputStream(from), fileBuffer))
-        val in = use(new ZstdInputStream(count, RecyclingBufferPool.INSTANCE))
-        val out = use(new BufferedOutputStream(Files.newOutputStream(to), fileBuffer))
-        val decompressed = in.transferTo(out)
-        val compressed = count.getCount
-        (decompressed, compressed)
-      }
-      _ <- Try { if (removeOld) Files.delete(from) }
-    } yield ret
+    Using.Manager { use =>
+      val tmpSuffix = s".tmp.${Instant.now}"
+      val fromTmp = Paths.get(from.toString + tmpSuffix)
+      val toTmp = Paths.get(to.toString + tmpSuffix)
+      Files.deleteIfExists(toTmp)
+      if (removeOld) Files.move(from, fromTmp, StandardCopyOption.REPLACE_EXISTING)
+      else Files.copy(from, fromTmp, StandardCopyOption.REPLACE_EXISTING)
+      val count = new CountingInputStream(new BufferedInputStream(Files.newInputStream(fromTmp), fileBuffer))
+      val in = use(new ZstdInputStream(count, RecyclingBufferPool.INSTANCE))
+      val out = use(new BufferedOutputStream(Files.newOutputStream(toTmp), fileBuffer))
+      val decompressed = in.transferTo(out)
+      val compressed = count.getCount
+      Files.delete(fromTmp)
+      Files.move(toTmp, to, StandardCopyOption.REPLACE_EXISTING)
+      (decompressed, compressed)
+    }
 
 }

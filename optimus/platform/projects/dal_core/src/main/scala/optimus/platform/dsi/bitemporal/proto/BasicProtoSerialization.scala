@@ -14,7 +14,7 @@ package optimus.platform.dsi.bitemporal.proto
 import java.time.Instant
 import com.google.protobuf.ByteString
 import msjava.slf4jutils.scalalog.getLogger
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.dsi.session.SlotMap
 import optimus.entity.EntityLinkageProperty
 import optimus.platform._
@@ -223,7 +223,7 @@ object SerializedEntitySerializer
 
     if (entity.entityRef != null) {
       builder.setEntityRef(toProto(entity.entityRef))
-      builder.setEntityRefString(Base64.encodeBytes(entity.entityRef.data))
+      builder.setEntityRefString(Base64.getEncoder.encodeToString(entity.entityRef.data))
     }
     if (entity.linkages.isDefined) {
       val linkageProtos = entity.linkages.get map { case (linkageField, links) =>

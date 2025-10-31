@@ -28,18 +28,10 @@ object ReactiveBreadCrumbs {
   object ReactiveSource extends Source {
     override val name = "Reactive"
   }
-  val event = Events.OptimusAppCollected
 
   def publishInfoIfNeeded(message: String): Unit = {
     if (Settings.enableReactiveBreadcrumb) {
       Breadcrumbs.info(ChainedNodeID.nodeID, LogPropertiesCrumb(_, ReactiveSource, Properties.reactiveError -> message))
     }
-  }
-
-  /**
-   * In Splunk, we can use below query reactive related logs by: search "source=ReactiveConcurrency"
-   */
-  object ConcurrencyIssue extends Crumb.Source {
-    override val name: String = "ReactiveConcurrency"
   }
 }

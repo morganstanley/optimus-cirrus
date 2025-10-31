@@ -12,7 +12,7 @@
 package optimus.graph
 
 import optimus.platform.PluginHelpers.mkCompute
-import optimus.platform.{PropertyTweak, ScenarioStack, Tweak}
+import optimus.platform.{PropertyTweak, ScenarioStack}
 import optimus.platform.annotations.{nodeLift, nodeLiftByName, nodeSyncLift, tweakOperator, withNodeClassID}
 import optimus.platform.util.PrettyStringBuilder
 
@@ -24,10 +24,10 @@ import optimus.platform.util.PrettyStringBuilder
  *   Different TweakTargets will be added that support identifying a property type on any instance of an entity type, or
  *   by tag (both with predicate support).
  *
- * Don't think you can change to a case class, because that will bring a whole bunch of other methods. Given that we
+ * Don't think you can change to a case class, because that will bring a bunch of other methods. Given that we
  * have an implicit conversion to InstancePropertyTarget this would result in a lot of strange errors.
  */
-final class InstancePropertyTarget[R, SetT](override val key: NodeKey[R])
+final class InstancePropertyTarget[R, SetT <: AnyRef](override val key: NodeKey[R])
     extends TweakTargetKey[R, SetT]
     with Serializable {
   // We have to test for isTweakable, because some code creates InstancePropertyTarget on keys without any confidence checks
@@ -103,33 +103,6 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
 
   override def matchesKeyFromRSS(key: NodeKey[_]): Boolean = key.propertyInfo == propertyInfo
 
-  def tweakByValueExtractor(extractor: TweakKeyExtractor, key: Any, valueProvider: SITweakValueProvider): Tweak = {
-    val fullKey = ExtractorTweakableKey(key, this)
-    val target = new TweakKeyExtractorTarget(this, extractor, fullKey)
-    new Tweak(target, new TweakNode(new TweakValueProviderNode(valueProvider, modify = false)))
-  }
-
-  def tweakByValueExtractor(
-      extractor: TweakKeyExtractor,
-      keys: Seq[Any],
-      valueProvider: SITweakValueProvider): Seq[Tweak] =
-    keys.map(tweakByValueExtractor(extractor, _, valueProvider))
-
-  def tweakByModifyValueExtractor(
-      extractor: TweakKeyExtractor,
-      key: Any,
-      valueProvider: SITweakValueProvider): Tweak = {
-    val fullKey = ExtractorTweakableKey(key, this)
-    val target = new TweakKeyExtractorTarget(this, extractor, fullKey)
-    new Tweak(target, new TweakNode(new TweakValueProviderNode(valueProvider, modify = true)))
-  }
-
-  def tweakByModifyValueExtractor(
-      extractor: TweakKeyExtractor,
-      keys: Seq[AnyRef],
-      valueProvider: SITweakValueProvider): Seq[Tweak] =
-    keys.map(tweakByModifyValueExtractor(extractor, _, valueProvider))
-
   @nodeSyncLift
   @nodeLiftByName
   def when(@nodeLift @withNodeClassID predicate: WhenT): PredicatedPropertyTweakTarget[E, WhenT, SetT, R] =
@@ -139,23 +112,21 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
     PredicatedPropertyTweakTarget[E, WhenT, SetT, R](this, vn)
 
   /* BEGIN DUPLICATION OF THE TweakTarget INTERFACE. The only change is to allow for PropertyTweak type propagation */
-  private[this] def makeTweak(tweakTemplate: TweakNode[R]) = new PropertyTweak[E, WhenT](this, tweakTemplate)
+  private[this] def makeTweak(tweakTemplate: TweakTemplate) = new PropertyTweak[E, WhenT](this, tweakTemplate)
 
   @tweakOperator
   @nodeSyncLift
-  override def :=(@nodeLift @withNodeClassID value: => R): PropertyTweak[E, WhenT] =
-    makeTweak(new TweakNode[R](mkCompute(value _)))
+  override def :=(@nodeLift @withNodeClassID value: => R): PropertyTweak[E, WhenT] = makeTweak(
+    TweakTemplate(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  override def $colon$eq$withValue(value: R): PropertyTweak[E, WhenT] =
-    makeTweak(new TweakNode[R](new AlreadyCompletedNode(value)))
-  override def $colon$eq$withNode(vn: Node[R]): PropertyTweak[E, WhenT] = makeTweak(new TweakNode[R](vn))
+  override def $colon$eq$withValue(value: R): PropertyTweak[E, WhenT] = makeTweak(TweakTemplate(value))
+  override def $colon$eq$withNode(vn: Node[R]): PropertyTweak[E, WhenT] = makeTweak(TweakTemplate(vn))
 
   @tweakOperator
   @nodeSyncLift
-  override def :=(@nodeLift @withNodeClassID f: SetT): PropertyTweak[E, WhenT] =
-    makeTweak(new TweakNode[R](f))
-  override def $colon$eq$withNode(vn: AnyRef /* FunctionN(... Node[R])*/ ): PropertyTweak[E, WhenT] =
-    makeTweak(new TweakNode[R](vn))
+  override def :=(@nodeLift @withNodeClassID f: SetT): PropertyTweak[E, WhenT] = makeTweak(TweakTemplate.byKey(f))
+  override def $colon$eq$withNode(vn: AnyRef /* FunctionN(... Node[R])*/ ): PropertyTweak[E, WhenT] = makeTweak(
+    TweakTemplate.byKey(vn))
 
   @tweakOperator
   @nodeSyncLift
@@ -163,7 +134,7 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
     makeTweak(mkPlus(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
   override def $colon$plus$eq$withValue(value: R)(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] = makeTweak(
-    mkPlus(new AlreadyCompletedNode(value))(ev))
+    mkPlus(value)(ev))
   override def $colon$plus$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] = makeTweak(
     mkPlus(vn))
 
@@ -172,8 +143,8 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
   override def :-=(@nodeLift @withNodeClassID value: => R)(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] =
     makeTweak(mkMinus(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
-  override def $colon$minus$eq$withValue(value: R)(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] =
-    makeTweak(mkMinus(new AlreadyCompletedNode(value)))
+  override def $colon$minus$eq$withValue(value: R)(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] = makeTweak(
+    mkMinus(value))
   override def $colon$minus$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] =
     makeTweak(mkMinus(vn))
 
@@ -183,7 +154,7 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
     makeTweak(mkTimes(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
   override def $colon$times$eq$withValue(value: R)(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] =
-    makeTweak(mkTimes(new AlreadyCompletedNode(value)))
+    makeTweak(mkTimes(value))
   override def $colon$times$eq$withNode(vn: Node[R])(implicit ev: Numeric[R]): PropertyTweak[E, WhenT] =
     makeTweak(mkTimes(vn))
 
@@ -193,7 +164,7 @@ trait PropertyTarget[E, WhenT <: AnyRef, SetT <: AnyRef, R] extends TweakTarget[
     makeTweak(mkDiv(mkCompute(value _)))
   // noinspection ScalaUnusedSymbol
   override def $colon$div$eq$withValue(value: R)(implicit ev: Fractional[R]): PropertyTweak[E, WhenT] =
-    makeTweak(mkDiv(new AlreadyCompletedNode(value)))
+    makeTweak(mkDiv(value))
   override def $colon$div$eq$withNode(vn: Node[R])(implicit ev: Fractional[R]): PropertyTweak[E, WhenT] =
     makeTweak(mkDiv(vn))
 

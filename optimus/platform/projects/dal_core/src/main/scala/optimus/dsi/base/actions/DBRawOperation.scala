@@ -12,7 +12,7 @@
 package optimus.dsi.base.actions
 
 import java.util.Arrays
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.storable.{EntityTimeSliceReference, SerializedAppEvent, SerializedKey, StorableReference}
 import DBRawObjectTypename._
@@ -113,7 +113,7 @@ final case class DBRawOpaqueId(bytes: Array[Byte]) extends DBRawQuery {
     case _                => false
   }
 
-  override def toString = Base64.encodeBytes(bytes)
+  override def toString = Base64.getEncoder.encodeToString(bytes)
 }
 
 // DBRawValueType

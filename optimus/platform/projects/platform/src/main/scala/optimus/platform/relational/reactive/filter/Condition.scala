@@ -14,7 +14,7 @@ package optimus.platform.relational.reactive.filter
 import optimus.utils.datetime.ZoneIds
 
 import java.time._
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.platform.pickling._
 import optimus.platform.storable.{Entity, EntityImpl, EntityReference, ModuleEntityToken}
 import optimus.platform.dsi.bitemporal._
@@ -106,7 +106,10 @@ object Condition {
     }
   }
   def ofEntityReference(eref: EntityReference): Binary = {
-    Binary("notification_entry.segment.serialized_entity.entity_ref_string", EQ, Base64.encodeBytes(eref.data))
+    Binary(
+      "notification_entry.segment.serialized_entity.entity_ref_string",
+      EQ,
+      Base64.getEncoder.encodeToString(eref.data))
   }
 }
 

@@ -15,9 +15,15 @@ import msjava.zkapi.ZkaAttr
 import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
+import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.crumbs.{Properties => P}
 import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.graph.diagnostics.sampling.SamplingProfiler
+import optimus.logging.LoggingInfo
+import optimus.platform.sampling.SamplingProfilerSource
 import optimus.platform.util.Log
 import org.apache.commons.io
 import optimus.utils.FileUtils
@@ -66,10 +72,13 @@ class PlexCleanerArgs {
   val dryRun = false
 
   @ArgOption(name = "--threads")
-  val nThreads = 5
+  val nThreads = 10
 
   @ArgOption(name = "--logThreshold")
   val logThresh = 5000
+
+  @ArgOption(name = "--snapWalk", usage = "Attempt to snapshot the file tree before walking it")
+  val snapWalk = true
 
   @ArgOption(
     name = "--publish",
@@ -94,6 +103,9 @@ object PlexCleaner extends App with Log {
   import plexCleanerArgs._
   private val plexDir = Paths.get(dirName)
 
+  private val pubSource = ProfilerSource
+  private val host = LoggingInfo.getHost
+
   private val publishing =
     if (crumbPublication.contains("/")) {
       val Array(env, configNode) = crumbPublication.split("/")
@@ -105,7 +117,25 @@ object PlexCleaner extends App with Log {
       true
     } else false
 
+  private def publishEvent(p: Path, event: String): Unit = {
+    val fn = p.getFileName.toString
+    val dot = fn.lastIndexOf('.')
+    val fnStripped = if (dot < 0) fn else fn.substring(0, dot)
+    val id = ChainedID(fnStripped)
+    if (id.toString == fnStripped)
+      Breadcrumbs.send(
+        PropertiesCrumb(
+          id, // id of original crumb publisher
+          pubSource,
+          Properties.event -> event,
+          // Critical: otherwise we immediately re-open deleted files!
+          Properties.crumbplexerIgnore -> "PlexCleaner",
+          Properties.engineId -> ChainedID.root
+        ))
+  }
+
   val store = Files.getFileStore(plexDir)
+  private def availableDiskGB = store.getUsableSpace / (1024L * 1024L * 1024L)
 
   // Run f on multiple threads
   private def crunch[T](f: => Unit): Unit = {
@@ -128,20 +158,33 @@ object PlexCleaner extends App with Log {
     }
   }
 
+  private trait Result[U] {
+    def apply[U]() = this.asInstanceOf[Result[U]]
+    def continue = true
+  }
+  private case object Halt extends Result[Any] {
+    override def continue = false
+  }
+  private case object Skip extends Result[Any]
+  private case object Continue extends Result[Any]
+  private final case class Value[U](u: U) extends Result[U]
+
   // Pull items safely off iterator to process, adding zero or more results to the output queue
-  private def harvest[T, U](it: Iterator[T])(f: (T, ConcurrentLinkedQueue[U]) => Unit): Iterable[U] = {
+  private def harvest[T, U](it: Iterator[T])(f: (T, ConcurrentLinkedQueue[U]) => Result[U]): Iterable[U] = {
     val qout = new ConcurrentLinkedQueue[U]()
     crunch {
       @tailrec def loop(): Unit = {
         it.safeNext() match {
           case Some(e) =>
-            try {
-              f(e, qout)
-            } catch {
-              case NonFatal(t) =>
-                log.warn(s"Skipping $e, $t")
-            }
-            loop()
+            val continue =
+              try {
+                f(e, qout).continue
+              } catch {
+                case NonFatal(t) =>
+                  log.warn(s"Skipping $e, $t")
+                  true
+              }
+            if (continue) loop()
           case None =>
         }
       }
@@ -151,17 +194,25 @@ object PlexCleaner extends App with Log {
   }
 
   // Pull items safely off iterator to process, adding zero or one results to output queue
-  private def process[T, U](it: Iterator[T])(f: T => Option[U]): Iterable[U] =
-    harvest(it)((t: T, q: ConcurrentLinkedQueue[U]) => f(t).foreach(q.add))
+  private def process[T, U](it: Iterator[T])(f: T => Result[U]): Iterable[U] =
+    harvest(it)((t: T, q: ConcurrentLinkedQueue[U]) =>
+      f(t) match {
+        case Value(u) =>
+          q.add(u)
+          Continue[U]()
+        case r => r
+      })
 
   // Main loop
   while (true) {
-
     // Assemble top level files names and their modification times, possibly compressing the file
     if (zipAgeMn > 0)
       log.info(s"Zipping files older than $zipAgeMn minutes")
     val fileAndTimes: Iterable[(String, Long)] = {
-      val in = Files.walk(plexDir).iterator.asScala
+      val in: Iterator[Path] = {
+        val stream = Files.walk(plexDir)
+        if (snapWalk) stream.toArray.iterator.asInstanceOf[Iterator[Path]] else stream.iterator().asScala
+      }
       val t0 = System.currentTimeMillis()
       val tLatestToZip = t0 - zipAgeMn * 60L * 1000L
       val nf = new AtomicInteger()
@@ -179,7 +230,7 @@ object PlexCleaner extends App with Log {
             || name.endsWith(CrumbPlexerUtils.sizeSuffix)
             || (zipAgeMn < 0) || t > tLatestToZip
           )
-            Some((name, t)) // not zippable; output original file
+            Value((name, t)) // not zippable; output original file
           else {
             val p1 = Paths.get(name)
             val name2 = name + (if (useZstd) CrumbPlexerUtils.zstdSuffix else CrumbPlexerUtils.zipSuffix)
@@ -190,11 +241,18 @@ object PlexCleaner extends App with Log {
             compress match {
               case Failure(e) =>
                 log.warn(s"Unable to compress $p1: $e")
-                // Not clear what the failure mode was, but try to delete both original and zipped now.
-                Try(Files.delete(p1)) recover (e => log.warn(s"Unable to delete $p1: $e"))
-                Try(Files.delete(p2)) recover (e => log.warn(s"Unable to delete $p2: $e"))
-                None
+                if (e.getMessage.contains("No space")) {
+                  log.warn("No space on disk! Aborting compression attempts and proceeding to deletion.")
+                  Halt()
+                } else {
+                  // Not clear what the failure mode was, but try to delete both original and zipped now.
+                  Try(Files.delete(p1)) recover (e => log.warn(s"Unable to delete $p1: $e"))
+                  Try(Files.delete(p2)) recover (e => log.warn(s"Unable to delete $p2: $e"))
+                  Continue()
+                }
               case Success((orig, zipped)) =>
+                BaseSamplers.increment(Properties.plexerCountCompressed, 1)
+                publishEvent(p1, "compressed")
                 // Set modification time to that of uncompressed file, to track its age for deletion
                 Try(Files.setLastModifiedTime(p2, FileTime.fromMillis(t))) recover (e =>
                   log.warn(s"Unable to adjust modification time of $p2: $e"))
@@ -207,15 +265,17 @@ object PlexCleaner extends App with Log {
                 val i = nz.incrementAndGet()
                 totBytesUnzipped.addAndGet(orig)
                 totBytesZipped.addAndGet(zipped)
-                if (i % logThresh == 0)
+                if (i % logThresh == 0) {
+                  BaseSamplers.setGauge(Properties.plexerSnapFreeDisk, availableDiskGB * 1024)
                   log.info(
                     s"Zipped $i files, $totBytesUnzipped -> $totBytesZipped (${totBytesZipped.get.toDouble / (totBytesUnzipped.get + 1)}) so far in ${System
                         .currentTimeMillis() - t0}ms")
+                }
                 // Retain original modification time!
-                Some((name2, t))
+                Value((name2, t))
             }
           }
-        } else None
+        } else Skip()
       }
       log.info(
         s"Zipped $nz files of $nf, $totBytesUnzipped -> $totBytesZipped (${totBytesZipped.get.toDouble / (totBytesUnzipped.get + 1)}) bytes total in ${System
@@ -223,7 +283,7 @@ object PlexCleaner extends App with Log {
       ret
     }
 
-    val avail = store.getUsableSpace / (1024L * 1024L * 1024L)
+    val avail = availableDiskGB
     if (publishing)
       BaseSamplers.setGauge(P.plexerSnapFreeDisk, avail * 1024)
     if (avail > minGB) {
@@ -257,7 +317,7 @@ object PlexCleaner extends App with Log {
           val toDelete = sorted.take(leaves.size * pct / 100).takeWhile(_._2 < earliestToDelete)
           // We'll spare the first item in toDelete, so we can report it as the oldest
           if (toDelete.size <= 1)
-            (Iterator.empty, sorted.head._2)
+            (Iterable.empty, sorted.head._2)
           else
             (toDelete.map(_._1).drop(1), toDelete.head._2)
         }
@@ -273,19 +333,24 @@ object PlexCleaner extends App with Log {
                 io.FileUtils.deleteDirectory(p.toFile)
               else
                 Files.delete(p)
+              publishEvent(p, "deleted")
+              BaseSamplers.increment(Properties.plexerCountDeleted, 1)
               val d = deleted.incrementAndGet()
               if (d > nextLog.get) {
                 nextLog.addAndGet(logThresh)
+                BaseSamplers.setGauge(Properties.plexerSnapFreeDisk, availableDiskGB * 1024)
                 log.info(s"Deleted $d ...")
               }
             } catch {
               case NonFatal(e) =>
                 log.warn(s"Unable to to delete $entry $p: $e")
             }
+            Continue()
           }
         log.info(s"Deleted $deleted total.")
-        if (publishing)
+        if (publishing) {
           BaseSamplers.setGauge(P.plexerSnapOldestHours, (System.currentTimeMillis() - earliest) / (3600 * 1000L))
+        }
       }
       if (publishing)
         BaseSamplers.setGauge(P.plexerSnapOldestHours, 0L)

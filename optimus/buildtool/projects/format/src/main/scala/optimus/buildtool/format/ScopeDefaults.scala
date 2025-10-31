@@ -16,12 +16,27 @@ import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.ScopeId
 
+sealed trait Filter {
+  def include: Boolean
+  def matches(scopeId: ScopeId, moduleSet: ModuleSetId): Boolean
+}
+
+final case class AllFilter(include: Boolean) extends Filter {
+  override def matches(scopeId: ScopeId, moduleSet: ModuleSetId): Boolean = true
+}
+
+final case class IdFilter(id: Id, include: Boolean) extends Filter {
+  def matches(scopeId: ScopeId, moduleSet: ModuleSetId): Boolean = id.contains(scopeId)
+}
+
+final case class ModuleSetFilter(id: ModuleSetId, include: Boolean) extends Filter {
+  def matches(scopeId: ScopeId, moduleSet: ModuleSetId): Boolean = id == moduleSet
+}
+
 final case class ConditionalDefaults(
     name: String,
-    ids: Seq[Id],
-    moduleSets: Seq[ModuleSetId],
-    defaults: ScopeDefaults,
-    exclude: Boolean
+    filters: Seq[Filter],
+    defaults: ScopeDefaults
 ) {
 
   private def checkMavenDef(
@@ -36,12 +51,13 @@ final case class ConditionalDefaults(
       false // force exclude target for mavenOnly modules
     else if (includeTpe == tpe || includeTpe == "all") true // force af build include target Conditional for tpe
     else if (excludeTpe == tpe || excludeTpe == "all") false // force af build exclude target from tpe
-    else checkExclude(id, moduleSet) // not covered in MavenDefinition, back to Exclude checking
+    else checkFilters(id, moduleSet) // not covered in MavenDefinition, back to Exclude checking
   }
 
-  private def checkExclude(id: ScopeId, moduleSet: ModuleSet): Boolean = {
-    val matches = ids.exists(_.contains(id)) || moduleSets.contains(moduleSet.id)
-    if (exclude) !matches else matches
+  private def checkFilters(id: ScopeId, moduleSet: ModuleSet): Boolean = {
+    // search filters, finding the last one that matches (so that they can be ordered from least to most specific in config)
+    val matching = filters.findLast(_.matches(id, moduleSet.id))
+    matching.exists(_.include) // default to false
   }
 
   def appliesTo(
@@ -54,7 +70,7 @@ final case class ConditionalDefaults(
     if (useMavenDepsRules) // for maven build or mavenOnly scope
       checkMavenDef(id, moduleSet, mavenDefinition, useMavenOnlyRules)
     else
-      checkExclude(id, moduleSet)
+      checkFilters(id, moduleSet)
   }
 
   def isForbiddenDependencyConditional: Boolean =

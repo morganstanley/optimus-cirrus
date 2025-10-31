@@ -45,6 +45,7 @@ import optimus.graph.PThreadContext;
 import optimus.graph.PredicatedPropertyTweakTarget;
 import optimus.graph.PropertyTarget;
 import optimus.graph.Settings;
+import optimus.graph.TwkPropertyInfo0;
 import optimus.logging.LoggingInfo;
 import optimus.platform.Tweak;
 import optimus.platform.util.Version$;
@@ -163,7 +164,7 @@ public final class CoreHelpers {
         doSendDebugInfo = false;
       }
       if (port != null) {
-        log.warn("Entering debuggerBreak: " + info);
+        log.warn("Entering debuggerBreak: {}", info);
         do {
           // When attached you would actually set breakpoint on the next lines
           breakTotalMs += STOP_MILLISECONDS;
@@ -174,7 +175,7 @@ public final class CoreHelpers {
           Thread.sleep(STOP_MILLISECONDS);
         } while (breakOn);
       } else {
-        log.warn("Not entering debuggerBreak, because debugging not enabled: " + info);
+        log.warn("Not entering debuggerBreak, because debugging not enabled: {}", info);
         breakOn = false;
       }
     } catch (Exception e) {
@@ -294,6 +295,9 @@ public final class CoreHelpers {
   private static final String PredicatedPropertyTweakTargetClsName =
       PredicatedPropertyTweakTarget.class.getName();
   private static final String PropertyTweakTargetClsName = PropertyTarget.class.getName();
+  private static final String TwkPropertyInfo0Name = TwkPropertyInfo0.class.getName();
+  private static final String TweakPropertyInfo =
+      TwkPropertyInfo0Name.substring(0, TwkPropertyInfo0Name.length() - 1);
 
   private static final String TweakClsName = Tweak.class.getName();
 
@@ -319,7 +323,8 @@ public final class CoreHelpers {
                     || clsName.equals(PredicatedPropertyTweakTargetClsName)
                     || clsName.equals(PropertyTweakTargetClsName)) seenTargetClass = true;
                 else if (clsName.equals(TweakClsName)) seenTweakConstructor = true;
-                else if (seenTargetClass) return frame.toStackTraceElement();
+                else if (seenTargetClass && !clsName.startsWith(TweakPropertyInfo))
+                  return frame.toStackTraceElement();
               }
               // The best we can do :) return first tweak creation site in this stack
               return beforeTweakConstructorFrame;

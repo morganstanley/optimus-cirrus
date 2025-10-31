@@ -12,7 +12,7 @@
 package optimus.platform.dsi.bitemporal.proto
 
 import optimus.dsi.notification._
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.storable._
 
@@ -288,7 +288,7 @@ private[proto] object ObliterateMessageSerializer
   override def serialize(om: ObliterateMessage): ObliterateMessageProto = {
     val builder = ObliterateMessageProto.newBuilder
     builder
-      .addAllEntityReferenceStrings((om.entityReferences map (c => Base64.encodeBytes(c.data))).asJava)
+      .addAllEntityReferenceStrings((om.entityReferences map (c => Base64.getEncoder.encodeToString(c.data))).asJava)
       .addAllTypes(om.types.asJava)
       .setTxTime(toProto(om.txTime))
       .setContext(toProto(om.context))

@@ -41,9 +41,7 @@ public class Settings {
 
   public static final boolean kludgeBind2BindOnce =
       getBoolProperty("optimus.compat.bind2BindOnce", false);
-  /** Added 2/17/2016 backward compatible with the previous way of resolving tweaks */
-  public static final boolean compatSyncTweakWhen =
-      getBoolProperty("optimus.compat.syncTweakWhen", false);
+
   /** Added 1/5/2017 backward compatible with the original design */
   // TODO (OPTIMUS-15699): flip it for everyone in main
   public static boolean throwOnDuplicateInstanceTweaks =

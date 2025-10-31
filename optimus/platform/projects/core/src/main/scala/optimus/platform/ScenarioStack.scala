@@ -70,6 +70,7 @@ object ScenarioStack {
     ((lhs.siParams eq rhs.siParams) || lhs.siParams.equals(rhs.siParams))
   }
 
+  /** Synthetic, meaning they have no tweaks and are just used to carry nodeInputs or cancelScopes */
   private[optimus] def isSyntheticScenario(cur: ScenarioStack): Boolean = {
     (cur.parent ne null) && (cur.parent._cacheID eq cur._cacheID)
   }
@@ -108,9 +109,9 @@ object ScenarioStack {
     val maybeTracker = ssMaybeWithProgress.progressTracker
 
     /*
-     * In order to cancel the follow on steps, we make use of union
+     * In order to cancel the follow-on steps, we make use of union
      *
-     * This leads to the the below structure of SS and cancellation scopes (if cs passed to this method)
+     * This leads to the below structure of SS and cancellation scopes (if cs passed to this method)
      *
      * user cs (maybeTracker.params.userCancellationScope) = global handler cs
      *             (coming from optimus.ui.server.widgets.HtmlWidget.getProgressTracker)
@@ -149,7 +150,7 @@ final case class ScenarioStack private[optimus] (
     private var _parent: ScenarioStack = null,
     private[optimus] val _cacheID: SSCacheID = SSCacheID.newUnique(),
     private[optimus] var flags: Int = 0,
-    // this should be transient (used in NodeExecutor.hasRecordingSS - replace with RECORD_TWEAK_USAGE flag?
+    // this should be transient (used in NodeExecutor.hasRecordingSS - replace with RECORD_TWEAK_USAGE flag?)
     private[optimus] val tweakableListener: TweakableListener = NoOpTweakableListener,
     private[optimus] val siParams: SIParams = ScenarioStack.emptySIParams,
     private[optimus] val ssShared: ScenarioStackShared = null,
@@ -188,7 +189,7 @@ final case class ScenarioStack private[optimus] (
     // too many times for no good reason.
     siParams.markPluginNodeTaskInfos()
 
-  /** Scenario State is one to one with ScenarioStack but we don't want to expose to the 'user' all innards */
+  /** Scenario State is one to one with ScenarioStack, but we don't want to expose to the 'user' all innards */
   def asScenarioState: ScenarioState = ScenarioState(this)
   def asUntweakedScenarioState: UntweakedScenarioState =
     new UntweakedScenarioState(env, siParams.scopedPlugins, siParams.nodeInputs.freeze)
@@ -320,7 +321,8 @@ final case class ScenarioStack private[optimus] (
           // Add SS header
           hb.buildLeaf(NoStyleNamed(if (isRoot) "RootScenarioStack" else "ScenarioStackHeader")) { sb =>
             sb ++= getClass.getSimpleName ++= ":" ++= trackingDepth.toString
-            sb ++= "@" ++= flagsAsString ++= "@" ++= System.identityHashCode(this).toHexString
+            sb ++= "@" ++= flagsAsString
+            if (DiagnosticSettings.verboseSSView) sb ++= "@" ++= System.identityHashCode(this).toHexString
           }
 
           // Add SS profile
@@ -329,7 +331,7 @@ final case class ScenarioStack private[optimus] (
           }
 
           // Print the stack
-          hb += this._cacheID.tweakMaskString
+          if (DiagnosticSettings.verboseSSView) hb += this._cacheID.tweakMaskString
           hb.squareBracketsIndent {
             if (!ScenarioStack.isSyntheticScenario(this)) {
               if (hb.cfg.scenarioStackEffective || !_cacheID.isEmpty)
@@ -515,7 +517,7 @@ final case class ScenarioStack private[optimus] (
         TweakExpander.expandTweaks(scenario, this)
       } else scenario
 
-      val lookupObject = OGTrace.observer.lookupStartScenario(givenNode)
+      val lookupObject = OGTrace.observer.lookupStartScenario(expandedScenario.dontCache, givenNode)
 
       val cacheKey = new SSCacheKey(_cacheID.id, expandedScenario)
       val freshCacheID = SSCacheID.newUninitialized(expandedScenario)
@@ -685,7 +687,7 @@ final case class ScenarioStack private[optimus] (
 
   /** tracking overlay */
   private[optimus] def withOverlay(overlayScenarioRef: ScenarioReference, overlaySS: ScenarioStack): ScenarioStack = {
-    // cacheKey for TOSS is just tuple of parent scenarioStack ID and overlaySS ID
+    // cacheKey for TOSS is just tuple of parent scenarioStack ID and overlaySS ID,
     // and therefore it is not dependent on the state of tweaks in the dependency trackers,
     // only on any tweaks in given blocks (and we rely on invalidation for cache coherency)
     val overlayCacheID = {
@@ -708,7 +710,7 @@ final case class ScenarioStack private[optimus] (
     //
     // It's safe to only report to parent.forwardToListener (which is somewhere in the parent's ancestry) because we have
     // already reported to overlaySS, and overlaySS will receive invalidation notifications from overlaySS.parent already,
-    // so we don't need parent to report to overlaySS.parent.
+    // so we don't need the parent to report to overlaySS.parent.
     //
     // Note that it's not true if our parent is an overlay of some unrelated scenario, because in that case our overlaySS
     // won't be receiving any invalidation notifications, so we need our parent to report to that unrelated scenario, i.e.
@@ -764,7 +766,7 @@ final case class ScenarioStack private[optimus] (
 
   /**
    * Create identical scenario stack with cachedTransitively It's a very common case to start with no-caching scenario
-   * and 'upgrade' to caching scenario.... Therefore we effectively cache that value
+   * and 'upgrade' to caching scenario.... Therefore, we effectively cache that value
    */
   private[optimus] def withCacheableTransitively: ScenarioStack = {
     def canUseCached = {
@@ -1052,7 +1054,7 @@ final case class ScenarioStack private[optimus] (
   }
 
   /**
-   * Called from NCSuport#hasTweaksForTweakables
+   * Called from NCSupport#hasTweaksForTweakables
    * Note: executes when clauses and not just lookup the tweak!
    * For non-xs usages consider adding an argument that will throw if when clause is needed!
    */
@@ -1072,10 +1074,10 @@ final case class ScenarioStack private[optimus] (
   }
 
   /** Last step in the resolution of a PropertyNode that didn't end up being tweaked */
-  private[optimus] def completeGetNode[R](info: NodeTaskInfo, pnode: PropertyNode[R], ec: OGSchedulerContext) =
-    if (info.getCacheable && !pnode.isStable)
-      pnode.scenarioStack().cacheSelector.lookupAndInsert(info, pnode, ec)
-    else pnode
+  private[optimus] def completeGetNode[R](info: NodeTaskInfo, node: PropertyNode[R], ec: OGSchedulerContext) =
+    if (info.getCacheable && !node.isStable)
+      node.scenarioStack().cacheSelector.lookupAndInsert(info, node, ec)
+    else node
 
   private[optimus] def initialRuntimeScenarioStack: ScenarioStack = ssShared.scenarioStackWithInitialTime
 
@@ -1121,7 +1123,7 @@ final case class ScenarioStack private[optimus] (
         throw new GraphInInvalidState(s"Tweakable node is not tracking value: $key")
     }
 
-    // Could use executionInfo, Nodes going via getNode they should implemented as def executionInfo = propertyInfo
+    // Could use executionInfo, Nodes requested via `getNode` should have def executionInfo = propertyInfo
     val info = key.propertyInfo
 
     val ssAdjusted = info.adjustScenarioStack(key, this)
@@ -1341,7 +1343,7 @@ final case class ScenarioStack private[optimus] (
 
   def toShortString: String = {
     val trackerName = if (isTrackingIndividualTweakUsage) "." + name else ""
-    trackingDepth + flagsAsString + trackerName + "@" + System.identityHashCode(this).toHexString
+    s"$trackingDepth $flagsAsString $trackerName @ ${System.identityHashCode(this).toHexString}"
   }
 }
 

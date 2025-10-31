@@ -96,8 +96,7 @@ object TemporalSource {
     transactionTimeAsNode_info.setCacheable(false)
   }
 
-  @node(tweak = true) private[optimus] def loadContext: TemporalContext =
-    TemporalContext(initialTime, initialTime)
+  @node(tweak = true) private[optimus] def loadContext: TemporalContext = TemporalContext(initialTime, initialTime)
 
   @node(tweak = true) private[optimus] def validTimeStore: Instant = initialTime
 

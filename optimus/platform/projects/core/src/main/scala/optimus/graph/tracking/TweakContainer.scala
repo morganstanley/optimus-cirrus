@@ -73,10 +73,8 @@ private[tracking] sealed abstract class TweakContainer(root: DependencyTrackerRo
   )
 
   private[optimus] def copyTweaks: Seq[Tweak] = {
-    val tweaks = cacheId.allTweaksAsIterable
-      .filterNot(permanentTweaks.contains)
-      .toSeq
-    val byNames = tweaks.filter { !_.tweakTemplate.resultIsStable() }
+    val tweaks = cacheId.allTweaksAsIterable.filterNot(permanentTweaks.contains)
+    val byNames = tweaks.filter { !_.tweakTemplate.resultIsStable }
     if (byNames.nonEmpty)
       throw new UnsupportedOperationException(
         s"Can only copy byValue tweaks, not byName tweaks like: ${byNames.map(_.prettyString(false)).mkString(", ")}")
@@ -145,7 +143,8 @@ private[tracking] final class MutableTweakContainer(
     val excludesSet = excludes.toSet
     doRemoveTweaksBasedOnPredicate(
       nk => nk.entity == entity && (keySet.isEmpty || keySet(nk)) && !excludesSet(nk),
-      cause, observer)
+      cause,
+      observer)
   }
 
   def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause, observer: TrackedNodeInvalidationObserver): Unit = {

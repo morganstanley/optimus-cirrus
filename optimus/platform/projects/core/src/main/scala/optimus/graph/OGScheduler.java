@@ -57,7 +57,7 @@ import scala.Some;
 import scala.Tuple3;
 
 public class OGScheduler extends Scheduler {
-  static final String schedulerVersion = "OGScheduler_v15.4";
+  static final String schedulerVersion = "OGScheduler_v15.5";
   public static final Logger log = optimus.core.package$.MODULE$.log().javaLogger();
 
   private static final ExecutorService virtualExecutorService;

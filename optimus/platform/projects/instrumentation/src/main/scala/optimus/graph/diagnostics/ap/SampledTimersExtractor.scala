@@ -14,8 +14,10 @@ package optimus.graph.diagnostics.ap
 import optimus.graph.diagnostics.ap.SampledTimersExtractor.FrameMatcher
 import optimus.graph.diagnostics.ap.StackAnalysis.BackedArray
 import optimus.graph.diagnostics.ap.StackAnalysis.CleanName
+import optimus.platform.sampling.SourceCompression
 import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
+import optimus.utils.StringTyping
 
 import java.util.function.Predicate
 import scala.collection.mutable
@@ -94,10 +96,14 @@ object DefaultFrameMatchers extends FrameMatcherProvider {
     startsWith("optimus/graph/diagnostics/ap") or startsWith("optimus/graph/diagnostics/sampling")
   private val instrumentation = startsWith("java/lang/instrument")
   private val skipped = startsWith("[java_skipped")
+  private val compression =
+    isEqualTo(StringTyping.methodFrameString[SourceCompression]("compressToBlobCrumb")) or isEqualTo(
+      StringTyping.methodFrameString[SourceCompression]("writeToZstd"))
   override def frameMatchers: Seq[SampledTimersExtractor.FrameMatcher] = Seq(
     matcher("samplingOH", samplingAndAp),
     matcher("instrumOH", instrumentation),
-    matcher("javaSkipped", skipped)
+    matcher("javaSkipped", skipped),
+    matcher("samplingZstd", compression)
   )
 }
 

@@ -58,6 +58,7 @@ object CopyFilesConfigurationCompiler {
           id = s"${origin.path}:${config.origin.lineNumber()}",
           from = from,
           into = into,
+          deployArtifact = config.booleanOrDefault("deployArtifact", default = false),
           skipIfMissing = config.booleanOrDefault("skipIfMissing", default = false),
           fileMode = fileMode,
           dirMode = dirMode,

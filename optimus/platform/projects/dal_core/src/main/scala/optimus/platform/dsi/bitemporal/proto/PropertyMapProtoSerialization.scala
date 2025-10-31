@@ -31,7 +31,7 @@ import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.storable._
 
 import java.time.ZoneOffset
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.Settings
 import optimus.platform.pickling.PickledProperties
@@ -96,7 +96,7 @@ object ProtoPickleSerializer {
       case x: FinalTypedReference =>
         builder
           .setType(FieldProto.Type.ENTITY_REF)
-          .setStringValue(Base64.encodeBytes(x.data))
+          .setStringValue(Base64.getEncoder.encodeToString(x.data))
           .setBlobValue(ByteString.copyFrom(x.data))
           .setIntValue(x.typeId)
       case x: FinalReference =>
@@ -104,7 +104,7 @@ object ProtoPickleSerializer {
         // upgraded to support string entity ref, we need to remove blob value from the representation
         builder
           .setType(FieldProto.Type.ENTITY_REF)
-          .setStringValue(Base64.encodeBytes(x.data))
+          .setStringValue(Base64.getEncoder.encodeToString(x.data))
           .setBlobValue(ByteString.copyFrom(x.data))
       case x: TemporaryReference =>
         // NB TemporaryReference should never be used for filtering on CPS so we should only ever need to serialize to a blob value here

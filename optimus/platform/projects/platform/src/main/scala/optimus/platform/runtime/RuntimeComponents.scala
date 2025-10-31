@@ -18,16 +18,13 @@ import optimus.config.OptimusConfigurationException
 import optimus.config.RuntimeConfiguration
 import optimus.config.{RuntimeComponents => CoreRuntimeComponents}
 import optimus.dsi.partitioning.DefaultPartition
-import optimus.graph.AlreadyCompletedNode
 import optimus.graph.DiagnosticSettings
 import optimus.graph.InstancePropertyTarget
-import optimus.graph.PropertyNode
 import optimus.graph.SITweakValueProvider
 import optimus.graph.ScenarioStackShared
 import optimus.graph.Scheduler
 import optimus.graph.Settings
-import optimus.graph.TweakNode
-import optimus.graph.TweakValueProviderNode
+import optimus.graph.TweakTemplate
 import optimus.graph.diagnostics.sampling.SamplingProfilerSwitch
 import optimus.graph.{Settings => gs}
 import optimus.platform.RuntimeEnvironment.KnownNames._
@@ -61,7 +58,7 @@ object RuntimeComponents {
   class WithConstantTime(rc: RuntimeConfiguration, t: Instant) extends RuntimeComponents(rc) {
     override protected[this] final def timeLookup(resolver: EntityResolver): Instant = t
   }
-  // This is just used in tests at the moment..
+  // This is just used in tests at the moment.
   class WithMaxTime(rc: RuntimeConfiguration) extends RuntimeComponents(rc) {
     override protected[this] final def timeLookup(resolver: EntityResolver): Instant = {
       if (!EvaluationContext.isInitialised) EvaluationContext.initializeWithoutRuntime()
@@ -179,28 +176,18 @@ class RuntimeComponents(
       val runTimeIT = new InstancePropertyTarget(freshNodeOf(InitialRuntime.initialTime))
       val tempSourceIT = new InstancePropertyTarget(freshNodeOf(TemporalSource.initialTime))
 
-      val computeGenerator =
-        if (initialTimeResolutionMode == "eager")
-          new AlreadyCompletedNode(timeLookup(resolver))
-        else {
-          val provider = new SITweakValueProvider {
-            // resolving initial time lazily and in background
-            private lazy val initTime: Instant = timeLookup(resolver)
-            override def valueOf(node: PropertyNode[_]): Any = initTime
-            override def isKeyDependent: Boolean = false
-            override def serializeAsValue: Option[Any] = Some(initTime)
-          }
-          val initTimeComputer = new TweakValueProviderNode[Instant](provider, modify = false)
-          if (initialTimeResolutionMode == "async") Scheduler.currentOrDefault.evaluateNodeAsync(initTimeComputer)
-          // else we resolve it lazily (= only when people asks for it!)
-          initTimeComputer
-        }
-
-      val tweakTemplate = new TweakNode(computeGenerator)
-      Scenario(
-        new Tweak(runTimeIT, tweakTemplate),
-        new Tweak(tempSourceIT, tweakTemplate)
-      )
+      val provider = new SITweakValueProvider {
+        // resolving initial time lazily and in background
+        private lazy val initTime: Instant = timeLookup(resolver)
+        override def value: Any = initTime
+      }
+      if (initialTimeResolutionMode == "eager") {
+        provider.value // force eager computation
+      } else if (initialTimeResolutionMode == "async") {
+        Scheduler.currentOrDefault.evaluateAsync(provider.value)
+      }
+      val tweakTemplate = TweakTemplate.lazyVal(provider)
+      Scenario(new Tweak(runTimeIT, tweakTemplate), new Tweak(tempSourceIT, tweakTemplate))
     }
     scenario
   }

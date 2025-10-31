@@ -35,14 +35,20 @@ object ScheduledNodeTask {
    *
    * The runnable will run in a no-caching scenario stack.
    */
-  def fromRunnable(scheduler: Scheduler, r: Runnable): ScheduledNodeTask = new ScheduledNodeTask(scheduler) {
-    attach(ScenarioStack.constantNC)
+  def fromRunnable(scheduler: Scheduler, r: Runnable): ScheduledNodeTask = runLater(scheduler, _ => r.run())
 
-    override def run(ec: OGSchedulerContext): Unit = {
-      r.run()
-      complete(ec)
+  /**
+   * Create a ScheduledNodeTask that will run f with an EC on a graph thread at some later time.
+   */
+  def runLater(scheduler: Scheduler, f: OGSchedulerContext => Unit): ScheduledNodeTask =
+    new ScheduledNodeTask(scheduler) {
+      attach(ScenarioStack.constantNC)
+
+      override def run(ec: OGSchedulerContext): Unit = {
+        f(ec)
+        complete(ec)
+      }
     }
-  }
 
   /**
    * A scheduled executor which exists only to give tasks to optimus schedulers.

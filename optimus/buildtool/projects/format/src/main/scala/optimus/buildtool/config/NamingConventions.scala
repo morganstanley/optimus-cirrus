@@ -61,6 +61,8 @@ object NamingConventions {
   val InstallPattern = s"$Install/$Common"
 
   val ArtifactoryStr = "artifactory"
+  val DockerPackage = "packages/docker"
+  val DockerTarName = "out"
   val MavenNamespaceToolExe = "artifactoryExePath"
   val MavenReleaseFrontier = "artifactory_frontier"
   val MavenServerId = "X-Artifactory-Id"

@@ -73,7 +73,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
 
   override def partitionMap: PartitionMap = throw new UnsupportedOperationException
 
-  protected[messages] val streamMap = new ConcurrentHashMap[String, MessagesNotificationStream]()
+  protected[messages] val streamMap = new ConcurrentHashMap[String, MessagesNotificationStreamImpl]()
 
   private[optimus] def TEST_ONLY_currentSubscriptions: Set[MessagesSubscription] = {
     // Better to get the stream ID referring to the react block but sufficient for tests
@@ -113,7 +113,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
 
     private def handleStreamResults(
         results: Seq[MessagesStreamResult],
-        stream: MessagesNotificationStream
+        stream: MessagesNotificationStreamImpl
     ): Unit = {
       val (notificationResults, others) = results.partition(_.isInstanceOf[DirectMessagesNotificationResult])
       others.foreach {
@@ -142,7 +142,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
         clientSessionCtx: ClientSessionContext
     ): Unit = clientSessionCtx.consumeEstablishSessionResult(result)
 
-    private def getStream(streamId: String): Option[MessagesNotificationStream] = {
+    private def getStream(streamId: String): Option[MessagesNotificationStreamImpl] = {
       val res = Option(streamMap.get(streamId))
       if (res.isEmpty) log.info(s"Stream id does not exist in the stream map, might be closed $streamId")
       res
@@ -150,7 +150,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
 
     private[messages] def handleStreamErrorResults(
         strmException: MessagesStreamException,
-        stream: MessagesNotificationStream
+        stream: MessagesNotificationStreamImpl
     ): Unit = {
       strmException match {
         case msce: MessagesStreamCreationException =>
@@ -275,7 +275,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
             cmd.streamId,
             s"Messages Stream already exists with same id=${cmd.streamId}!"))
       case None =>
-        val stream = new MessagesNotificationStream(cmd, this)
+        val stream = new MessagesNotificationStreamImpl(cmd, this)
         streamMap.put(cmd.streamId, stream)
         // TODO (OPTIMUS-49663): Add client-side filter logic when notifying upstream.
         val classSubs = cmd.createStream.subs.map(_.eventClassName)

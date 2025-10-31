@@ -27,6 +27,8 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.InstallPathBuilder
+import optimus.buildtool.format.docker.ImageDefinition
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.FileDiff
@@ -93,11 +95,14 @@ class JsonReporter(
       } else if (isDocker) {
         settings.images.toIndexedSeq.apar.map { image =>
           val imageScopes = scopeCompilations.filterKeysNow(image.relevantScopeIds.contains)
-          val Array(meta, bundle) = image.location.repo.split("/", 2)
-          val dockerBundle = MetaBundle(meta, bundle)
-          val metadataDir = settings.dockerDir.resolveDir(dockerBundle.meta)
+          val dockerBundle =
+            ImageDefinition.toMetaBundle(image.location.repo).getOrThrow("metabundle cannot be computed")
+          val metadataDir =
+            InstallPathBuilder
+              .dockerRelease(settings.installDir, image.location.tag)
+              .primaryInstallDir(dockerBundle, settings.leafDir.toString)
           val metaBundleReport = MetaBundleReport(settings, dockerBundle, imageScopes)
-          val file = writeJsonFile(metadataDir, metaBundleReport, s"${dockerBundle.bundle}-metadata.json")
+          val file = writeJsonFile(metadataDir, metaBundleReport, s"${NamingConventions.DockerTarName}-metadata.json")
           log.debug(s"Metadata for image $dockerBundle generated - see ${file.pathString}")
           file
         }

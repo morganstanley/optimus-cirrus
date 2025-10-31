@@ -392,7 +392,8 @@ public class OGLivePGOObserver extends OGEventsNullObserver {
   }
 
   @Override
-  public LookupState lookupStartScenario(Object couldBeGiven) {
+  public LookupState lookupStartScenario(boolean hintDontCache, Object couldBeGiven) {
+    if (hintDontCache) return LookupState.NoCache; // Consider ignoring the hint and do PGO?
     // to avoid debugger markers we need to make sure this is a NodeTask
     if (couldBeGiven instanceof NodeTask task) {
       // currently given blocks don't get special execution info (it will be NodeTaskInfo.Default)

@@ -43,7 +43,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-object MessagesNotificationStream {
+object MessagesNotificationStreamImpl {
 
   private val log = getLogger(this)
   private val useAsyncCallbackInvoker =
@@ -59,11 +59,11 @@ object MessagesNotificationStream {
   private case object CloseRequest extends MessagesStreamRequest
 }
 
-class MessagesNotificationStream(
+class MessagesNotificationStreamImpl(
     cmd: CreateMessagesClientStream,
     proxy: MessagesDsiProxyBase
-) extends DalMessages.MessagesNotificationStream {
-  import MessagesNotificationStream._
+) extends MessagesNotificationStream {
+  import MessagesNotificationStreamImpl._
 
   override val id = cmd.streamId
   private val streamId = cmd.streamId
@@ -536,7 +536,6 @@ class AsyncMessagesCallbackInvoker(
         try {
           log.info(s"$logHeader Messages callback invoker thread started..")
           notifyMsgHandlerThreadSetup()
-          callback.setupThread(streamId)
           log.info(s"$logHeader Messages callback invoker setup is successful.")
         } catch {
           case ex: Exception =>
@@ -618,7 +617,6 @@ class AsyncMessagesCallbackInvoker(
 
           log.info(s"$logHeader Message handler thread is stopping..")
           notifyMsgHandlerThreadTeardown()
-          callback.teardownThread(streamId)
           log.info(s"$logHeader Message handler thread teardown successful..")
         } catch {
           // Don't throw it if it's an Exception so that it won't override the original Error. The handler at

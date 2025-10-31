@@ -11,6 +11,7 @@
  */
 package optimus.graph
 
+import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
 import optimus.platform.RecordingScenarioStack
 import optimus.platform.ScenarioStack
@@ -60,9 +61,9 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
   private[this] var cur: ScenarioStack = startSS
   var evaluateInSS: ScenarioStack = _ // used when evaluating underlying node (if no tweak) - set during asyncResolve
 
-  // If we have a when clause, this is the node that computes the when predicate.
+  // If we have a when clause, this is the node that computes the `when` predicate.
   private[this] var whenNode: Node[Boolean] = _
-  // The outer most proxy when transitioned from tracking s
+  // The outermost proxy when transitioned from tracking s
   private[this] var trackingProxy: NodeTask = _
 
   var tweak: Tweak = _ // Result of resolution of this tweak
@@ -122,7 +123,7 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
 
       val tweakInfo = info.tweakInfo
       // It's only worth caching (and/or recording) a byName tweak
-      val unstable = !tweak.tweakTemplate.resultIsStable()
+      val unstable = !tweak.tweakTemplate.resultIsStable
       val shouldCache = unstable && tweakInfo.getCacheable
       val tweakNode = tweak.createNode(startSS, cur, candidate)
       tweakNode.markAsTrackingValue()
@@ -134,6 +135,12 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
     }
   }
 
+  /** Have to make sure that tweak key extraction doesn't touch any tweakables */
+  private def getKey(tweakExtractor: TweakKeyExtractor): Any =
+    EvaluationContext.asIfCalledFrom(ScenarioStack.nullNode, OGSchedulerContext.current()) {
+      tweakExtractor.key(key)
+    }
+
   /* Makes the next step in a search for a tweak in the current scenario stack */
   private def nextInCurrent(): Unit = {
     val cacheID = cur._cacheID
@@ -141,7 +148,7 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
     def matchByProperty(pinfo: NodeTaskInfo): Unit = {
       cacheID.get(pinfo) match {
         case tweakExtractor: TweakKeyExtractor =>
-          val extractorKey = ExtractorTweakableKey(tweakExtractor.key(key), pinfo)
+          val extractorKey = ExtractorTweakableKey(getKey(tweakExtractor), pinfo)
           tweak = cacheID.get(extractorKey)
 
         case propertyTweak: Tweak =>
@@ -188,7 +195,7 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
 
   /** Make the next step across scenario stacks, stop at tweaks and possible tweaks */
   private def next(ec: OGSchedulerContext, sync: Boolean): Unit = {
-    if (!cur.isRoot) { // Test could be if(cur ne uptoSS) if need to limit the walk up arises
+    if (!cur.isRoot) { // Test could be if(cur ne uptoSS) if a need to limit the walk-up arises
       if (cur.isScenarioIndependent) throw new IllegalScenarioDependenceException(key, requestingNode)
       nextInCurrent()
       if (tweak eq null) {
@@ -247,7 +254,7 @@ final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: S
 
   private def asyncResolve(ec: OGSchedulerContext): PropertyNode[R] = {
     val startTime = OGTrace.observer.startTweakLookup(ec.prfCtx)
-    while (!resolved && (whenNode eq null)) next(ec, Settings.compatSyncTweakWhen)
+    while (!resolved && (whenNode eq null)) next(ec, sync = false)
     if (whenNode ne null) {
       val cWhenNode = whenNode
       // We want to avoid recursion here for accounting, note this works only for whenClauses that are not cached

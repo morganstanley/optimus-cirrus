@@ -13,7 +13,7 @@ package optimus.dsi.serialization.json
 
 import java.{util => ju}
 
-import net.iharder.base64.Base64
+import java.util.Base64
 import optimus.dsi.serialization.AbstractTypeTransformerOps
 import optimus.dsi.serialization.JavaCollectionUtils
 import optimus.dsi.serialization.TypeTransformException
@@ -38,9 +38,9 @@ trait StringTypeTransformerOps extends AbstractTypeTransformerOps[String] {
   }
 
   protected def toByteArray(s: Iterator[Any]): ImmutableByteArray =
-    ImmutableByteArray(Base64.decode(s.next().toString, Base64.DONT_GUNZIP))
+    ImmutableByteArray(Base64.getDecoder.decode(s.next().toString))
   protected def fromByteArray(b: Array[Byte]) =
-    JavaCollectionUtils.mkArrayList(TypeMarkers.ByteArray, Base64.encodeBytes(b))
+    JavaCollectionUtils.mkArrayList(TypeMarkers.ByteArray, Base64.getEncoder.encodeToString(b))
 
   protected def toLong(a: Any): Long = if (a.isInstanceOf[Int]) a.asInstanceOf[Int].toLong else a.asInstanceOf[Long]
   protected def fromLong(l: Long) = l.longValue(): java.lang.Long

@@ -44,7 +44,6 @@ main {
       ossjava.eaio-uuid-stephenc,
       ossjava.guava,
       ossjava.hibernate-validator,
-      ossjava.iharder-base64,
       ossjava.jackson2,
       ossjava.jackson2.module-scala,
       ossjava.jsr305-annotations,

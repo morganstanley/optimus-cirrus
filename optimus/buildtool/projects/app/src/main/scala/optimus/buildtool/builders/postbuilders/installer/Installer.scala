@@ -24,10 +24,12 @@ import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ObtConfig
+import optimus.buildtool.config.RuntimeDependencyCacheConfiguration
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.TestplanConfiguration
 import optimus.buildtool.config.VersionConfiguration
+import optimus.buildtool.files.CachedDependencyInstallPathResolver
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.FileAsset
@@ -77,7 +79,8 @@ class Installer(
     protected val bundleClassJars: Boolean = false,
     pythonConfiguration: PythonInstallerConfiguration,
     externalDependencies: ExternalDependenciesSource,
-    private[installer] val fingerprintsConfiguration: FingerprintsDiffConfiguration
+    private[installer] val fingerprintsConfiguration: FingerprintsDiffConfiguration,
+    runtimeDependencyCacheConfig: RuntimeDependencyCacheConfiguration
 ) extends BaseInstaller
     with PostBuilder
     with Log {
@@ -103,8 +106,11 @@ class Installer(
         ))
     } else None
 
+  val dependencyInstallPathResolver = CachedDependencyInstallPathResolver(runtimeDependencyCacheConfig, pathBuilder)
+
   private val components = {
-    val manifestResolver: ManifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
+    val manifestResolver: ManifestResolver =
+      ManifestResolver(scopeConfigSource, versionConfig, dependencyInstallPathResolver, gitLog)
     val classJarInstaller = new ClassJarInstaller(this, manifestResolver, sparseOnly)
     if (sparseOnly)
       Seq(
@@ -146,7 +152,7 @@ class Installer(
         new ProcessedFileInstaller(this, fileInstaller),
         new IntellijPluginInstaller(this, archiveInstaller),
         new WarInstaller(this, archiveInstaller, warScopes),
-        new MavenInstaller(this),
+        new MavenInstaller(this, dependencyInstallPathResolver),
         new ElectronInstaller(this, pathBuilder),
         new PythonInstaller(pathBuilder, bundleFingerprintsCache, pythonConfiguration)
       ) ++ ivyInstaller
@@ -157,7 +163,7 @@ class Installer(
     if (generatePoms) Seq.empty
     else {
       val bundleJarInstaller = if (bundleClassJars) {
-        val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder, gitLog)
+        val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, dependencyInstallPathResolver, gitLog)
         Some(new BundleJarInstaller(this, manifestResolver))
       } else None
       Seq(

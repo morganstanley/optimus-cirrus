@@ -120,7 +120,10 @@ object DefaultSampleCrumbConsumer extends SampleCrumbConsumer {
     if (success) crumbsSent.incrementAndGet() else crumbErrors.incrementAndGet()
   }
 
-  override def flush(): Unit = Breadcrumbs.flush()
+  override def flush(): Unit = {
+    SamplingProfilerSource.compressAndSendBlobCrumb()
+    Breadcrumbs.flush()
+  }
 
   override def errors: Int = crumbErrors.get
   override def sent: Int = crumbsSent.get
@@ -507,6 +510,7 @@ class SamplingProfiler private[diagnostics] (
       isCanonical = false
     }
     val t = System.currentTimeMillis()
+    SamplingProfilerSource.compressAndSendBlobCrumb()
     crumbConsumer.flush()
     hasPublished = true
     log.info(s"Published to ${destinations.size} destinations")
@@ -543,11 +547,11 @@ class SamplingProfiler private[diagnostics] (
         warn("Shutting down sampling")
         enabled = false
         _snapAndPublishImmediately = waitMs > 0
-        _stillPulsing = false
         waiter.notifyAll()
         if (waitMs > 0)
           waiter.wait(waitMs)
         samplers.foreach(_.shutdown())
+        _stillPulsing = false
       }
     }
   }

@@ -15,17 +15,14 @@ import java.lang.management.ManagementFactory
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
-import ch.epfl.scala.bsp4j.MessageType
 import com.sun.management.ThreadMXBean
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
-import optimus.breadcrumbs.CrumbLogger
 import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.CrumbHint
 import optimus.breadcrumbs.crumbs.CrumbHints
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
-import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.compilers.RegexScanner.ruleTimings
 import optimus.buildtool.compilers.RegexScanner.timingEnabled
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -85,11 +82,6 @@ private[buildtool] class BreadcrumbTrace(
   import optimus.breadcrumbs.crumbs.Properties._
 
   private val id = ChainedNodeID.nodeID
-
-  import optimus.breadcrumbs.CrumbLogger
-
-  override def publishMessages(messages: Seq[CompilationMessage]): Unit =
-    CrumbLogger.debug(ObtCrumbSource, s"Messages: $messages")
 
   override def end(success: Boolean, errors: Int, warnings: Int, time: Instant): Unit = {
     super.end(success = success, errors = errors, warnings = warnings, time = time)
@@ -225,10 +217,6 @@ final class BreadcrumbTraceListener(
 
   override protected def newTrace(scopeId: ScopeId, category: CategoryTrace, time: Instant): StatisticsTrace =
     new BreadcrumbTrace(descriptor, scopeId, category, time)
-
-  override def logMsg(msg: String, tpe: MessageType): Unit = {
-    CrumbLogger.debug(ObtCrumbSource, s"$tpe:$msg")
-  }
 
   override def endBuild(success: Boolean): Boolean = {
     super.endBuild(success)

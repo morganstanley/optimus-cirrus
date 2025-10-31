@@ -133,6 +133,10 @@ object WorkspaceConfig extends TopLevelConfig("conf.obt")
 object ResolverConfig extends TopLevelConfig("resolvers.obt")
 object DependenciesConfig extends TopLevelConfig("dependencies.obt") with DependencyConfig
 object FingerprintsDiffConfig extends TopLevelConfig("config/fingerprints-diff.obt")
+object RuntimeDependencyCache
+    extends TopLevelConfig(
+      "config/runtime-dependency-cache.json"
+    ) // This is JSON because jenkins job is fetching it to get current list of revisions
 object JvmDependenciesConfig extends TopLevelConfig("dependencies/jvm-dependencies.obt") with DependencyConfig
 object MavenDependenciesConfig extends TopLevelConfig("dependencies/maven-dependencies.obt") with DependencyConfig
 object BuildDependenciesConfig extends TopLevelConfig("dependencies/build-dependencies.obt") with DependencyConfig

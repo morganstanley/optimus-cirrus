@@ -49,7 +49,7 @@ object ScopeArgs {
     args: ScopeArgs,
     scopeConfigSource: ScopeConfigurationSource with DockerConfigurationSupport,
     workspaceSourceRoot: Directory,
-    dockerDir: Directory
+    installDir: Directory
 ) {
 
   @node private[buildtool] def scopesToInclude: Set[ScopeId] = {
@@ -109,7 +109,7 @@ object ScopeArgs {
       if (OsUtils.isWindows) {
         throw new IllegalStateException("Building a docker image from Windows not supported. Please use a unix machine")
       }
-      scopeConfigSource.parseImages(dockerDir, args.imagesToBuild, args.imageTag)
+      scopeConfigSource.parseImages(installDir, args.imagesToBuild, args.imageTag)
     } else Set.empty
 
   @node private def scopesFromImages: Set[ScopeId] = imagesToBuild.flatten(_.relevantScopeIds)
@@ -117,6 +117,6 @@ object ScopeArgs {
   @node private[buildtool] def warScopes = args.warScopes.apar.flatMap(scopeConfigSource.resolveScopes)
 
   def withIncludedScopes(includedScopes: Set[String]): ScopeSelector =
-    ScopeSelector(args.copy(scopesToBuild = includedScopes), scopeConfigSource, workspaceSourceRoot, dockerDir)
+    ScopeSelector(args.copy(scopesToBuild = includedScopes), scopeConfigSource, workspaceSourceRoot, installDir)
 
 }

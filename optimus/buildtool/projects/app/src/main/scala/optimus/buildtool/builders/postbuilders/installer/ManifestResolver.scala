@@ -15,7 +15,7 @@ import java.util.jar
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.VersionConfiguration
-import optimus.buildtool.files.InstallPathBuilder
+import optimus.buildtool.files.DependencyInstallPathResolver
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.utils.GitLog
 import optimus.buildtool.utils.Hashing
@@ -28,7 +28,7 @@ import optimus.platform.utils.JarManifests.nme._
 @entity class ManifestResolver(
     scopeConfigSource: ScopeConfigurationSource,
     val versionConfig: VersionConfiguration,
-    pathBuilder: InstallPathBuilder,
+    dependencyInstallPathResolver: DependencyInstallPathResolver,
     gitLog: Option[GitLog],
 ) {
 
@@ -46,15 +46,18 @@ import optimus.platform.utils.JarManifests.nme._
       .getOrElse(throw new IllegalArgumentException(s"Jar $pathingJar is missing manifest"))
     val maybeAgentPaths = Jars.extractAgentsInManifest(pj, manifest)
     val installedAgents =
-      pathBuilder.locationIndependentClasspath(scopeId, maybeAgentPaths, installJarMapping, includeRelativePaths)
+      dependencyInstallPathResolver.locationIndependentClasspath(
+        scopeId,
+        maybeAgentPaths,
+        installJarMapping,
+        includeRelativePaths)
     val classpath = Jars.extractManifestClasspath(pj, manifest)
     val installedClasspath =
-      pathBuilder.locationIndependentClasspath(
+      dependencyInstallPathResolver.locationIndependentClasspath(
         scopeId,
         classpath,
         installJarMapping,
-        includeRelativePaths
-      )
+        includeRelativePaths)
     manifest.getMainAttributes.put(jar.Attributes.Name.CLASS_PATH, Jars.manifestPath(installedClasspath))
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedJniLibs)
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedPreloadReleaseLibs)
