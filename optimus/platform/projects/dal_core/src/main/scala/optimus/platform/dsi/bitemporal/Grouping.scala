@@ -249,8 +249,10 @@ final case class EntityGrouping(
     val maxTimeSliceCount: Int,
     val maxVersionCount: Int,
     val lockToken: Long,
-    val linkedTypes: Option[LinkedTypes])
-    extends HasDSIId[EntityReference]
+    val linkedTypes: Option[LinkedTypes],
+    val softDeleted: Option[Instant] = None,
+    val softDeleteReverted: Option[Instant] = None
+) extends HasDSIId[EntityReference]
     with OptimisticallyVersioned {
 
   def linkageDefinerTypesOpt: Option[Set[String]] = linkedTypes.map(_.linkageDefinerTypes)

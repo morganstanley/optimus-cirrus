@@ -12,6 +12,7 @@
 package optimus.platform.breadcrumbs
 
 import optimus.breadcrumbs.crumbs.Crumb
+import optimus.utils.PropertyUtils
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -33,10 +34,13 @@ object ControlledSource {
       failures: Int,
       wasNotThrottled: Boolean)
 
-  val rateIntervalMs: Double = System.getProperty("optimus.breadcrumbs.rate.interval.sec", "60").toDouble * 1000.0
+  private val disablingFilteringPermitted =
+    PropertyUtils.get("optimus.breadcrumbs.emergency.disabling.filtering.permitted", true)
+
+  val rateIntervalMs: Double = PropertyUtils.get("optimus.breadcrumbs.rate.interval.sec", 60).toDouble * 1000.0
   val defaultMaxBytesPerInterval: Double =
-    System.getProperty("optimus.breadcrumbs.max.kb.per.minutes", "10000").toDouble * 1000.0
-  val rateThrottleDryRun: Boolean = !System.getProperty("optimus.breadcrumbs.throttle.enabled", "false").toBoolean
+    PropertyUtils.get("optimus.breadcrumbs.max.kb.per.minutes", 10000) * 1000.0
+  val rateThrottleDryRun: Boolean = !PropertyUtils.get("optimus.breadcrumbs.throttle.enabled", false)
 }
 
 trait ControlledSource {
@@ -45,7 +49,7 @@ trait ControlledSource {
   // This trait exists so that we can make the following method private to optimus.platform.
   // Really, optimus.breadcrumbs ought to be in package platform, but that's a pretty big PR.
   private[platform] def filterable: Boolean = true
-  final def isFilterable: Boolean = filterable
+  final def isFilterable: Boolean = !disablingFilteringPermitted || filterable
 
   private[platform] val maxBytesPerInterval$ : Double = defaultMaxBytesPerInterval
   final def maxBytesPerInterval: Double = maxBytesPerInterval$

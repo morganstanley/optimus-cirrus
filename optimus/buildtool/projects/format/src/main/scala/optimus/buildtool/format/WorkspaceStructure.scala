@@ -163,7 +163,7 @@ final case class Module(
 ) extends ObtFile
     with OrderedElement[ModuleId]
 
-final case class Bundle(id: MetaBundle, eonId: Option[String], modulesRoot: String, root: Boolean, line: Int)
+final case class Bundle(id: MetaBundle, eonId: Int, modulesRoot: String, root: Boolean, line: Int)
     extends ObtFile
     with OrderedElement[MetaBundle] {
   def path: RelativePath = RelativePath(s"${id.meta}/${id.bundle}/bundle.obt")
@@ -225,7 +225,7 @@ object WorkspaceStructure {
 
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
-    val eonId: Option[String] = config.optionalString(Names.EonId)
+    val eonId: Int = config.getInt(Names.EonId)
     val root = config.optionalBoolean(Names.Root).contains(true)
     val id = MetaBundle(meta, name)
     Success(Bundle(id, eonId, modulesRoot, root, config.origin().lineNumber())).withProblems {

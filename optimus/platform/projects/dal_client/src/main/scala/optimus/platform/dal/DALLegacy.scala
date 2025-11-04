@@ -14,6 +14,7 @@ package optimus.platform.dal
 import optimus.platform._
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.annotations.expectingTweaks
+import optimus.platform.storable.Entity
 import optimus.platform.util.ElevatedUtils
 
 trait DALLegacy {
@@ -28,7 +29,7 @@ trait DALLegacy {
      * Any entities that are loaded inside the persist block automatically become merged into it.
      *
      * WARNING! this api mutates the passed in entities which can break Graph caching! This API will be removed in future!
-     * Prefer to use persistWithoutMutation, or even better use the non-legacy DAL.newEvent / DAL.newTransation APIs.
+     * Prefer to use persistWithoutMutation, or even better use the non-legacy newEvent / newTransaction APIs.
      */
     @closuresEnterGraph def persist[T](f: => T): T = {
       ElevatedUtils.throwOnElevated()
@@ -57,6 +58,10 @@ trait DALLegacy {
         ._2
     }
 
+    /** Calls persistWithoutMutation, and then returns the DAL entity `E` from the PersistResult. */
+    @closuresEnterGraph def persistWithoutMutationAndGetEntity[E <: Entity](f: => E): E =
+      persistGivenWithoutMutationAndGetEntity()(f)
+
     /**
      * Creates a persist block with some tweaks. The primary purpose of persistGiven is to persist entities at a
      * specific valid time. This would be done like so:
@@ -66,7 +71,7 @@ trait DALLegacy {
      * See the docs for persist for more information about persist blocks in general.
      *
      * WARNING! this api mutates the passed in entities which can break Graph caching! This API will be removed in future!
-     * Prefer to use persistGivenWithoutMutation, or even better use the non-legacy DAL.newEvent / DAL.newTransation APIs.
+     * Prefer to use persistGivenWithoutMutation, or even better use the non-legacy newEvent / newTransaction APIs.
      */
     @closuresEnterGraph @expectingTweaks
     def persistGiven[T](tweaks: Tweak*)(f: => T): T = {
@@ -94,6 +99,20 @@ trait DALLegacy {
       DALBlock
         .execute(resolver.createScenario(tweaks), resolver.createPersistBlockNoSideEffect, asAsync(() => identity(f)))
         ._2
+    }
+
+    /** Calls persistGivenWithoutMutation, and then returns the DAL entity `E` from the PersistResult. */
+    @closuresEnterGraph @expectingTweaks @async
+    def persistGivenWithoutMutationAndGetEntity[E <: Entity](tweaks: Tweak*)(f: => E): E = {
+      val (entity, result) = execute(tweaks, resolver.createPersistBlockNoSideEffect, f)
+      result.getEntityReferenceHolder(entity).get.payload
+    }
+
+    @async
+    private def execute[T](tweaks: Seq[Tweak], plug: PluginTagKeyValue[_ <: DALBlock], f: => T): (T, PersistResult) = {
+      ElevatedUtils.throwOnElevated()
+      // identity(...) is required for Loom: without it, Scala optimizes this by calling f rather than creating () => f
+      DALBlock.execute(resolver.createScenario(tweaks), plug, asAsync(() => identity(f)))
     }
 
     @closuresEnterGraph

@@ -49,6 +49,9 @@ object ProfilingEventStatistics extends Log {
   ) {
     def postProcess(pec: ProfiledEventCause): ProfiledEventCause =
       if (dropUntaggedChildren) {
+        val updatedChildEvents = pec.childEvents.filter(_.profilingData.contains(HandlerResult.eventTagKey))
+        log.debug(
+          s"[${pec.eventName}] Dropping Untagged Children Events: ${pec.childEvents.size} => ${updatedChildEvents.size}")
         pec.copy(childEvents = pec.childEvents.filter(_.profilingData.contains(HandlerResult.eventTagKey)))
       } else pec
   }
@@ -108,7 +111,7 @@ object ProfilingEventStatistics extends Log {
         )
       )
       log.debug(
-        s"${profiledEvent.eventName} completed in ${profiledEvent.totalDurationMs} ms, actionSelfTime: ${profiledEvent.actionSelfTimeMs} ms with meta ${profiledEvent.profilingData} (${ChainedID.root})")
+        s"${profiledEvent.eventName} completed in ${profiledEvent.totalDurationMs} ms, actionSelfTime: ${profiledEvent.actionSelfTimeMs} ms with meta ${profiledEvent.profilingData}, childEventsSize: ${profiledEvent.childEvents.size} (${ChainedID.root})")
     }
   }
 

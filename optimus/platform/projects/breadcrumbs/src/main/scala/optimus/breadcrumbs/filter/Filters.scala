@@ -124,25 +124,23 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
 }
 
 final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer)
-    extends AbstractFilter(Result.Deny, Result.Accept) {
+    extends AbstractFilter(onMatch = Result.Deny, onMismatch = Result.Accept) {
   override def filter(crumb: Crumb): Result = {
     if (!crumb.source.isFilterable) Result.Accept
-    else if (crumb.asJSON.toString.length > threshold)
-      onMatch
+    else if (crumb.asJSON.toString.length > threshold) onMatch
     else onMismatch
   }
 
-  override def toString() = s"${CrumbFilter.LARGE_CRUMB_FILTER}[threshold=$threshold]"
+  override def toString(): String = s"${CrumbFilter.LARGE_CRUMB_FILTER}[threshold=$threshold]"
 }
 
 final class CrumbHintFilter(private[breadcrumbs] val hint: CrumbHint)
     extends AbstractFilter(Result.Accept, Result.Deny) {
   override def filter(crumb: Crumb): Result =
-    if (crumb.hints contains hint)
-      onMatch
+    if (crumb.hints contains hint) onMatch
     else onMismatch
 
-  override def toString() = s"${CrumbFilter.CRUMB_HINT_FILTER}[hint=$hint]"
+  override def toString(): String = s"${CrumbFilter.CRUMB_HINT_FILTER}[hint=$hint]"
 }
 
 object CompositeFilter {

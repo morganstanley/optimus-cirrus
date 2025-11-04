@@ -436,10 +436,7 @@ object Breadcrumbs extends Log {
     val cs = getSourceSnapAnalysis
     val sources = (cs.keySet ++ ca.keySet)
     val sourceData: SortedMap[String, SortedMap[String, Double]] = sources
-      .map(s =>
-        s.toString -> ((ca.get(s).getOrElse(Map.empty) ++ cs
-          .get(s)
-          .getOrElse(Map.empty))).to(SortedMap))
+      .map(s => s.toString -> (ca.getOrElse(s, Map.empty) ++ cs.getOrElse(s, Map.empty)).to(SortedMap))
       .to(SortedMap)
     val kafkaData = BreadcrumbsKafkaPublisher.processedStats.to(SortedMap)
     val formatted = sourceData.mapValuesNow(_.mkString("{", ", ", "}")).mkString("{", ", ", "}") + ", " + kafkaData
@@ -619,14 +616,14 @@ abstract class BreadcrumbsPublisher extends Filterable with Log {
           isFiltered(c)
         } catch {
           case t: Throwable =>
-            val msg = s"Unable to filter $c due to $t, discarded..."
+            val msg = s"Unable to filter Crumb due to $t, discarding $c"
             log.debug(msg)
             warning.foreach(_.fail(msg))
             true
         }
 
       if (filtered) {
-        log.debug(s"Crumb $c was filtered")
+        log.debug(s"Crumb was filtered; $c")
       } else {
         crumbSent = send(c)
       }
@@ -728,17 +725,17 @@ private[optimus] class BreadcrumbsRouter(
   }
 
   // [SEE_BREADCRUMB_FILTERING]
-  private[breadcrumbs] final def route(c: Crumb): BreadcrumbsPublisher = {
+  private[breadcrumbs] final def route(c: Crumb): BreadcrumbsPublisher =
     if (c.source.isFilterable) {
-      val targetPublisher = rules
-        .find { _.matcher matches c }
-        .map { _.publisher }
-      targetPublisher getOrElse defaultPublisher
+      val routingRuleOpt = rules.find(_.matcher.matches(c))
+      log.debug(s"Crumb matching RoutingRule (if any) $routingRuleOpt; $c")
+      val targetPublisher = routingRuleOpt.map(_.publisher)
+      targetPublisher.getOrElse(defaultPublisher)
     } else BreadcrumbsKafkaPublisher.instance.get.getOrElse(defaultPublisher)
-  }
 
   protected[optimus] override def sendInternal(c: Crumb): Boolean = {
     val r = route(c)
+    log.debug(s"Crumb will be sent using Publisher ${r.getClass}; $c")
     r.sendInternal(c)
   }
 
@@ -759,7 +756,10 @@ class BreadcrumbsIgnorer extends BreadcrumbsPublisher {
   override val collecting = false
   override def init(): Unit = {}
   override def flush(): Unit = {}
-  override def sendInternal(c: Crumb): Boolean = true
+  override def sendInternal(c: Crumb): Boolean = {
+    log.debug(s"Crumb is being ignored and will not send; $c")
+    true
+  }
   override def shutdown(): Unit = {}
 }
 

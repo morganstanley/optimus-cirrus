@@ -550,6 +550,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
     class PersistVisitor(vt: A, upsert: Boolean, cmid: Option[MSUuid]) extends AbstractPickledOutputStream {
       private[this] var currentPropertyInfo: PropertyInfo[_] = _
+      private[this] var outerMonoTemporal: Boolean = _
       private[this] var containsFinalTypedReferencesOnly: Boolean = true
 
       private def tryPersist(entity: Entity): Boolean = {
@@ -559,6 +560,7 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
       def apply(entity: Entity): Unit = {
         tryPersist(entity)
+        outerMonoTemporal = entity.$info.monoTemporal
         // Pickle call here is used to build assert operations through writePropertyInfo and writeEntity
         entity.pickle(this)
         if (containsFinalTypedReferencesOnly && generateIgnoreListForReferenceResolutionEnabled) {
@@ -601,7 +603,8 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
 
       override def writeEntity(entity: Entity): Unit = {
         if (entity.$isModule) checkTransient(entity)
-        else if (!entity.$inline) assertOps += AssertEntry(entity, vt, currentPropertyInfo)
+        // do not generate AssertEntry for monoTemporal entities
+        else if (!entity.$inline && !outerMonoTemporal) assertOps += AssertEntry(entity, vt, currentPropertyInfo)
         // if dal$entityRef is null or isTemporary then it is a heap entity, or if it is a finalReference
         if (
           containsFinalTypedReferencesOnly && Option(getEntityRef(entity)).forall { r =>

@@ -45,9 +45,7 @@ class BuildPropertiesInstaller(
     val metaBundles = installable.metaBundles.to(Seq)
     val metaBundlesWithEonId: Seq[Bundle] = metaBundles.apar.flatMap(scopeConfigSource.bundleConfiguration)
     val eonIdListStr = metaBundlesWithEonId
-      .collect { case Bundle(id, Some(eonId), _, _, _) =>
-        s"${id.properPath}:$eonId"
-      }
+      .map(b => s"${b.id.properPath}:${b.eonId}")
       .sorted
       .mkString(",")
     val content = Seq(

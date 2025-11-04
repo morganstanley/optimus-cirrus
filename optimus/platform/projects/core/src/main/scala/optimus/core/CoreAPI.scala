@@ -169,6 +169,19 @@ trait CoreAPI
     with BreadcrumbRegistration
     with NodeFunctionImplicits {
 
+  /**
+   * Can be handy to temporally exclude a code-block from execution instead of comment-out or temporal removal.
+   * @param reason consider to provide details why the code-block being ignored, e.g. a jira reference.
+   */
+  def ignoreWithReason(reason: String)(fn: => Unit): Unit = ()
+  def ignoreWithReason$NF(reason: String)(fn: NodeFunction0[Unit]): Unit = ()
+
+  /**
+   * Can be handy to temporally exclude a code-block from execution instead of comment-out or temporal removal.
+   */
+  def ignore(fn: => Unit): Unit = ()
+  def ignore$NF(fn: NodeFunction0[Unit]): Unit = ()
+
   @nodeSync
   @nodeSyncLift
   def track[T](label: String, tpe: CrumbNodeType.CrumbNodeType)(@nodeLift @nodeLiftByName f: => T): T =

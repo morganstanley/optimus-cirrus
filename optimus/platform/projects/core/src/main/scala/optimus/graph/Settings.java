@@ -690,10 +690,13 @@ public class Settings {
   public static final boolean failOnRecursiveThrottle =
       getBoolProperty("optimus.graph.failOnRecursiveThrottle", false);
 
-  // TODO (OPTIMUS-79168): This should be enabled by default once we've remediated broken indexes,
-  // and then eventually the flag should be removed
+  // You can temporarily set this to false to verify if the index/key ordering is breaking your
+  // applications. If so, contact Graph and DAL teams immediately to discuss. This flag will always
+  // be true in future. Don't set it to false without notifying us or you will get broken!
+  //
+  // TODO (OPTIMUS-79168): This flag will be removed once we are sure that no apps are broken by it.
   public static boolean enableStableIndexKeyOrdering =
-      getBoolProperty("optimus.pickling.enableStableIndexKeyOrdering", false);
+      getBoolProperty("optimus.pickling.enableStableIndexKeyOrdering", true);
 
   /**
    * We can evaluate initial time in three different ways:
